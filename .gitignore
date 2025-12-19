@@ -1,0 +1,30 @@
+# Arduino/PlatformIO build artifacts
+.pio/
+.vscode/
+build/
+*.hex
+*.bin
+*.elf
+*.eep
+*.lss
+*.map
+
+# OS files
+.DS_Store
+Thumbs.db
+*~
+
+# Credentials and sensitive data
+secrets.h
+credentials.h
+wifi_config.h
+
+# IDE files
+*.swp
+*.swo
+*~.nib
+*.sublime-*
+.idea/
+
+# Logs
+*.log
