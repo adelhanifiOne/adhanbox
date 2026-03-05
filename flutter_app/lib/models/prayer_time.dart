@@ -1,5 +1,7 @@
 // lib/models/prayer_time.dart
 
+import 'package:flutter/foundation.dart';
+
 class PrayerTime {
   final int index; // 1-5
   final String name; // Fajr, Dhuhr, etc.
@@ -112,5 +114,59 @@ class PrayerTimes {
       nextPrayerIndex: json['next_index'] as int?,
       minutesUntilNextPrayer: json['minutes_until_next'] as int?,
     );
+  }
+
+  /// Applique les offsets de fine-tuning aux horaires
+  PrayerTimes applyOffsets(Map<String, int> offsets) {
+    final adjustedTimes = times.map((prayer) {
+      String prayerKey = prayer.name.toLowerCase();
+      if (prayerKey == 'fajr') prayerKey = 'fajr';
+      if (prayerKey == 'dhuhr') prayerKey = 'dhuhr';
+      if (prayerKey == 'asr') prayerKey = 'asr';
+      if (prayerKey == 'maghreb') prayerKey = 'maghrib';
+      if (prayerKey == 'isha') prayerKey = 'isha';
+
+      final offset = offsets[prayerKey] ?? 0;
+      if (offset == 0) return prayer;
+
+      final adjustedTime = _addMinutesToTime(prayer.calculatedTime, offset);
+      return PrayerTime(
+        index: prayer.index,
+        name: prayer.name,
+        calculatedTime: adjustedTime,
+        mawaqitTime: prayer.mawaqitTime,
+        enabled: prayer.enabled,
+        trackIndex: prayer.trackIndex,
+        duaaAfter: prayer.duaaAfter,
+      );
+    }).toList();
+
+    return PrayerTimes(
+      times: adjustedTimes,
+      date: date,
+      source: source,
+      nextPrayerIndex: nextPrayerIndex,
+      minutesUntilNextPrayer: minutesUntilNextPrayer,
+    );
+  }
+
+  /// Ajoute X minutes à une heure (ex: "13:13" + 20 = "13:33")
+  static String _addMinutesToTime(String time, int minutesToAdd) {
+    final parts = time.split(':');
+    if (parts.length != 2) return time;
+
+    final hours = int.tryParse(parts[0]) ?? 0;
+    final minutes = int.tryParse(parts[1]) ?? 0;
+
+    int totalMinutes = hours * 60 + minutes + minutesToAdd;
+
+    // Wraparound sur 24h
+    totalMinutes = totalMinutes % (24 * 60);
+    if (totalMinutes < 0) totalMinutes += 24 * 60;
+
+    final newHours = totalMinutes ~/ 60;
+    final newMinutes = totalMinutes % 60;
+
+    return '${newHours.toString().padLeft(2, '0')}:${newMinutes.toString().padLeft(2, '0')}';
   }
 }

@@ -6,9 +6,11 @@ import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wifi_scan/wifi_scan.dart';
+import 'package:app_settings/app_settings.dart';
 import '../providers/adhanbox_provider.dart';
 import '../services/adhanbox_api.dart';
-import 'mawaqit_config_screen.dart';
+import '../services/esp32_discovery_service.dart';
+import 'calculation_setup_screen.dart';
 
 class DeviceSetupScreen extends ConsumerStatefulWidget {
   const DeviceSetupScreen({super.key});
@@ -47,6 +49,46 @@ class _DeviceSetupScreenState extends ConsumerState<DeviceSetupScreen> {
   void initState() {
     super.initState();
     _scanForAdhanBoxNetworks();
+  }
+
+  /// Ouvre les paramètres WiFi du système
+  Future<void> _openWiFiSettings() async {
+    try {
+      // app_settings ouvre directement les paramètres WiFi
+      await AppSettings.openAppSettings(type: AppSettingsType.wifi);
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('✅ Paramètres WiFi ouverts - Revenez après connexion'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      // Fallback: ouvre les paramètres généraux
+      try {
+        await AppSettings.openAppSettings(type: AppSettingsType.settings);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Ouvrez WiFi dans les paramètres'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+      } catch (e2) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Erreur: Ouvrez WiFi manuellement dans Paramètres'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    }
   }
 
   /// ========== ÉTAPE 1: Scanner les réseaux WiFi Adhanbox ==========
@@ -167,36 +209,62 @@ class _DeviceSetupScreenState extends ConsumerState<DeviceSetupScreen> {
     });
 
     try {
-      // TODO: Utiliser wifi_iot_plugin ou network_info_plus pour connexion auto
-      // await WiFiForIoTPlugin.connect(_selectedAdhanboxWifi,
-      //     password: '', security: NetworkSecurity.NONE);
+      // Vérifier la connexion à l'ESP32 avec plusieurs tentatives
+      const maxAttempts = 5;
+      bool connected = false;
+      Exception? lastError;
 
-      // Simulation: demander à l'utilisateur de se connecter manuellement
-      await Future.delayed(const Duration(seconds: 2));
+      for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+          setState(() {
+            _error = 'Vérification de la connexion... ($attempt/$maxAttempts)';
+          });
 
-      // Vérifier la connexion à l'ESP32
-      final api = AdhanBoxAPI(
-        baseUrl: 'http://192.168.4.1',
-        timeout: const Duration(seconds: 5),
-      );
+          final api = AdhanBoxAPI(
+            baseUrl: 'http://192.168.4.1',
+            timeout: const Duration(seconds: 8),
+          );
 
-      final status = await api.getStatus();
-      if (status['device']?.toString().toLowerCase().contains('adhanbox') ??
-          false) {
+          final status = await api.getStatus();
+          // Vérifier que le JSON contient des clés attendues (wifi, rtc_ok, etc.)
+          if (status.containsKey('wifi') && status.containsKey('rtc_ok')) {
+            // Connexion réussie! Passer à l'étape suivante
+            setState(() {
+              _step = 3;
+              _isConnectingToAdhanbox = false;
+              _error = null;
+            });
+
+            // Demander à l'ESP32 de scanner les réseaux WiFi disponibles
+            await _getHomeWifiNetworksFromESP32();
+            connected = true;
+            break;
+          } else {
+            throw Exception('Réponse JSON invalide');
+          }
+        } catch (e) {
+          lastError = e as Exception;
+          if (attempt < maxAttempts) {
+            await Future.delayed(const Duration(seconds: 3));
+          }
+        }
+      }
+
+      if (!connected) {
         setState(() {
-          _step = 3;
+          _error =
+              '❌ Impossible de contacter l\'ESP32\n\n'
+              'Vérifiez que:\n'
+              '• Vous êtes connecté au WiFi "$_selectedAdhanboxWifi"\n'
+              '• L\'ESP32 est allumé\n'
+              '• Vous êtes près de l\'ESP32\n\n'
+              'Puis réessayez.';
           _isConnectingToAdhanbox = false;
         });
-
-        // Demander à l'ESP32 de scanner les réseaux WiFi disponibles
-        await _getHomeWifiNetworksFromESP32();
-      } else {
-        throw Exception('Appareil non reconnu');
       }
     } catch (e) {
       setState(() {
-        _error = 'Impossible de se connecter à l\'AdhanBox.\n'
-            'Vérifiez que vous êtes bien connecté au WiFi $_selectedAdhanboxWifi';
+        _error = '❌ Erreur: $e';
         _isConnectingToAdhanbox = false;
       });
     }
@@ -324,11 +392,18 @@ class _DeviceSetupScreenState extends ConsumerState<DeviceSetupScreen> {
     try {
       for (var interface in await NetworkInterface.list()) {
         for (var addr in interface.addresses) {
-          // Chercher une IPv4 du réseau local (192.168.x.x ou 10.x.x.x)
+          // Chercher une IPv4 du réseau local (192.168.x.x, 10.x.x.x, ou 172.16.x.x-172.31.x.x)
           if (addr.type == InternetAddressType.IPv4 && !addr.isLoopback) {
             final ip = addr.address;
             if (ip.startsWith('192.168.') || ip.startsWith('10.')) {
               return ip;
+            }
+            // Vérifier aussi les adresses 172.16.x.x à 172.31.x.x
+            if (ip.startsWith('172.')) {
+              final secondOctet = int.tryParse(ip.split('.')[1]) ?? 0;
+              if (secondOctet >= 16 && secondOctet <= 31) {
+                return ip;
+              }
             }
           }
         }
@@ -370,8 +445,8 @@ class _DeviceSetupScreenState extends ConsumerState<DeviceSetupScreen> {
       }
     }
 
-    // Tester les IPs par lots de 30 en parallèle pour optimiser la vitesse
-    const batchSize = 30;
+    // Tester les IPs par lots de 15 en parallèle avec timeout de 5 secondes
+    const batchSize = 15;
     int tested = 0;
 
     for (int i = 0; i < ipsToTest.length; i += batchSize) {
@@ -406,14 +481,13 @@ class _DeviceSetupScreenState extends ConsumerState<DeviceSetupScreen> {
     try {
       final api = AdhanBoxAPI(
         baseUrl: 'http://$ip',
-        timeout: const Duration(seconds: 2),
+        timeout: const Duration(seconds: 5),
       );
 
       final status = await api.getStatus();
 
-      // Vérifier si c'est bien un AdhanBox
-      final deviceName = status['device']?.toString().toLowerCase() ?? '';
-      if (deviceName.contains('adhanbox') || deviceName.contains('adhan')) {
+      // Vérifier si c'est bien un AdhanBox (vérifier les champs qui existent)
+      if (status.containsKey('wifi') && status.containsKey('rtc_ok')) {
         debugPrint('AdhanBox trouvée à $ip');
         return true;
       }
@@ -427,38 +501,79 @@ class _DeviceSetupScreenState extends ConsumerState<DeviceSetupScreen> {
     setState(() {
       _isSearchingOnHomeNetwork = true;
       _error = null;
-      _networkScanProgress = 'Démarrage du scan...';
+      _networkScanProgress = 'Recherche de l\'AdhanBox sur le réseau...';
     });
 
     try {
-      // Scanner le réseau local
-      final foundIp = await _scanNetworkForAdhanBox();
+      // Essayer de scanner le réseau pour trouver une IP réelle (pas mDNS)
+      const maxAttempts = 3;
+      bool connected = false;
+      Exception? lastError;
+      String? foundIp;
 
-      if (foundIp != null) {
-        // Sauvegarder l'IP trouvée
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('deviceIp', foundIp);
-        ref.read(currentDeviceIpProvider.notifier).state = foundIp;
-        ref.invalidate(deviceIpProvider);
+      for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+          setState(() {
+            _networkScanProgress = 'Tentative $attempt/$maxAttempts...';
+          });
 
+          // Utiliser le discovery service pour trouver l'ESP32
+          final discovery = ESP32DiscoveryService();
+          final device = await discovery.findAdhanBox(timeout: const Duration(seconds: 5)).timeout(
+            const Duration(seconds: 6),
+            onTimeout: () => null,
+          );
+
+          if (device != null) {
+            // Tester la connexion avec l'IP trouvée
+            final api = AdhanBoxAPI(
+              baseUrl: 'http://${device.host}',
+              timeout: const Duration(seconds: 5),
+            );
+
+            final status = await api.getStatus();
+
+            if (status.containsKey('wifi') && status.containsKey('rtc_ok')) {
+              foundIp = device.host;
+              final prefs = await SharedPreferences.getInstance();
+              await prefs.setString('deviceIp', foundIp!);
+              ref.read(currentDeviceIpProvider.notifier).state = foundIp;
+              ref.invalidate(deviceIpProvider);
+
+              setState(() {
+                _deviceIp = foundIp;
+                _step = 5; // Configuration finale
+                _isSearchingOnHomeNetwork = false;
+                _networkScanProgress = '';
+              });
+              connected = true;
+              break;
+            }
+          }
+        } catch (e) {
+          lastError = e as Exception;
+          print('DEBUG: Tentative $attempt échouée: $e');
+          if (attempt < maxAttempts) {
+            await Future.delayed(const Duration(seconds: 2));
+          }
+        }
+      }
+
+      if (!connected) {
         setState(() {
-          _deviceIp = foundIp;
-          _step = 5; // Configuration finale
-          _isSearchingOnHomeNetwork = false;
-          _networkScanProgress = '';
-        });
-      } else {
-        setState(() {
-          _error = 'Impossible de trouver l\'AdhanBox sur le réseau maison.\n'
-              'L\'appareil a peut-être échoué à se connecter au WiFi.\n'
-              'Vous pouvez réessayer ou entrer l\'IP manuellement.';
+          _error = 'Impossible de trouver l\'AdhanBox sur le réseau après $maxAttempts tentatives.\n\n'
+              'Assurez-vous que:\n'
+              '1. L\'ESP32 est connecté au WiFi\n'
+              '2. Le téléphone est sur le même réseau\n'
+              '3. L\'adresse IP est dans la plage 172.20.x.x ou 192.168.x.x\n\n'
+              'Vous pouvez aussi entrer l\'IP manuellement.';
           _isSearchingOnHomeNetwork = false;
           _networkScanProgress = '';
         });
       }
     } catch (e) {
       setState(() {
-        _error = 'Erreur lors du scan réseau: $e\n'
+        _error = 'Erreur: $e\n'
             'Vous pouvez entrer l\'IP manuellement.';
         _isSearchingOnHomeNetwork = false;
         _networkScanProgress = '';
@@ -480,9 +595,8 @@ class _DeviceSetupScreenState extends ConsumerState<DeviceSetupScreen> {
       );
 
       final status = await api.getStatus();
-      final deviceName = status['device']?.toString().toLowerCase() ?? '';
 
-      if (deviceName.contains('adhanbox') || deviceName.contains('adhan')) {
+      if (status.containsKey('wifi') && status.containsKey('rtc_ok')) {
         // Sauvegarder l'IP
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('deviceIp', ip);
@@ -791,7 +905,7 @@ class _DeviceSetupScreenState extends ConsumerState<DeviceSetupScreen> {
         ),
         const SizedBox(height: 8),
         Text(
-          'Connexion au réseau: $_selectedAdhanboxWifi',
+          'Réseau sélectionné: $_selectedAdhanboxWifi',
           style: const TextStyle(color: Colors.grey),
         ),
         const SizedBox(height: 24),
@@ -804,7 +918,7 @@ class _DeviceSetupScreenState extends ConsumerState<DeviceSetupScreen> {
                 Text('Connexion en cours...'),
                 SizedBox(height: 8),
                 Text(
-                  'Connexion au WiFi de l\'AdhanBox',
+                  'Tentative de connexion à l\'AdhanBox',
                   style: TextStyle(fontSize: 12, color: Colors.grey),
                 ),
               ],
@@ -814,7 +928,7 @@ class _DeviceSetupScreenState extends ConsumerState<DeviceSetupScreen> {
           Center(
             child: Column(
               children: [
-                const Icon(Icons.info_outline, size: 64, color: Colors.blue),
+                const Icon(Icons.wifi_tethering, size: 64, color: Colors.blue),
                 const SizedBox(height: 16),
                 const Text(
                   'Action requise',
@@ -823,34 +937,80 @@ class _DeviceSetupScreenState extends ConsumerState<DeviceSetupScreen> {
                 const SizedBox(height: 16),
                 Card(
                   color: Colors.blue.shade50,
-                  child: const Padding(
-                    padding: EdgeInsets.all(16),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          '📱 Connectez votre téléphone manuellement:',
-                          style: TextStyle(fontWeight: FontWeight.bold),
+                        const Text(
+                          '📱 Connectez-vous au réseau AdhanBox',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
                         ),
-                        SizedBox(height: 8),
+                        const SizedBox(height: 16),
+                        OutlinedButton.icon(
+                          onPressed: _openWiFiSettings,
+                          icon: const Icon(Icons.settings, size: 20),
+                          label: const Text('Ouvrir les paramètres WiFi'),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 20,
+                              vertical: 12,
+                            ),
+                            side: const BorderSide(color: Colors.blue, width: 2),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        const Text(
+                          '1. Cliquez sur le bouton ci-dessus',
+                          style: TextStyle(fontSize: 14),
+                        ),
+                        const SizedBox(height: 4),
                         Text(
-                            '1. Ouvrez les paramètres WiFi de votre téléphone'),
-                        Text('2. Connectez-vous au réseau AdhanBox'),
-                        Text('3. Revenez dans l\'application'),
-                        Text('4. Appuyez sur "Continuer"'),
+                          '2. Sélectionnez "$_selectedAdhanboxWifi"',
+                          style: const TextStyle(fontSize: 14),
+                        ),
+                        const SizedBox(height: 4),
+                        const Text(
+                          '3. Revenez dans l\'app',
+                          style: TextStyle(fontSize: 14),
+                        ),
+                        const SizedBox(height: 12),
+                        const Text(
+                          '💡 Aucun mot de passe nécessaire',
+                          style: TextStyle(
+                            color: Colors.green,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                       ],
                     ),
                   ),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 20),
                 ElevatedButton.icon(
                   onPressed: _connectToAdhanBoxWifi,
                   icon: const Icon(Icons.check_circle),
-                  label: const Text('Je suis connecté, continuer'),
+                  label: const Text('Je suis connecté'),
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 24, vertical: 12),
+                        horizontal: 32, vertical: 16),
+                    backgroundColor: Colors.green,
+                    foregroundColor: Colors.white,
+                    textStyle: const TextStyle(fontSize: 16),
                   ),
+                ),
+                const SizedBox(height: 12),
+                TextButton.icon(
+                  onPressed: () {
+                    setState(() {
+                      _step = 1;
+                    });
+                  },
+                  icon: const Icon(Icons.arrow_back),
+                  label: const Text('Retour au scan'),
                 ),
               ],
             ),
@@ -990,14 +1150,25 @@ class _DeviceSetupScreenState extends ConsumerState<DeviceSetupScreen> {
                   const Icon(Icons.wifi_off, size: 48, color: Colors.orange),
                   const SizedBox(height: 16),
                   const Text(
-                    'Vous êtes actuellement sur le WiFi AdhanBox',
+                    'Reconnectez-vous à votre WiFi maison',
                     textAlign: TextAlign.center,
-                    style: TextStyle(fontWeight: FontWeight.bold),
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
                   ),
-                  const SizedBox(height: 12),
-                  const Text(
-                    'Avant de continuer, vous devez:',
-                    textAlign: TextAlign.center,
+                  const SizedBox(height: 16),
+                  OutlinedButton.icon(
+                    onPressed: _openWiFiSettings,
+                    icon: const Icon(Icons.settings, size: 20),
+                    label: const Text('Ouvrir les paramètres WiFi'),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 12,
+                      ),
+                      side: const BorderSide(color: Colors.orange, width: 2),
+                    ),
                   ),
                   const SizedBox(height: 16),
                   Container(
@@ -1010,10 +1181,20 @@ class _DeviceSetupScreenState extends ConsumerState<DeviceSetupScreen> {
                     child: const Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('1. Ouvrir les paramètres WiFi'),
-                        Text('2. Déconnecter du WiFi "AdhanBox"'),
-                        Text('3. Reconnecter à votre WiFi maison'),
-                        Text('4. Revenir ici et cliquer "Continuer"'),
+                        Text(
+                          '1. Cliquez sur "Ouvrir paramètres WiFi"',
+                          style: TextStyle(fontSize: 14),
+                        ),
+                        SizedBox(height: 4),
+                        Text(
+                          '2. Sélectionnez votre WiFi maison',
+                          style: TextStyle(fontSize: 14),
+                        ),
+                        SizedBox(height: 4),
+                        Text(
+                          '3. Revenez ici',
+                          style: TextStyle(fontSize: 14),
+                        ),
                       ],
                     ),
                   ),
@@ -1023,14 +1204,16 @@ class _DeviceSetupScreenState extends ConsumerState<DeviceSetupScreen> {
                       setState(() => _step4ReadyToSearch = true);
                       _findESP32OnHomeNetwork();
                     },
-                    icon: const Icon(Icons.arrow_forward),
-                    label: const Text('Continuer (j\'ai reconnecté)'),
+                    icon: const Icon(Icons.search),
+                    label: const Text('Chercher l\'AdhanBox'),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.orange,
+                      foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 24,
-                        vertical: 12,
+                        horizontal: 32,
+                        vertical: 14,
                       ),
+                      textStyle: const TextStyle(fontSize: 16),
                     ),
                   ),
                 ],
@@ -1262,13 +1445,15 @@ class _DeviceSetupScreenState extends ConsumerState<DeviceSetupScreen> {
                   onPressed: () {
                     Navigator.of(context).pushReplacement(
                       MaterialPageRoute(
-                        builder: (_) => const MawaqitConfigScreen(),
+                        builder: (_) => const CalculationSetupScreen(),
                       ),
                     );
                   },
-                  icon: const Icon(Icons.mosque),
-                  label: const Text('Configurer Mawaqit'),
+                  icon: const Icon(Icons.tune),
+                  label: const Text('Configurer les horaires'),
                   style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF1B5E20),
+                    foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 12),
                   ),
                 ),

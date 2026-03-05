@@ -6,6 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 import 'package:geolocator/geolocator.dart';
 import '../providers/adhanbox_provider.dart';
+import 'device_setup_screen.dart';
+import 'mawaqit_offsets_screen.dart';
 
 class MosqueData {
   final String uuid;
@@ -70,20 +72,34 @@ class _MawaqitConfigScreenState extends ConsumerState<MawaqitConfigScreen> {
   bool _showManualLocation = false;
   late TextEditingController _latController;
   late TextEditingController _lonController;
+  late TextEditingController _mosqueSearchController;
+  String _selectedCalcMethod = 'mwl';
+
+  final Map<String, String> _calcMethodLabels = const {
+    'mwl': 'Muslim World League (Fajr 18° / Isha 17°)',
+    'isna': 'ISNA (Fajr 15° / Isha 15°)',
+    'uoif': 'UOIF/France (Fajr 12° / Isha 12°)',
+    'egypt': 'Egyptian (Fajr 19.5° / Isha 17.5°)',
+    'karachi': 'Karachi (Fajr 18° / Isha 18°)',
+  };
 
   @override
   void initState() {
     super.initState();
     _latController = TextEditingController();
     _lonController = TextEditingController();
+    _mosqueSearchController = TextEditingController();
+    _autoDetectAndConfigure();
   }
 
   @override
   void dispose() {
     _latController.dispose();
     _lonController.dispose();
+    _mosqueSearchController.dispose();
     super.dispose();
   }
+
 
   Future<Position> _getReliablePosition() async {
     // Priorité absolue: obtenir une NOUVELLE position GPS du téléphone (pas du cache)
@@ -204,7 +220,9 @@ class _MawaqitConfigScreenState extends ConsumerState<MawaqitConfigScreen> {
           await http.get(Uri.parse(url)).timeout(const Duration(seconds: 8));
 
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
+        final decoded = jsonDecode(response.body);
+        final data = _asMap(decoded);
+        if (data == null) return null;
 
         double? lat, lon;
 
@@ -239,129 +257,314 @@ class _MawaqitConfigScreenState extends ConsumerState<MawaqitConfigScreen> {
     return null;
   }
 
-  @override
-  void initState() {
-    super.initState();
-    _autoDetectAndConfigure();
+  Map<String, dynamic>? _asMap(dynamic value) {
+    if (value is Map<String, dynamic>) return value;
+    if (value is Map) {
+      return value.map(
+        (key, val) => MapEntry(key.toString(), val),
+      );
+    }
+    return null;
   }
 
-  /// Rechercher les mosquées directement via l'API Mawaqit (sans passer par ESP32)
-  Future<List<MosqueData>> _searchMosquesDirectly(
-      double lat, double lon) async {
+  List<MosqueData> _parseOverpassMosques(dynamic decoded) {
+    final root = _asMap(decoded);
+    if (root == null) return [];
+    final elements = root['elements'];
+    if (elements is! List) return [];
+
+    final mosques = <MosqueData>[];
+
+    for (final item in elements) {
+      final element = _asMap(item);
+      if (element == null) continue;
+
+      final tags = _asMap(element['tags']) ?? <String, dynamic>{};
+      final name = (tags['name'] ?? tags['name:fr'] ?? '').toString().trim();
+      if (name.isEmpty) continue;
+
+      final center = _asMap(element['center']);
+      final latRaw = element['lat'] ?? center?['lat'];
+      final lonRaw = element['lon'] ?? center?['lon'];
+      if (latRaw == null || lonRaw == null) continue;
+
+      final lat = double.tryParse(latRaw.toString());
+      final lon = double.tryParse(lonRaw.toString());
+      if (lat == null || lon == null) continue;
+
+      final city = (tags['addr:city'] ?? tags['is_in:city'] ?? '').toString();
+      final street = (tags['addr:street'] ?? '').toString();
+      final houseNumber = (tags['addr:housenumber'] ?? '').toString();
+      final address = [houseNumber, street]
+          .where((part) => part.trim().isNotEmpty)
+          .join(' ')
+          .trim();
+
+      mosques.add(
+        MosqueData(
+          uuid: 'osm-${element['id']}',
+          name: name,
+          lat: lat,
+          lon: lon,
+          city: city.isEmpty ? null : city,
+          address: address.isEmpty ? null : address,
+        ),
+      );
+    }
+
+    final dedup = <String, MosqueData>{};
+    for (final mosque in mosques) {
+      final key = '${mosque.name.toLowerCase()}_${mosque.lat.toStringAsFixed(5)}_${mosque.lon.toStringAsFixed(5)}';
+      dedup[key] = mosque;
+    }
+
+    return dedup.values.toList();
+  }
+
+  List<MosqueData> _parsePhotonMosques(dynamic decoded) {
+    final root = _asMap(decoded);
+    if (root == null) return [];
+    final features = root['features'];
+    if (features is! List) return [];
+
+    final mosques = <MosqueData>[];
+    for (final item in features) {
+      final feature = _asMap(item);
+      if (feature == null) continue;
+
+      final properties = _asMap(feature['properties']) ?? <String, dynamic>{};
+      final geometry = _asMap(feature['geometry']) ?? <String, dynamic>{};
+      final coords = geometry['coordinates'];
+      if (coords is! List || coords.length < 2) continue;
+
+      final lon = double.tryParse(coords[0].toString());
+      final lat = double.tryParse(coords[1].toString());
+      if (lat == null || lon == null) continue;
+
+      final name = (properties['name'] ?? properties['osm_value'] ?? '').toString().trim();
+      if (name.isEmpty) continue;
+
+      final osmValue = (properties['osm_value'] ?? '').toString().toLowerCase();
+      final osmKey = (properties['osm_key'] ?? '').toString().toLowerCase();
+      final type = (properties['type'] ?? '').toString().toLowerCase();
+      
+      // Filtre plus large pour capturer toutes les mosquées
+      final looksMosque = name.toLowerCase().contains('mosqu') ||
+          name.toLowerCase().contains('mosque') ||
+          name.toLowerCase().contains('مسجد') ||
+          osmValue == 'mosque' ||
+          osmValue.contains('mosque') ||
+          (osmKey == 'amenity' && osmValue == 'place_of_worship') ||
+          (osmKey == 'building' && osmValue == 'mosque') ||
+          type.contains('mosque');
+      if (!looksMosque) continue;
+
+      final city = (properties['city'] ?? properties['district'] ?? '').toString();
+      final street = (properties['street'] ?? '').toString();
+      final houseNumber = (properties['housenumber'] ?? '').toString();
+      final address = [houseNumber, street]
+          .where((part) => part.trim().isNotEmpty)
+          .join(' ')
+          .trim();
+
+      final id = (properties['osm_id'] ?? properties['id'] ?? '${lat}_$lon').toString();
+
+      mosques.add(
+        MosqueData(
+          uuid: 'photon-$id',
+          name: name,
+          lat: lat,
+          lon: lon,
+          city: city.isEmpty ? null : city,
+          address: address.isEmpty ? null : address,
+        ),
+      );
+    }
+
+    final dedup = <String, MosqueData>{};
+    for (final mosque in mosques) {
+      final key = '${mosque.name.toLowerCase()}_${mosque.lat.toStringAsFixed(5)}_${mosque.lon.toStringAsFixed(5)}';
+      dedup[key] = mosque;
+    }
+    return dedup.values.toList();
+  }
+
+  Future<List<MosqueData>> _searchMosquesViaPhoton(double lat, double lon) async {
     try {
-      // Essayer différents endpoints en PARALLÈLE (plus rapide)
-      final endpoints = [
-        'https://api.mawaqit.net/v1/mosque?latitude=$lat&longitude=$lon',
-        'https://api.mawaqit.net/v1/mosque/nearby?latitude=$lat&longitude=$lon',
-        'https://api.mawaqit.net/v1/mosques/search?latitude=$lat&longitude=$lon',
-      ];
-
-      // Teste tous les endpoints en parallèle au lieu de séquentiellement
-      final futures = endpoints.map((endpoint) async {
-        try {
-          debugPrint('Essai endpoint: $endpoint');
-          final searchResponse = await http
-              .get(Uri.parse(endpoint))
-              .timeout(const Duration(seconds: 10));
-
-          debugPrint('Réponse statut: ${searchResponse.statusCode}');
-
-          if (searchResponse.statusCode == 200) {
-            final searchData = jsonDecode(searchResponse.body);
-
-            // Essayer différentes clés de réponse
-            List<dynamic> mosquesList = searchData['data'] as List? ??
-                searchData['mosques'] as List? ??
-                searchData['results'] as List? ??
-                (searchData is List ? searchData : []);
-
-            if (mosquesList.isNotEmpty) {
-              debugPrint('Mosquées trouvées: ${mosquesList.length}');
-              final mosques = mosquesList
-                  .map((m) {
-                    try {
-                      return MosqueData.fromJson(m as Map<String, dynamic>);
-                    } catch (e) {
-                      return null;
-                    }
-                  })
-                  .whereType<MosqueData>()
-                  .where((m) => m.uuid.isNotEmpty)
-                  .toList();
-
-              if (mosques.isNotEmpty) {
-                return mosques;
-              }
-            }
-          }
-        } catch (e) {
-          debugPrint('Endpoint échoué: $e');
-        }
-        return <MosqueData>[];
+      debugPrint('=== RECHERCHE PHOTON ===');
+      final uri = Uri.https('photon.komoot.io', '/api/', {
+        'q': 'mosque',
+        'lat': lat.toString(),
+        'lon': lon.toString(),
+        'limit': '50',
+        'distance_sort': 'true',
       });
 
-      // Exécute tous les futures en parallèle, prend le premier résultat non-vide
-      final results = await Future.wait(futures);
-      for (final mosques in results) {
-        if (mosques.isNotEmpty) {
-          return mosques;
-        }
+      debugPrint('>>> Photon endpoint: $uri');
+      final response = await http.get(uri).timeout(const Duration(seconds: 15));
+      debugPrint('<<< Photon status: ${response.statusCode}, body length: ${response.body.length}');
+
+      if (response.statusCode != 200 || response.body.trim().isEmpty) {
+        debugPrint('✗ Photon: pas de résultats (status=${response.statusCode})');
+        return [];
       }
 
-      // Fallback : Retourner une liste manuelle de grandes mosquées
-      debugPrint(
-          'API échouée, fallback sur liste manuelle de mosquées connues');
-      return _getFallbackMosques();
+      final decoded = jsonDecode(response.body);
+      final mosques = _parsePhotonMosques(decoded);
+      debugPrint('✓ Mosquées Photon parsées: ${mosques.length}');
+      
+      return mosques;
+    } on TimeoutException {
+      debugPrint('✗ Photon timeout après 15s');
+      return [];
     } catch (e) {
-      debugPrint('Erreur recherche Mawaqit: $e');
-      return _getFallbackMosques();
+      debugPrint('✗ Photon échec: $e');
+      return [];
     }
   }
 
-  /// Liste manuelle de mosquées courantes (fallback)
-  List<MosqueData> _getFallbackMosques() {
-    return [
-      MosqueData(
-        uuid: 'grande-mosque-paris',
-        name: 'Grande Mosquée de Paris',
-        lat: 48.8372,
-        lon: 2.3588,
-        city: 'Paris 5e',
-        address: '1 Rue Dieudé, 75005 Paris',
-      ),
-      MosqueData(
-        uuid: 'mosquee-strasbourg',
-        name: 'Mosquée de Strasbourg',
-        lat: 48.5734,
-        lon: 7.7521,
-        city: 'Strasbourg',
-        address: 'Rue du Fossé des Treize',
-      ),
-      MosqueData(
-        uuid: 'mosquee-marseille',
-        name: 'Mosquée Al-Farouq',
-        lat: 43.2947,
-        lon: 5.3708,
-        city: 'Marseille',
-        address: 'Boulevard Saint-Yves',
-      ),
-      MosqueData(
-        uuid: 'mosquee-pau',
-        name: 'Mosquée de Pau',
-        lat: 43.2929,
-        lon: -0.3654,
-        city: 'Pau',
-        address: 'Rue Maréchal Joffre',
-      ),
-      MosqueData(
-        uuid: 'mosquee-bordeaux',
-        name: 'Mosquée Abou Ayyoub As-Saluki',
-        lat: 44.8378,
-        lon: -0.5792,
-        city: 'Bordeaux',
-        address: 'Rue du Château Trompette',
-      ),
-    ];
+  /// Rechercher des mosquées réellement proches via OpenStreetMap/Overpass
+  Future<List<MosqueData>> _searchMosquesDirectly(double lat, double lon) async {
+    try {
+      debugPrint('=== RECHERCHE MOSQUÉES OSM ===');
+      debugPrint('GPS: lat=$lat, lon=$lon');
+      final startedAt = DateTime.now();
+
+      final overpassQuery = '''
+[out:json][timeout:35];
+(
+  node["amenity"="place_of_worship"]["religion"="muslim"](around:35000,$lat,$lon);
+  way["amenity"="place_of_worship"]["religion"="muslim"](around:35000,$lat,$lon);
+  relation["amenity"="place_of_worship"]["religion"="muslim"](around:35000,$lat,$lon);
+  node["building"="mosque"](around:35000,$lat,$lon);
+  way["building"="mosque"](around:35000,$lat,$lon);
+  relation["building"="mosque"](around:35000,$lat,$lon);
+  node["amenity"="mosque"](around:35000,$lat,$lon);
+  way["amenity"="mosque"](around:35000,$lat,$lon);
+  relation["amenity"="mosque"](around:35000,$lat,$lon);
+);
+out center tags;
+''';
+
+      final endpoints = [
+        'https://overpass-api.de/api/interpreter',
+        'https://overpass.kumi.systems/api/interpreter',
+        'https://overpass.openstreetmap.ru/api/interpreter',
+      ];
+
+      for (final endpoint in endpoints) {
+        if (DateTime.now().difference(startedAt) > const Duration(seconds: 35)) {
+          debugPrint('⏱️ Timeout global Overpass atteint (35s)');
+          break;
+        }
+        try {
+          debugPrint('>>> Overpass endpoint: $endpoint');
+          final response = await http
+              .post(
+                Uri.parse(endpoint),
+                headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                body: {'data': overpassQuery},
+              )
+              .timeout(const Duration(seconds: 12));
+
+          debugPrint('<<< Overpass status: ${response.statusCode}');
+          if (response.statusCode != 200 || response.body.trim().isEmpty) {
+            continue;
+          }
+
+          final decoded = jsonDecode(response.body);
+          final mosques = _parseOverpassMosques(decoded);
+          if (mosques.isNotEmpty) {
+            debugPrint('✓ Mosquées OSM trouvées: ${mosques.length}');
+            return mosques;
+          }
+        } catch (e) {
+          debugPrint('✗ Overpass échec: $e');
+        }
+      }
+
+      // Fallback rapide: Photon (toujours données OSM, souvent plus stable)
+      final photonMosques = await _searchMosquesViaPhoton(lat, lon);
+      return photonMosques;
+    } catch (e) {
+      debugPrint('✗ Erreur recherche OSM: $e');
+      return [];
+    }
+  }
+
+  /// Rechercher les mosquées par nom de ville ou code postal
+  Future<void> _searchMosquesByCity() async {
+    final cityInput = _mosqueSearchController.text.trim();
+    if (cityInput.isEmpty) {
+      setState(() {
+        _error = 'Veuillez entrer une ville ou un code postal';
+      });
+      return;
+    }
+
+    setState(() {
+      _isSearching = true;
+      _error = null;
+    });
+
+    try {
+      final geocodeUrl = Uri.https(
+        'nominatim.openstreetmap.org',
+        '/search',
+        {
+          'q': cityInput,
+          'format': 'json',
+          'limit': '1',
+          'countrycodes': 'fr',
+        },
+      );
+
+      final geocodeResponse = await http.get(
+        geocodeUrl,
+        headers: {'User-Agent': 'AdhanBox/1.0 (Flutter)'} ,
+      ).timeout(const Duration(seconds: 15));
+
+      if (geocodeResponse.statusCode != 200 || geocodeResponse.body.trim().isEmpty) {
+        throw Exception('Impossible de géocoder "$cityInput"');
+      }
+
+      final geocodeData = jsonDecode(geocodeResponse.body);
+      if (geocodeData is! List || geocodeData.isEmpty) {
+        throw Exception('Ville/code postal introuvable');
+      }
+
+      final first = _asMap(geocodeData.first);
+      final lat = double.tryParse((first?['lat'] ?? '').toString());
+      final lon = double.tryParse((first?['lon'] ?? '').toString());
+      if (lat == null || lon == null) {
+        throw Exception('Coordonnées invalides pour "$cityInput"');
+      }
+
+      _userLat = lat;
+      _userLon = lon;
+
+      final mosques = await _searchMosquesDirectly(lat, lon);
+      if (mosques.isEmpty) {
+        throw Exception('Aucune mosquée trouvée autour de "$cityInput"');
+      }
+
+      mosques.sort((a, b) {
+        final distA = a.distanceTo(lat, lon);
+        final distB = b.distanceTo(lat, lon);
+        return distA.compareTo(distB);
+      });
+
+      setState(() {
+        _nearbyMosques = mosques.take(20).toList();
+        _isSearching = false;
+        _error = null;
+      });
+    } catch (e) {
+      setState(() {
+        _error = 'Recherche impossible: $e';
+        _isSearching = false;
+      });
+    }
   }
 
   Future<void> _autoDetectAndConfigure() async {
@@ -403,8 +606,11 @@ class _MawaqitConfigScreenState extends ConsumerState<MawaqitConfigScreen> {
         );
       }
 
-      // 2. Search mosques via API Mawaqit directe (plus fiable)
-      final mosques = await _searchMosquesDirectly(_userLat!, _userLon!);
+        // 2. Search mosques with hard timeout to avoid infinite spinner
+        debugPrint('>>> Début recherche mosquées (timeout 50s)...');
+        final mosques = await _searchMosquesDirectly(_userLat!, _userLon!)
+          .timeout(const Duration(seconds: 50));
+        debugPrint('<<< Recherche terminée: ${mosques.length} mosquées');
 
       if (mosques.isEmpty) {
         throw Exception(
@@ -506,18 +712,111 @@ class _MawaqitConfigScreenState extends ConsumerState<MawaqitConfigScreen> {
     return true;
   }
 
-  Future<void> _configureMosque(MosqueData mosque) async {
+  Future<void> _configureCalculatedFallback() async {
     setState(() {
       _isConfiguring = true;
       _error = null;
     });
 
     try {
-      final deviceIp = ref.read(currentDeviceIpProvider);
-      if (deviceIp == null || deviceIp.isEmpty) {
-        throw Exception('Aucune adresse IP configurée');
+      final api = ref.read(adhanboxApiProvider);
+      if (api == null) {
+        throw Exception('Aucun appareil configuré');
       }
 
+      await api.setCalculationConfig(method: _selectedCalcMethod);
+
+      ref.invalidate(prayerTimesProvider);
+      ref.invalidate(deviceStatusProvider);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Horaires calculés activés (${_calcMethodLabels[_selectedCalcMethod] ?? _selectedCalcMethod})',
+            ),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+
+      setState(() {
+        _configuredMosque = 'Mode calcul activé';
+      });
+
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+    } catch (e) {
+      setState(() {
+        _error = 'Impossible d\'activer le mode calcul: $e';
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erreur mode calcul: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      setState(() {
+        _isConfiguring = false;
+      });
+    }
+  }
+
+  Future<void> _configureMosque(MosqueData mosque) async {
+    final deviceIp = ref.read(currentDeviceIpProvider);
+    
+    // Vérifier si un appareil est configuré
+    if (deviceIp == null || deviceIp.isEmpty) {
+      if (mounted) {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (BuildContext dialogContext) {
+            return AlertDialog(
+              title: const Text('🕌 Pas d\'appareil AdhanBox détecté'),
+              content: const Text(
+                'Vous devez d\'abord ajouter un appareil AdhanBox avant de pouvoir configurer une mosquée.\n\n'
+                'Souhaitez-vous configurer votre AdhanBox maintenant ?',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: const Text('Annuler'),
+                ),
+                ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.of(dialogContext).pop();
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const DeviceSetupScreen(),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.add_box_outlined),
+                  label: const Text('Configurer AdhanBox'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.teal,
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      }
+      return;
+    }
+
+    setState(() {
+      _isConfiguring = true;
+      _error = null;
+    });
+
+    try {
       // Vérification importante: s'assurer que ce n'est pas l'adresse AP initiale
       if (deviceIp == '192.168.4.1') {
         throw Exception('IP incorrect (adresse AP).\n\n'
@@ -556,25 +855,48 @@ class _MawaqitConfigScreenState extends ConsumerState<MawaqitConfigScreen> {
 
         // Force sync on ESP32
         try {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('⏳ Synchronisation en cours...'),
+                backgroundColor: Colors.blue,
+                duration: Duration(seconds: 2),
+              ),
+            );
+          }
+          
           final syncResponse = await http
               .post(
                 Uri.parse('http://$deviceIp/api/mawaqit/sync'),
               )
-              .timeout(const Duration(seconds: 60));
+              .timeout(const Duration(seconds: 90));
 
           if (syncResponse.statusCode == 200) {
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
-                  content: Text('Horaires synchronisés ! ✓'),
+                  content: Text('✅ Horaires Mawaqit synchronisés avec succès!'),
                   backgroundColor: Colors.green,
-                  duration: Duration(seconds: 2),
+                  duration: Duration(seconds: 3),
                 ),
               );
             }
+            
+            // Attendre que l'ESP32 enregistre les données
+            await Future.delayed(const Duration(seconds: 3));
+          } else {
+            throw Exception('Sync HTTP ${syncResponse.statusCode}');
           }
-        } catch (_) {
-          // Sync silently failed, but data might still be cached
+        } catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('⚠️ Erreur synchronisation: $e'),
+                backgroundColor: Colors.orange,
+                duration: const Duration(seconds: 5),
+              ),
+            );
+          }
         }
 
         // Invalidate cache providers to refresh data
@@ -584,15 +906,77 @@ class _MawaqitConfigScreenState extends ConsumerState<MawaqitConfigScreen> {
         ref.invalidate(mawaqitTimesProvider);
         ref.invalidate(deviceStatusProvider);
 
-        // Attendre plus longtemps pour que l'ESP32 complète la synchronisation
-        await Future.delayed(const Duration(seconds: 4));
+        // Attendre que les providers se rechargent
+        await Future.delayed(const Duration(seconds: 2));
+        
+        // Force reload des prayer times
+        try {
+          await ref.refresh(prayerTimesProvider.future);
+        } catch (_) {}
 
         if (mounted) {
-          Navigator.of(context).pop();
+          // Proposer l'ajustement des horaires
+          final shouldAdjust = await showDialog<bool>(
+            context: context,
+            barrierDismissible: false,
+            builder: (BuildContext dialogContext) {
+              return AlertDialog(
+                title: const Row(
+                  children: [
+                    Icon(Icons.tune, color: Color(0xFF2E7D32)),
+                    SizedBox(width: 12),
+                    Text('Ajuster les horaires?'),
+                  ],
+                ),
+                content: const Text(
+                  'Voulez-vous ajuster finement les horaires pour qu\'ils correspondent exactement aux horaires de votre mosquée locale?\n\n'
+                  'Vous pourrez modifier chaque prière de ±30 minutes.',
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(dialogContext).pop(false),
+                    child: const Text('Plus tard'),
+                  ),
+                  ElevatedButton.icon(
+                    onPressed: () => Navigator.of(dialogContext).pop(true),
+                    icon: const Icon(Icons.tune),
+                    label: const Text('Ajuster maintenant'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF2E7D32),
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                ],
+              );
+            },
+          );
+
+          if (shouldAdjust == true && mounted) {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (context) => const MawaqitOffsetsScreen(),
+              ),
+            );
+          } else {
+            Navigator.of(context).pop();
+          }
         }
       } else {
-        final error = jsonDecode(response.body);
-        throw Exception(error['error'] ?? 'Erreur de configuration');
+        String message = 'Erreur de configuration (HTTP ${response.statusCode})';
+        final raw = response.body.trim();
+        if (raw.isNotEmpty) {
+          try {
+            final decoded = jsonDecode(raw);
+            if (decoded is Map && decoded['error'] != null) {
+              message = decoded['error'].toString();
+            } else {
+              message = raw;
+            }
+          } catch (_) {
+            message = raw;
+          }
+        }
+        throw Exception(message);
       }
     } on TimeoutException {
       setState(() {
@@ -653,7 +1037,6 @@ class _MawaqitConfigScreenState extends ConsumerState<MawaqitConfigScreen> {
         ),
       );
     }
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('Configuration Mawaqit'),
@@ -692,42 +1075,173 @@ class _MawaqitConfigScreenState extends ConsumerState<MawaqitConfigScreen> {
                 ),
               ),
 
-            // Error card
+            // Recherche: Deux options - Manuelle ou Automatique
+            const SizedBox(height: 16),
+            Card(
+              elevation: 2,
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Text(
+                      '🕌 Trouver une mosquée',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    
+                    // Option 1: Recherche manuelle
+                    const Text(
+                      'Option 1: Recherche par ville ou code postal',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: _mosqueSearchController,
+                      decoration: InputDecoration(
+                        hintText: 'Ex: Paris, 75005, Marseille...',
+                        prefixIcon: const Icon(Icons.search),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        enabled: !_isSearching,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    ElevatedButton.icon(
+                      onPressed: _isSearching 
+                        ? null 
+                        : _searchMosquesByCity,
+                      icon: const Icon(Icons.location_city),
+                      label: const Text('Rechercher par ville'),
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                    ),
+                    
+                    const SizedBox(height: 20),
+                    const Divider(),
+                    const SizedBox(height: 20),
+                    
+                    // Option 2: Géolocalisation automatique
+                    const Text(
+                      'Option 2: Géolocalisation automatique',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Permet de trouver les mosquées les plus proches de vous',
+                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+                    const SizedBox(height: 12),
+                    ElevatedButton.icon(
+                      onPressed: _isSearching 
+                        ? null 
+                        : _autoDetectAndConfigure,
+                      icon: const Icon(Icons.my_location),
+                      label: const Text('Détecter ma position'),
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        backgroundColor: Colors.teal,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 16),
+            Card(
+              color: Colors.orange.shade50,
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Text(
+                      '🧮 Si aucune mosquée n\'est trouvée',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    const Text(
+                      'Utiliser les horaires calculés localement.',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                    const SizedBox(height: 10),
+                    DropdownButtonFormField<String>(
+                      value: _selectedCalcMethod,
+                      decoration: const InputDecoration(
+                        labelText: 'Méthode de calcul',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                        contentPadding: EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                      ),
+                      isExpanded: true,
+                      items: _calcMethodLabels.entries
+                          .map(
+                            (entry) => DropdownMenuItem<String>(
+                              value: entry.key,
+                              child: Text(
+                                entry.value,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontSize: 13),
+                              ),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: _isConfiguring
+                          ? null
+                          : (value) {
+                              if (value == null) return;
+                              setState(() {
+                                _selectedCalcMethod = value;
+                              });
+                            },
+                    ),
+                    const SizedBox(height: 10),
+                    ElevatedButton.icon(
+                      onPressed: _isConfiguring ? null : _configureCalculatedFallback,
+                      icon: const Icon(Icons.calculate, size: 18),
+                      label: const Text(
+                        'Utiliser horaires calculés',
+                        style: TextStyle(fontSize: 13),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.orange,
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
             if (_error != null) ...[
               const SizedBox(height: 16),
               Card(
                 color: Colors.red.shade50,
                 child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    children: [
-                      const Icon(Icons.error_outline,
-                          color: Colors.red, size: 48),
-                      const SizedBox(height: 12),
-                      Text(
-                        'Erreur',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.red.shade700,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        _error!,
-                        style: const TextStyle(fontSize: 14),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 16),
-                      ElevatedButton.icon(
-                        onPressed: _autoDetectAndConfigure,
-                        icon: const Icon(Icons.refresh),
-                        label: const Text('Réessayer'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.orange,
-                        ),
-                      ),
-                    ],
+                  padding: const EdgeInsets.all(12),
+                  child: Text(
+                    _error!,
+                    style: const TextStyle(color: Colors.red, fontSize: 13),
                   ),
                 ),
               ),

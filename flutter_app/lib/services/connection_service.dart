@@ -119,8 +119,11 @@ class ConnectionNotifier extends StateNotifier<ESP32ConnectionState> {
 
   /// Lance un check immédiat
   Future<void> checkNow() async {
+    if (!mounted) return;
     state = ESP32ConnectionState(status: ConnectionStatus.checking);
-    state = await service.checkConnection();
+    final result = await service.checkConnection();
+    if (!mounted) return;
+    state = result;
   }
 
   /// Démarre les checks périodiques (toutes les 30 secondes)
@@ -129,6 +132,7 @@ class ConnectionNotifier extends StateNotifier<ESP32ConnectionState> {
     
     _timer = Timer.periodic(const Duration(seconds: 30), (_) async {
       final result = await service.checkConnection();
+      if (!mounted) return;
       state = result;
     });
   }

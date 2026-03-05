@@ -2,13 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/prayer_time.dart';
 import '../providers/adhanbox_provider.dart';
+import 'calculation_setup_screen.dart';
 
 class PrayerTimesScreen extends ConsumerWidget {
   const PrayerTimesScreen({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final prayerTimesAsync = ref.watch(prayerTimesProvider);
+    final prayerTimesAsync = ref.watch(adjustedPrayerTimesProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -17,6 +18,8 @@ class PrayerTimesScreen extends ConsumerWidget {
       body: RefreshIndicator(
         onRefresh: () async {
           ref.invalidate(prayerTimesProvider);
+          ref.invalidate(prayerOffsetsProvider);
+          ref.invalidate(adjustedPrayerTimesProvider);
         },
         child: ListView(
           padding: const EdgeInsets.all(16),
@@ -26,6 +29,8 @@ class PrayerTimesScreen extends ConsumerWidget {
               loading: () => const _LoadingWidget(),
               error: (error, stack) => _buildErrorWidget(error),
             ),
+            const SizedBox(height: 24),
+            _buildConfigButton(context),
           ],
         ),
       ),
@@ -34,11 +39,10 @@ class PrayerTimesScreen extends ConsumerWidget {
 
   Widget _buildPrayerTimesTable(BuildContext context, PrayerTimes times) {
     final prayerList = times.times;
-    final isMawaqit = times.source.toLowerCase() == 'mawaqit' ||
-        prayerList.any((p) => p.mawaqitTime != null);
 
     if (prayerList.isEmpty) {
       return Card(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Text('Pas de prières aujourd\'hui',
@@ -48,30 +52,26 @@ class PrayerTimesScreen extends ConsumerWidget {
     }
 
     return Card(
-      elevation: 4,
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              isMawaqit ? 'Horaires Mawaqit' : 'Horaires Calculés',
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            if (isMawaqit)
-              const Padding(
-                padding: EdgeInsets.only(top: 6),
-                child: Text(
-                  'Source: Mawaqit',
-                  style: TextStyle(fontSize: 13, color: Colors.green),
-                ),
+            const Text(
+              'Horaires Calculés',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF1B5E20),
               ),
-            const SizedBox(height: 16),
+            ),
+            const SizedBox(height: 20),
             ...prayerList.map<Widget>((prayer) {
-              final displayedTime = prayer.mawaqitTime ?? prayer.calculatedTime;
               return _buildPrayerRow(
                 prayer.name,
-                displayedTime,
+                prayer.calculatedTime,
               );
             }).toList(),
           ],
@@ -91,6 +91,69 @@ class PrayerTimesScreen extends ConsumerWidget {
               style:
                   const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
         ],
+      ),
+    );
+  }
+
+  Widget _buildConfigButton(BuildContext context) {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: InkWell(
+        onTap: () {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => const CalculationSetupScreen(),
+            ),
+          );
+        },
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1B5E20).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(
+                  Icons.tune,
+                  size: 32,
+                  color: Color(0xFF1B5E20),
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Configurer les horaires',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Méthode de calcul et ajustements fins',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.grey[600],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(
+                Icons.chevron_right,
+                color: Colors.grey,
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

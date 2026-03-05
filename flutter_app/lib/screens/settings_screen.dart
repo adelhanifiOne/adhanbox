@@ -4,6 +4,7 @@ import '../providers/adhanbox_provider.dart';
 import '../services/location_service.dart';
 import '../services/wifi_service.dart';
 import '../services/esp32_discovery_service.dart';
+import 'adhan_config_screen.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({Key? key}) : super(key: key);
@@ -16,11 +17,37 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   late TextEditingController _ipController;
   int _volume = 20;
   int _timezone = 0;
+  int _brightness = 50;
+  int _ledScenario = 0;
+  bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
     _ipController = TextEditingController();
+    _loadCurrentSettings();
+  }
+
+  /// Charge les paramètres actuels depuis l'ESP32
+  Future<void> _loadCurrentSettings() async {
+    final api = ref.read(adhanboxApiProvider);
+    if (api != null) {
+      try {
+        final volume = await api.getAudioVolume();
+        final brightness = await api.getLedBrightness();
+        
+        setState(() {
+          _volume = volume;
+          _brightness = brightness;
+          _isLoading = false;
+        });
+      } catch (e) {
+        print('Erreur lors du chargement des paramètres: $e');
+        setState(() => _isLoading = false);
+      }
+    } else {
+      setState(() => _isLoading = false);
+    }
   }
 
   @override
@@ -37,7 +64,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       appBar: AppBar(
         title: const Text('Paramètres'),
       ),
-      body: ListView(
+      body: _isLoading
+          ? const Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 16),
+                  Text('Chargement des paramètres...'),
+                ],
+              ),
+            )
+          : ListView(
         padding: const EdgeInsets.all(16),
         children: [
           // Device IP Setting
@@ -184,6 +222,91 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
           ),
           const SizedBox(height: 20),
+          // LED Settings
+          Card(
+            elevation: 4,
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    '💡 LED',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Luminosité',
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                  ),
+                  Row(
+                    children: [
+                      const Icon(Icons.brightness_low),
+                      Expanded(
+                        child: Slider(
+                          value: _brightness.toDouble(),
+                          min: 0,
+                          max: 100,
+                          divisions: 20,
+                          onChanged: (value) async {
+                            setState(() => _brightness = value.toInt());
+                            final api = ref.read(adhanboxApiProvider);
+                            if (api != null) {
+                              await api.setLedBrightness(_brightness);
+                            }
+                          },
+                        ),
+                      ),
+                      const Icon(Icons.brightness_high),
+                    ],
+                  ),
+                  Center(
+                    child: Text(
+                      'Luminosité: $_brightness%',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Scénario LED',
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                  ),
+                  const SizedBox(height: 8),
+                  DropdownButtonFormField<int>(
+                    value: _ledScenario,
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    ),
+                    items: const [
+                      DropdownMenuItem(value: 0, child: Text('Éteint')),
+                      DropdownMenuItem(value: 1, child: Text('Rouge fixe')),
+                      DropdownMenuItem(value: 2, child: Text('Rose fixe')),
+                      DropdownMenuItem(value: 3, child: Text('Bleu fixe')),
+                      DropdownMenuItem(value: 4, child: Text('Violet fixe')),
+                      DropdownMenuItem(value: 5, child: Text('Vert fixe')),
+                      DropdownMenuItem(value: 6, child: Text('Jaune fixe')),
+                      DropdownMenuItem(value: 8, child: Text('Arc-en-ciel')),
+                      DropdownMenuItem(value: 9, child: Text('Dégradé dynamique')),
+                    ],
+                    onChanged: (value) async {
+                      if (value != null) {
+                        setState(() => _ledScenario = value);
+                        final api = ref.read(adhanboxApiProvider);
+                        if (api != null) {
+                          await api.setLedScenario(value);
+                        }
+                      }
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
           // WiFi Settings
           Card(
             elevation: 4,
@@ -227,6 +350,43 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     onPressed: () => _getGPSLocation(),
                     icon: const Icon(Icons.location_on),
                     label: const Text('Utiliser ma position GPS'),
+                    style: ElevatedButton.styleFrom(
+                      minimumSize: const Size(double.infinity, 48),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+          // Adhan Configuration
+          Card(
+            elevation: 4,
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    '🎵 Adhans',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 12),
+                  const Text(
+                    'Configurer les adhans par prière et ajouter le duaa après l\'appel à la prière',
+                    style: TextStyle(fontSize: 13, color: Colors.grey),
+                  ),
+                  const SizedBox(height: 12),
+                  ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const AdhanConfigScreen(),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.music_note),
+                    label: const Text('Configurer les adhans'),
                     style: ElevatedButton.styleFrom(
                       minimumSize: const Size(double.infinity, 48),
                     ),

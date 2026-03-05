@@ -2,25 +2,23 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/prayer_time.dart';
 import '../services/connection_service.dart';
+import '../services/adhanbox_api.dart';
 import '../providers/adhanbox_provider.dart';
+import '../widgets/wifi_config_dialog.dart';
 import 'device_setup_screen.dart';
+import 'calculation_setup_screen.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final deviceIpAsync = ref.watch(deviceIpProvider);
+    final autoConnectAsync = ref.watch(autoReconnectProvider);
 
-    return deviceIpAsync.when(
+    return autoConnectAsync.when(
       data: (deviceIp) {
-        // Initialiser currentDeviceIpProvider
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          ref.read(currentDeviceIpProvider.notifier).state = deviceIp;
-        });
-        
         if (deviceIp == null) {
-          return _buildNoDeviceScreen(context);
+          return _buildNoDeviceScreen(context, ref);
         } else {
           return _buildNormalHomeScreen(context, ref);
         }
@@ -29,11 +27,17 @@ class HomeScreen extends ConsumerWidget {
         appBar: AppBar(title: const Text('AdhanBox')),
         body: const Center(child: CircularProgressIndicator()),
       ),
-      error: (_, __) => _buildNoDeviceScreen(context),
+      error: (error, __) {
+        print('Erreur de connexion: $error');
+        return _buildConnectionErrorScreen(context, ref);
+      },
     );
   }
 
-  Widget _buildNoDeviceScreen(BuildContext context) {
+  /// Écran en cas d'erreur de connexion
+  Widget _buildConnectionErrorScreen(BuildContext context, WidgetRef ref) {
+    final ipController = TextEditingController();
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('AdhanBox'),
@@ -41,34 +45,186 @@ class HomeScreen extends ConsumerWidget {
       ),
       body: Center(
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.wifi_off,
+                size: 80,
+                color: Colors.red[300],
+              ),
+              const SizedBox(height: 24),
+              Text(
+                'Erreur de connexion',
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.grey[800],
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Impossible de se connecter à l\'AdhanBox.\nSi l\'appareil est connecté au WiFi, essayez d\'entrer son IP manuellement.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 16,
+                  color: Colors.grey[600],
+                ),
+              ),
+              const SizedBox(height: 32),
+              TextField(
+                controller: ipController,
+                decoration: InputDecoration(
+                  hintText: '172.20.10.4',
+                  labelText: 'Adresse IP de l\'AdhanBox',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  prefixIcon: const Icon(Icons.router),
+                ),
+                keyboardType: TextInputType.number,
+              ),
+              const SizedBox(height: 24),
+              ElevatedButton.icon(
+                onPressed: () async {
+                  final ip = ipController.text.trim();
+                  if (ip.isEmpty) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Veuillez entrer une IP')),
+                    );
+                    return;
+                  }
+
+                  // Tenter la connexion
+                  final api = AdhanBoxAPI(baseUrl: 'http://$ip');
+                  try {
+                    print('DEBUG: Test connexion à $ip...');
+                    await api.getStatus().timeout(const Duration(seconds: 5));
+                    // Connexion réussie, sauvegarder l'IP
+                    print('DEBUG: Connexion réussie!');
+                    await saveDeviceIp(ref, ip);
+                    ref.invalidate(autoReconnectProvider);
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Connecté! Actualisation...'),
+                          backgroundColor: Colors.green,
+                        ),
+                      );
+                    }
+                  } catch (e) {
+                    print('DEBUG: Erreur de connexion: $e');
+                    if (context.mounted) {
+                      showDialog(
+                        context: context,
+                        builder: (context) => AlertDialog(
+                          title: const Text('Erreur de connexion'),
+                          content: SingleChildScrollView(
+                            child: Text(
+                              'Impossible de se connecter à http://$ip\n\nDétails:\n$e',
+                              style: const TextStyle(fontSize: 14),
+                            ),
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(context),
+                              child: const Text('OK'),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
+                  }
+                },
+                icon: const Icon(Icons.connect_without_contact, size: 28),
+                label: const Text(
+                  'Connecter',
+                  style: TextStyle(fontSize: 18),
+                ),
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 40,
+                    vertical: 20,
+                  ),
+                  backgroundColor: Colors.green,
+                  foregroundColor: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton.icon(
+                onPressed: () {
+                  ref.invalidate(autoReconnectProvider);
+                },
+                icon: const Icon(Icons.refresh, size: 28),
+                label: const Text(
+                  'Réessayer la détection',
+                  style: TextStyle(fontSize: 18),
+                ),
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 40,
+                    vertical: 20,
+                  ),
+                  backgroundColor: Colors.orange,
+                  foregroundColor: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextButton.icon(
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const DeviceSetupScreen(),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.settings),
+                label: const Text('Configuration avancée'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNoDeviceScreen(BuildContext context, WidgetRef ref) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('AdhanBox'),
+        elevation: 0,
+      ),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(
                 Icons.devices_outlined,
-                size: 64,
+                size: 80,
                 color: Colors.grey[400],
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 24),
               Text(
                 'Aucun appareil configuré',
                 style: TextStyle(
-                  fontSize: 18,
+                  fontSize: 22,
                   fontWeight: FontWeight.bold,
-                  color: Colors.grey[700],
+                  color: Colors.grey[800],
                 ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 12),
               Text(
-                'Cliquez sur le bouton ci-dessous pour\najouter votre AdhanBox',
+                'Configurez votre AdhanBox pour commencer',
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  fontSize: 14,
+                  fontSize: 16,
                   color: Colors.grey[600],
                 ),
               ),
-              const SizedBox(height: 32),
+              const SizedBox(height: 40),
               ElevatedButton.icon(
                 onPressed: () {
                   Navigator.of(context).push(
@@ -77,14 +233,49 @@ class HomeScreen extends ConsumerWidget {
                     ),
                   );
                 },
-                icon: const Icon(Icons.add_box_outlined),
-                label: const Text('Ajouter un appareil'),
+                icon: const Icon(Icons.add_box_outlined, size: 28),
+                label: const Text(
+                  'Configurer un appareil',
+                  style: TextStyle(fontSize: 18),
+                ),
                 style: ElevatedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 32,
-                    vertical: 16,
+                    horizontal: 40,
+                    vertical: 20,
                   ),
+                  backgroundColor: Colors.blue,
+                  foregroundColor: Colors.white,
                 ),
+              ),
+              const SizedBox(height: 16),
+              TextButton.icon(
+                onPressed: () {
+                  // Afficher les instructions
+                  showDialog(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      title: const Text('Configuration AdhanBox'),
+                      content: const SingleChildScrollView(
+                        child: Text(
+                          '1. Allumez votre ESP32 AdhanBox\n\n'
+                          '2. L\'ESP32 créera un réseau WiFi "AdhanBox"\n\n'
+                          '3. Cliquez sur "Configurer un appareil"\n\n'
+                          '4. Suivez l\'assistant de configuration\n\n'
+                          '5. Connectez l\'ESP32 à votre WiFi maison',
+                          style: TextStyle(fontSize: 15),
+                        ),
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('Compris'),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.help_outline),
+                label: const Text('Comment configurer ?'),
               ),
             ],
           ),
@@ -94,8 +285,7 @@ class HomeScreen extends ConsumerWidget {
   }
 
   Widget _buildNormalHomeScreen(BuildContext context, WidgetRef ref) {
-    final statusAsync = ref.watch(deviceStatusProvider);
-    final prayerTimesAsync = ref.watch(prayerTimesProvider);
+    final prayerTimesAsync = ref.watch(adjustedPrayerTimesProvider);
     final connectionState = ref.watch(connectionStateProvider);
 
     return Scaffold(
@@ -103,6 +293,18 @@ class HomeScreen extends ConsumerWidget {
         title: const Text('AdhanBox'),
         elevation: 0,
         actions: [
+          // Bouton pour ajouter/reconfigurer un appareil
+          IconButton(
+            icon: const Icon(Icons.add_box_outlined),
+            tooltip: 'Configurer un appareil',
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const DeviceSetupScreen(),
+                ),
+              );
+            },
+          ),
           Padding(
             padding: const EdgeInsets.all(8.0),
             child:
@@ -112,32 +314,20 @@ class HomeScreen extends ConsumerWidget {
       ),
       body: RefreshIndicator(
         onRefresh: () async {
-          ref.invalidate(deviceStatusProvider);
           ref.invalidate(prayerTimesProvider);
+          ref.invalidate(prayerOffsetsProvider);
+          ref.invalidate(adjustedPrayerTimesProvider);
         },
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            // Status Card
-            statusAsync.when(
-              data: (status) => _buildStatusCard(context, status),
-              loading: () => const _LoadingCard(),
-              error: (error, stack) =>
-                  _buildErrorCard('Erreur de status', error),
-            ),
-            const SizedBox(height: 12),
-            ElevatedButton.icon(
-              onPressed: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => const DeviceSetupScreen(),
-                  ),
-                );
-              },
-              icon: const Icon(Icons.add_box_outlined),
-              label: const Text('Ajouter un appareil'),
-            ),
-            const SizedBox(height: 20),
+            // WiFi Disconnected Warning (if applicable)
+            if (connectionState.status == ConnectionStatus.disconnected ||
+                connectionState.status == ConnectionStatus.error)
+              _buildWiFiDisconnectedCard(context, ref),
+            if (connectionState.status == ConnectionStatus.disconnected ||
+                connectionState.status == ConnectionStatus.error)
+              const SizedBox(height: 16),
             // Next Prayer Card
             prayerTimesAsync.when(
               data: (prayerTimes) =>
@@ -158,21 +348,41 @@ class HomeScreen extends ConsumerWidget {
           ],
         ),
       ),
+      floatingActionButton: connectionState.status == ConnectionStatus.disconnected ||
+              connectionState.status == ConnectionStatus.error
+          ? FloatingActionButton.extended(
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const DeviceSetupScreen(),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.settings_input_antenna),
+              label: const Text('Configurer'),
+              backgroundColor: Colors.orange[700],
+            )
+          : null,
     );
   }
 
   Widget _buildStatusCard(BuildContext context, Map<String, dynamic> status) {
-    final wifi = status['wifi'] as Map<String, dynamic>? ?? {};
-    final location = status['location'] as Map<String, dynamic>? ?? {};
-    final connected = wifi['connected'] == true;
+    final wifiRaw = status['wifi'];
+    final locationRaw = status['location'];
+    final wifi = wifiRaw is Map ? Map<String, dynamic>.from(wifiRaw) : <String, dynamic>{};
+    final location = locationRaw is Map ? Map<String, dynamic>.from(locationRaw) : <String, dynamic>{};
+
+    final connected = wifi['connected'] == true || wifiRaw?.toString().toLowerCase() == 'connected';
     final ssid = wifi['ssid']?.toString() ?? 'N/A';
-    final ip = wifi['ip']?.toString() ?? 'N/A';
+    final ip = wifi['ip']?.toString() ?? (status['ip']?.toString() ?? 'N/A');
     final signal = wifi['signal']?.toString() ?? 'N/A';
-    final lat = location['lat']?.toStringAsFixed(3) ?? 'N/A';
-    final lon = location['lon']?.toStringAsFixed(3) ?? 'N/A';
-    final rtcOk = status['rtc_ok'] == true;
-    final timestamp = status['timestamp']?.toString() ?? '0';
-    final wifiText = connected ? '$ssid ($ip, $signal dBm)' : 'Deconnecte';
+    final latVal = location['lat'];
+    final lonVal = location['lon'];
+    final lat = latVal is num ? latVal.toStringAsFixed(3) : (status['lat']?.toString() ?? 'N/A');
+    final lon = lonVal is num ? lonVal.toStringAsFixed(3) : (status['lon']?.toString() ?? 'N/A');
+    final rtcOk = status['rtc_ok'] == true || status['rtc_ok'] == 1;
+    final timestamp = status['timestamp']?.toString() ?? status['rtc']?.toString() ?? '0';
+    final wifiText = connected ? '$ssid ($ip, $signal dBm)' : (wifiRaw?.toString() ?? 'Deconnecte');
     final rtcText = rtcOk ? 'OK (ts: $timestamp)' : 'Non disponible';
 
     return Card(
@@ -253,77 +463,92 @@ class HomeScreen extends ConsumerWidget {
   Widget _buildTodayPrayersPreview(
       BuildContext context, PrayerTimes prayerTimes) {
     final times = prayerTimes.times;
-    final hasMawaqit = times.any((p) => p.mawaqitTime != null);
 
     if (times.isEmpty) {
       return const SizedBox();
     }
 
     return Card(
-      elevation: 4,
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text(
-                  'Horaires d\'aujourd\'hui',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-                if (hasMawaqit)
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.green.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: const Text(
-                      'Mawaqit ✓',
-                      style: TextStyle(
-                        color: Colors.green,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                      ),
+                const Expanded(
+                  child: Text(
+                    'Horaires d\'aujourd\'hui',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF1B5E20),
                     ),
                   ),
+                ),
+                const SizedBox(width: 12),
+                InkWell(
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const CalculationSetupScreen(),
+                      ),
+                    );
+                  },
+                  borderRadius: BorderRadius.circular(8),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1B5E20).withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: const [
+                        Icon(
+                          Icons.tune,
+                          size: 18,
+                          color: Color(0xFF1B5E20),
+                        ),
+                        SizedBox(width: 6),
+                        Text(
+                          'Ajuster',
+                          style: TextStyle(
+                            color: Color(0xFF1B5E20),
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
             ...times.map<Widget>((prayer) {
-              final displayTime = prayer.mawaqitTime ?? prayer.calculatedTime;
-              final isMawaqit = prayer.mawaqitTime != null;
-
               return Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8),
+                padding: const EdgeInsets.symmetric(vertical: 10),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(prayer.name),
-                    Row(
-                      children: [
-                        Text(
-                          displayTime,
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: isMawaqit ? Colors.green : Colors.black,
-                          ),
-                        ),
-                        if (isMawaqit)
-                          const Padding(
-                            padding: EdgeInsets.only(left: 8),
-                            child: Text(
-                              '✓',
-                              style: TextStyle(
-                                color: Colors.green,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ),
-                      ],
+                    Text(
+                      prayer.name,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    Text(
+                      prayer.calculatedTime,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 18,
+                        color: Color(0xFF1B5E20),
+                      ),
                     ),
                   ],
                 ),
@@ -345,8 +570,7 @@ class HomeScreen extends ConsumerWidget {
     PrayerTime? firstPrayer;
 
     for (final prayer in prayerTimes.times) {
-      final timeToUse = prayer.mawaqitTime ?? prayer.calculatedTime;
-      final minutes = _timeToMinutes(timeToUse);
+      final minutes = _timeToMinutes(prayer.calculatedTime);
       if (minutes == null) continue;
 
       firstTime ??= minutes;
@@ -413,7 +637,42 @@ class HomeScreen extends ConsumerWidget {
       message: connectionState.message ?? statusText,
       child: InkWell(
         onTap: () {
-          ref.read(connectionStateProvider.notifier).checkNow();
+          // If disconnected, show options menu
+          if (connectionState.status == ConnectionStatus.disconnected ||
+              connectionState.status == ConnectionStatus.error) {
+            showDialog(
+              context: context,
+              builder: (context) => AlertDialog(
+                title: const Text('ESP32 Déconnecté'),
+                content: const Text(
+                  'L\'ESP32 n\'est pas accessible. Voulez-vous configurer sa connexion WiFi ?',
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Annuler'),
+                  ),
+                  TextButton(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      ref.read(connectionStateProvider.notifier).checkNow();
+                    },
+                    child: const Text('Réessayer'),
+                  ),
+                  ElevatedButton(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      showWiFiConfigDialog(context, ref);
+                    },
+                    child: const Text('Configurer WiFi'),
+                  ),
+                ],
+              ),
+            );
+          } else {
+            // If connected, just refresh
+            ref.read(connectionStateProvider.notifier).checkNow();
+          }
         },
         borderRadius: BorderRadius.circular(20),
         child: Container(
@@ -464,6 +723,81 @@ class _LoadingCard extends StatelessWidget {
     );
   }
 }
+
+  Widget _buildWiFiDisconnectedCard(BuildContext context, WidgetRef ref) {
+    return Card(
+      elevation: 6,
+      color: Colors.orange[50],
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                Icon(Icons.wifi_off, color: Colors.orange[700], size: 32),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'ESP32 Déconnecté',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.orange[900],
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'L\'appareil n\'est pas accessible sur le réseau WiFi',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.orange[800],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      ref.read(connectionStateProvider.notifier).checkNow();
+                    },
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Réessayer'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.orange[700],
+                      side: BorderSide(color: Colors.orange[700]!),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      showWiFiConfigDialog(context, ref);
+                    },
+                    icon: const Icon(Icons.wifi),
+                    label: const Text('Configurer WiFi'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.orange[700],
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
 Widget _buildErrorCard(String title, dynamic error) {
   return Card(

@@ -6,14 +6,18 @@
 #include <Arduino.h>
 #include <Wire.h>
 #include <WiFi.h>
+#include <WiFiClientSecure.h>
 #include <WebServer.h>
 #include <Preferences.h>
 #include <RTClib.h>
 #include <DFRobotDFPlayerMini.h>
+#include <Adafruit_NeoPixel.h>
 // ESP32 LEDC helpers (provides ledcSetup, ledcAttachPin, ledcWrite)
 #include <esp32-hal-ledc.h>
 // DNS server for captive portal behavior
 #include <DNSServer.h>
+// mDNS support for discovery via adhanbox.local
+#include <ESPmDNS.h>
 // Ensure low-level LEDC declarations are available on all toolchains
 #include <driver/ledc.h>
 
@@ -26,19 +30,17 @@
 
 // Addressable LED configuration
 #ifndef LED_NUM
-#define LED_NUM 8 // change to the number of LEDs on your strip (updated to 60)
+#define LED_NUM 16 // change to the number of LEDs on your strip (updated to 60)
 #endif
-// Use literal pin here; LED_DATA_PIN is defined slightly later in the file.
-// We'll drive SK6812 (RGBW) directly with a light-weight bit-bang sender
-// using GPIO.out_w1ts/out_w1tc timings tuned for 240MHz cores. The frame
-// buffer stores R,G,B,W per pixel.
-static uint8_t LedIc[LED_NUM][4]; // [R,G,B,W]
+const uint8_t LED_START_INDEX = 0; // start from first pixel (all LEDs enabled)
 // Data pin for addressable strip (default user wiring)
 #ifndef LED_DATA_PIN
 #define LED_DATA_PIN 13
 #endif
 // If you later want a PWM fallback (non-addressable), set to false.
 bool useAddressableLEDs = true;
+// Adafruit_NeoPixel: NEO_GRB = WS2812B with G,R,B byte order
+Adafruit_NeoPixel leds(LED_NUM, LED_DATA_PIN, NEO_GRB + NEO_KHZ800);
 // Button to start config AP (long press)
 #ifndef CONFIG_BUTTON_PIN
 // Default config button pin: GPIO11 is often used by flash/SPI on ESP32
@@ -110,64 +112,30 @@ void handleShowLoc();
 void handleShowTime();
 void handlePlayTrack();
 void handleStopPlay();
+bool tryRecoverDFPlayer(int retries);
+void playTrack(int track);
 void handleSetVolume();
 void handleGetVolume();
 void handleSetBrightness();
 void handleGetBrightness();
+void handleSetLedScenario();
 void handleConnectWifi();
 void handleScanWifi();
 void handleDisconnectWifi();
-void handleSetGeoKey();
-void handleGeoWifi();
-bool espGeolocateUsingWifi(double &outLat, double &outLon, double &outAcc);
+void handleMawaqitConfig();
+void handleMawaqitSync();
+void handleCalculationConfig();
+void handleAdhanConfig();
 bool syncTimeFromNtp(unsigned long timeoutMs = 10000);
 void handleDumpStatus();
 void scheduleNextPrayerAlarm();
 bool computeNextPrayer(const DateTime &now, DateTime &nextDt, int &idx);
 void handleLedTest();
+void setupServerRoutes();
 void stopConfigAP();
+void getCalculationAngles(double &fajrAngle, double &ishaAngle, String &methodName);
 
-// Low-level timing state for bit-banged SK6812/WS2812
-static uint32_t t_led_cycle = 0;
-
-static inline void TempoNs(uint32_t d){
-  do{}while((ESP.getCycleCount() - t_led_cycle) <= d);
-  t_led_cycle = ESP.getCycleCount();
-}
-
-static inline void EnvoieBit(uint32_t mask, uint8_t bitval){
-  // timings tuned for 240MHz cores (ESP32/ESP32-Sx)
-  TempoNs(119);
-  GPIO.out_w1ts = mask;
-  TempoNs(76);
-  if (bitval){
-    TempoNs(77);
-    GPIO.out_w1tc = mask;
-  } else {
-    GPIO.out_w1tc = mask;
-    TempoNs(77);
-  }
-}
-
-// Send buffer in wire order G,R,B,W (SK6812)
-static void Send_GRBW(uint32_t mask, uint8_t buf[][4], uint16_t nled){
-  // ensure line is low for initial reset time
-  GPIO.out_w1tc = mask; delayMicroseconds(90);
-  t_led_cycle = ESP.getCycleCount();
-  noInterrupts();
-  for(uint16_t j=0;j<nled;j++){
-    uint8_t seq[4] = { buf[j][1], buf[j][0], buf[j][2], buf[j][3] }; // G,R,B,W
-    for(uint8_t k=0;k<4;k++){
-      uint8_t K = seq[k];
-      for(int8_t b=7;b>=0;b--) EnvoieBit(mask, (K>>b)&1);
-    }
-  }
-  // Ensure the data line is held low long enough for the SK6812 reset/latch
-  GPIO.out_w1tc = mask;
-  // hold low for >80us to latch; keep interrupts disabled during reset window
-  delayMicroseconds(120);
-  interrupts();
-}
+// LED timing and bit-bang functions removed - using Adafruit_NeoPixel instead
 
 // HSV (8-bit) -> RGB helper (no white channel)
 static inline void hsv2rgb(uint8_t h, uint8_t s, uint8_t v, uint8_t &r, uint8_t &g, uint8_t &b){
@@ -206,35 +174,25 @@ static inline void setLedDuty(uint32_t duty){
   ledc_update_duty(LEDC_LOW_SPEED_MODE, (ledc_channel_t)LEDC_CHANNEL);
 }
 
-// Helper: set all addressable pixels to RGB (white value applied equally to RGB)
-static inline void stripSetAll(uint8_t r, uint8_t g, uint8_t b, uint8_t w){
+// Helper: set all addressable pixels to RGB
+static inline void stripSetAll(uint8_t r, uint8_t g, uint8_t b){
   // Apply global brightness scaling
   r = (r * ledBrightness) / 100;
   g = (g * ledBrightness) / 100;
   b = (b * ledBrightness) / 100;
-  w = (w * ledBrightness) / 100;
-  // Fill our RGBW frame buffer and push to the strip.
+  // Set all pixels via Adafruit_NeoPixel
   for(uint16_t i=0;i<LED_NUM;i++){
-    LedIc[i][0] = r; // R
-    LedIc[i][1] = g; // G
-    LedIc[i][2] = b; // B
-    LedIc[i][3] = w; // W
+    leds.setPixelColor(i, r, g, b);
   }
-  // send immediately
-  uint32_t mask = (1u << LED_DATA_PIN);
-  // function declared later
-  extern void Send_GRBW(uint32_t mask, uint8_t buf[][4], uint16_t nled);
-  Send_GRBW(mask, LedIc, LED_NUM);
+  leds.show();
 }
 
-// Forcefully clear the strip by sending multiple zero frames and holding line low
+// Forcefully clear the strip
 static void clearStrip(){
   for(int i=0;i<3;i++){
-    stripSetAll(0,0,0,0);
+    stripSetAll(0,0,0);
     delay(20);
   }
-  // ensure data line low for a longer reset
-  gpio_set_level((gpio_num_t)LED_DATA_PIN, 0);
   delay(120);
 }
 
@@ -242,15 +200,15 @@ static void clearStrip(){
 unsigned long ledTestUntil = 0;
 int prevLedScenario = -1;
 
-// static color table (R,G,B,W) - white kept 0 for color scenes
-static const uint8_t STATIC_COLORS[][4] = {
-  {0,0,0,0},      // off
-  {255,0,0,0},    // red
-  {255,0,180,0},  // pink
-  {0,60,255,0},   // blue
-  {180,0,255,0},  // violet
-  {0,255,0,0},    // green
-  {255,255,0,0},  // yellow
+// static color table (R,G,B) for WS2812B RGB LEDs
+static const uint8_t STATIC_COLORS[][3] = {
+  {0,0,0},      // off
+  {255,0,0},    // red
+  {255,0,180},  // pink
+  {0,60,255},   // blue
+  {180,0,255},  // violet
+  {0,255,0},    // green
+  {255,255,0},  // yellow
 };
 static const uint8_t NUM_STATIC_COLORS = sizeof(STATIC_COLORS)/sizeof(STATIC_COLORS[0]);
 const int BLINK_INDEX = 7;
@@ -897,8 +855,26 @@ void handleShowTime(){
 void handlePlayTrack(){
   String t = server.arg("track");
   int track = t.length()? t.toInt() : 1;
-  if(dfAvailable){ dfplayer.play(track); isPlaying = true; server.send(200, "text/plain", "Playing"); }
-  else server.send(200, "text/plain", "DFPlayer not available");
+  
+  Serial.printf("handlePlayTrack: track=%d, dfAvailable=%d\n", track, dfAvailable);
+  
+  if(!dfAvailable){
+    Serial.println("DFPlayer not available, attempting recovery...");
+    if(!tryRecoverDFPlayer(3)){
+      server.send(503, "text/plain", "DFPlayer not available and recovery failed");
+      return;
+    }
+  }
+  
+  if(dfAvailable){ 
+    Serial.printf("Playing track %d\n", track);
+    dfplayer.play(track); 
+    isPlaying = true; 
+    server.send(200, "text/plain", "Playing"); 
+  }
+  else {
+    server.send(503, "text/plain", "DFPlayer not available");
+  }
 }
 
 void handleStopPlay(){
@@ -959,6 +935,29 @@ void handleGetBrightness(){
   server.send(200, "application/json", String(buf));
 }
 
+// ===== API Handlers for Flutter App (JSON wrappers) =====
+
+// Set LED scenario via POST JSON {"scenario": number}
+void handleSetLedScenario(){
+  if(server.method() != HTTP_POST){ server.send(405, "text/plain", "Method not allowed"); return; }
+  String body = server.arg(0);
+  double sc = parseJsonValue(body, "scenario");
+  if(isnan(sc)){ server.send(400, "text/plain", "Invalid payload"); return; }
+  int scenario = (int)round(sc);
+  if(scenario < 0 || scenario >= TOTAL_SCENES){ server.send(400, "text/plain", "Invalid scenario"); return; }
+  
+  ledScenario = scenario;
+  if(ledScenario == 0){ setLedDuty(0); if(useAddressableLEDs) stripSetAll(0,0,0); }
+  else { setLedDuty(128); }
+  
+  prefs.begin("adhancfg", false);
+  prefs.putInt("led_scenario", ledScenario);
+  prefs.end();
+  
+  Serial.printf("LED scenario set to %d via API\n", scenario);
+  server.send(200, "application/json", String("{\"scenario\":") + scenario + "}");
+}
+
 // LED test handler: starts a short blink for 5 seconds and returns status
 void handleLedTest(){
   // start blinking for 5 seconds
@@ -978,7 +977,7 @@ void handleSetLed(){
   int sc = s.toInt();
   if(sc < 0 || sc >= TOTAL_SCENES){ server.send(400, "text/plain", "Invalid scene"); return; }
   ledScenario = sc;
-  if(ledScenario == 0){ setLedDuty(0); if(useAddressableLEDs) stripSetAll(0,0,0,0); }
+  if(ledScenario == 0){ setLedDuty(0); if(useAddressableLEDs) stripSetAll(0,0,0); }
   else { setLedDuty(128); }
   // If this is a preview (preview=1) do not persist the choice to prefs
   String pv = server.arg("preview");
@@ -992,7 +991,7 @@ void handleSetLed(){
 void handleLedOff(){
   ledScenario = 0;
   setLedDuty(0);
-  if(useAddressableLEDs) stripSetAll(0,0,0,0);
+  if(useAddressableLEDs) stripSetAll(0,0,0);
   if(useAddressableLEDs) clearStrip();
   prefs.begin("adhancfg", false); prefs.putInt("led_scenario", ledScenario); prefs.end();
   Serial.println("LEDs turned off via HTTP");
@@ -1027,31 +1026,7 @@ void handleGetRTC(){
 void handlePrayerTimes();
 
 // Try to fetch location from ip-api.com and store in prefs. Returns true on success.
-bool fetchLocationFromIpApi(double &outLat, double &outLon, double &outAcc){
-  HTTPClient http;
-  const char *url = "http://ip-api.com/json";
-  if(!WiFi.isConnected()) return false;
-  http.begin(url);
-  int code = http.GET();
-  if(code != HTTP_CODE_OK){ http.end(); return false; }
-  String body = http.getString();
-  http.end();
-  // parse simple JSON for lat, lon
-  double lat = parseJsonValue(body, "lat");
-  double lon = parseJsonValue(body, "lon");
-  // ip-api doesn't send accuracy; set a reasonable default
-  double acc = 50000; // coarse accuracy in meters for IP-based geolocation
-  if(isnan(lat) || isnan(lon)) return false;
-  prefs.begin("adhancfg", false);
-  prefs.putString("lat", String(lat, 6));
-  prefs.putString("lon", String(lon, 6));
-  prefs.putString("acc", String(acc));
-  prefs.putULong("ts", millis());
-  prefs.end();
-  outLat = lat; outLon = lon; outAcc = acc;
-  Serial.printf("Location from IP: %f,%f (acc~%fm)\n", lat, lon, acc);
-  return true;
-}
+
 
 // Handler to connect to WiFi (POST JSON {"ssid":"...","pass":"..."}) and attempt auto-location
 void handleConnectWifi(){
@@ -1123,18 +1098,17 @@ void handleConnectWifi(){
     return;
   }
   Serial.printf("WiFi connected, IP=%s\n", WiFi.localIP().toString().c_str());
-  double lat, lon, acc;
-  String resp = "Connected";
-  // Attempt ESP-side Wi-Fi geolocation first (HERE). Fall back to IP-based lookup if it fails.
-  if(espGeolocateUsingWifi(lat, lon, acc)){
-    char buf[128]; snprintf(buf, sizeof(buf), "; located %f,%f (acc=%f)", lat, lon, acc);
-    resp += String(buf);
-  } else if(fetchLocationFromIpApi(lat, lon, acc)){
-    char buf[128]; snprintf(buf, sizeof(buf), "; located (IP) %f,%f", lat, lon);
-    resp += String(buf);
+  
+  // Initialize mDNS responder so device can be found at adhanbox.local
+  if (!MDNS.begin("adhanbox")) {
+    Serial.println("Error setting up MDNS responder!");
   } else {
-    resp += "; location lookup failed";
+    MDNS.addService("http", "tcp", 80);
+    Serial.println("mDNS responder started: adhanbox.local");
   }
+  
+  String resp = "Connected";
+  // Location will be set by mobile device via /set_location endpoint
   // Sync time from NTP and update RTC + recalculate prayer times
   bool ntpOk = syncTimeFromNtp(15000);
   if(ntpOk){
@@ -1144,6 +1118,14 @@ void handleConnectWifi(){
   }else{
     resp += "; time sync failed";
   }
+  
+  // Save WiFi credentials for auto-reconnect on reboot
+  prefs.begin("adhancfg", false);
+  prefs.putString("wifi_ssid", ssid);
+  prefs.putString("wifi_pass", pass);
+  prefs.end();
+  Serial.printf("WiFi credentials saved for auto-reconnect: SSID=%s\n", ssid.c_str());
+  
   server.send(200, "text/plain", resp);
 }
 
@@ -1165,97 +1147,654 @@ void handleScanWifi(){
   server.send(200, "application/json", out);
 }
 
-// Save geolocation API key (POST JSON {"key":"..."})
-void handleSetGeoKey(){
-  if(server.method() != HTTP_POST){ server.send(405, "text/plain", "Method not allowed"); return; }
+// Helper function: add offset (in minutes) to time string "HH:MM"
+// Returns adjusted time, handling day wraparound
+String addMinutesToTime(String timeStr, int offsetMinutes){
+  if(timeStr.length() < 5) return timeStr; // Invalid format
+  
+  int h = timeStr.substring(0, 2).toInt();
+  int m = timeStr.substring(3, 5).toInt();
+  
+  int totalMinutes = h * 60 + m + offsetMinutes;
+  
+  // Handle day wraparound
+  while(totalMinutes < 0) totalMinutes += 1440;
+  while(totalMinutes >= 1440) totalMinutes -= 1440;
+  
+  h = totalMinutes / 60;
+  m = totalMinutes % 60;
+  
+  char buffer[6];
+  sprintf(buffer, "%02d:%02d", h, m);
+  return String(buffer);
+}
+
+// GET /api/mawaqit/offsets - Return current offsets
+void handleMawaqitGetOffsets(){
+  prefs.begin("adhancfg", true);
+  int fajrOff = prefs.getInt("mq_off_fajr", 0);
+  int sunriseOff = prefs.getInt("mq_off_sunrise", 0);
+  int dhuhrOff = prefs.getInt("mq_off_dhuhr", 0);
+  int asrOff = prefs.getInt("mq_off_asr", 0);
+  int maghribOff = prefs.getInt("mq_off_maghrib", 0);
+  int ishaOff = prefs.getInt("mq_off_isha", 0);
+  prefs.end();
+  
+  String json = "{";
+  json += "\"fajr\":" + String(fajrOff) + ",";
+  json += "\"sunrise\":" + String(sunriseOff) + ",";
+  json += "\"dhuhr\":" + String(dhuhrOff) + ",";
+  json += "\"asr\":" + String(asrOff) + ",";
+  json += "\"maghrib\":" + String(maghribOff) + ",";
+  json += "\"isha\":" + String(ishaOff);
+  json += "}";
+  
+  server.send(200, "application/json", json);
+}
+
+// POST /api/mawaqit/offsets - Set time offsets (in minutes) for each prayer
+// Body: {"fajr":-5, "sunrise":0, "dhuhr":2, "asr":0, "maghrib":3, "isha":5}
+void handleMawaqitSetOffsets(){
+  if(server.method() != HTTP_POST){
+    server.send(405, "application/json", "{\"error\":\"Method not allowed\"}");
+    return;
+  }
+  
   String body = server.arg(0);
-  int kpos = body.indexOf("key");
-  String key = "";
-  if(kpos >= 0){
-    int colon = body.indexOf(':', kpos);
-    if(colon >= 0){
-      int fq = body.indexOf('"', colon);
-      if(fq >= 0){
-        int sq = body.indexOf('"', fq+1);
-        if(sq > fq) key = body.substring(fq+1, sq);
-      } else {
-        int endp = body.indexOf(',', colon); if(endp < 0) endp = body.indexOf('}', colon);
-        if(endp > colon) key = body.substring(colon+1, endp);
-        key.trim();
-      }
+  Serial.print("/api/mawaqit/offsets body: ");
+  Serial.println(body);
+  
+  // Simple JSON parsing for integers
+  auto extractJsonInt = [&](const String &src, const char* key)->int {
+    int k = src.indexOf(String("\"") + key + "\"");
+    if(k < 0) return 0;
+    int colon = src.indexOf(':', k);
+    if(colon < 0) return 0;
+    int numStart = colon + 1;
+    while(numStart < src.length() && (src.charAt(numStart) == ' ' || src.charAt(numStart) == '\t')) numStart++;
+    int numEnd = numStart;
+    if(src.charAt(numStart) == '-') numEnd++;
+    while(numEnd < src.length() && isDigit(src.charAt(numEnd))) numEnd++;
+    if(numEnd <= numStart) return 0;
+    return src.substring(numStart, numEnd).toInt();
+  };
+  
+  int fajrOff = extractJsonInt(body, "fajr");
+  int sunriseOff = extractJsonInt(body, "sunrise");
+  int dhuhrOff = extractJsonInt(body, "dhuhr");
+  int asrOff = extractJsonInt(body, "asr");
+  int maghribOff = extractJsonInt(body, "maghrib");
+  int ishaOff = extractJsonInt(body, "isha");
+  
+  // Limit offsets to ±30 minutes
+  fajrOff = constrain(fajrOff, -30, 30);
+  sunriseOff = constrain(sunriseOff, -30, 30);
+  dhuhrOff = constrain(dhuhrOff, -30, 30);
+  asrOff = constrain(asrOff, -30, 30);
+  maghribOff = constrain(maghribOff, -30, 30);
+  ishaOff = constrain(ishaOff, -30, 30);
+  
+  prefs.begin("adhancfg", false);
+  prefs.putInt("mq_off_fajr", fajrOff);
+  prefs.putInt("mq_off_sunrise", sunriseOff);
+  prefs.putInt("mq_off_dhuhr", dhuhrOff);
+  prefs.putInt("mq_off_asr", asrOff);
+  prefs.putInt("mq_off_maghrib", maghribOff);
+  prefs.putInt("mq_off_isha", ishaOff);
+  prefs.end();
+  
+  Serial.printf("Offsets saved: Fajr=%d Sunrise=%d Dhuhr=%d Asr=%d Maghrib=%d Isha=%d\n",
+                fajrOff, sunriseOff, dhuhrOff, asrOff, maghribOff, ishaOff);
+  
+  server.send(200, "application/json", "{\"ok\":true}");
+}
+
+// Configure selected mosque for Mawaqit from app
+// Expected body JSON: {"mosque_uuid":"...", "name":"...", "city":"...", "lat":..., "lon":...}
+void handleMawaqitConfig(){
+  if(server.method() != HTTP_POST){ server.send(405, "application/json", "{\"error\":\"Method not allowed\"}"); return; }
+
+  String body = server.arg(0);
+  Serial.print("/api/mawaqit/config body: ");
+  Serial.println(body);
+
+  auto extractJsonString = [&](const String &src, const char* key)->String {
+    int k = src.indexOf(String("\"") + key + "\"");
+    if(k < 0) return "";
+    int colon = src.indexOf(':', k);
+    if(colon < 0) return "";
+    int q1 = src.indexOf('"', colon + 1);
+    if(q1 < 0) return "";
+    int q2 = src.indexOf('"', q1 + 1);
+    if(q2 < 0) return "";
+    return src.substring(q1 + 1, q2);
+  };
+
+  String uuid = extractJsonString(body, "mosque_uuid");
+  if(uuid.length() == 0) uuid = extractJsonString(body, "uuid");
+  String name = extractJsonString(body, "name");
+  String city = extractJsonString(body, "city");
+
+  if(uuid.length() == 0){
+    server.send(400, "application/json", "{\"error\":\"Missing mosque_uuid\"}");
+    return;
+  }
+
+  prefs.begin("adhancfg", false);
+  prefs.putString("mq_uuid", uuid);
+  prefs.putString("mq_name", name);
+  prefs.putString("mq_city", city);
+  prefs.putULong("mq_ts", millis());
+  prefs.end();
+
+  Serial.printf("Mawaqit mosque saved uuid=%s name=%s city=%s\n", uuid.c_str(), name.c_str(), city.c_str());
+  server.send(200, "application/json", "{\"ok\":true,\"message\":\"mosque saved\"}");
+}
+
+// Trigger a sync placeholder (keeps API compatibility with app)
+void handleMawaqitSync(){
+  if(server.method() != HTTP_POST){ 
+    server.send(405, "application/json", "{\"error\":\"Method not allowed\"}"); 
+    return; 
+  }
+
+  prefs.begin("adhancfg", true);
+  String uuid = prefs.getString("mq_uuid", "");
+  prefs.end();
+
+  if(uuid.length() == 0){
+    server.send(400, "application/json", "{\"error\":\"No mosque configured\"}");
+    return;
+  }
+
+  // Download real Mawaqit times from API
+  // IMPORTANT: current app sends OSM/Photon ids (osm-xxxx / photon-xxxx),
+  // which are not valid Mawaqit mosque ids. For those, use lat/lon endpoint.
+  Serial.printf(">>> Syncing Mawaqit times for UUID: %s\n", uuid.c_str());
+
+  double lat = 0.0, lon = 0.0, acc = 0.0;
+  bool hasLocation = loadStoredLocation(lat, lon, acc);
+  bool looksOsmId = uuid.startsWith("osm-") || uuid.startsWith("photon-");
+
+  String host = "api.mawaqit.net";
+  String urls[2] = {"", ""};
+  int attempts = 0;
+
+  if(looksOsmId && hasLocation){
+    urls[attempts++] = "/v1/times?latitude=" + String(lat, 6) + "&longitude=" + String(lon, 6);
+    Serial.println("UUID is OSM/Photon id -> using lat/lon endpoint first");
+  }else{
+    urls[attempts++] = "/2.0/mosque/" + uuid + "/prayer-times";
+    if(hasLocation){
+      urls[attempts++] = "/v1/times?latitude=" + String(lat, 6) + "&longitude=" + String(lon, 6);
     }
   }
-  if(key.length()==0){ server.send(400, "text/plain", "Missing key"); return; }
-  prefs.begin("adhancfg", false);
-  prefs.putString("geo_key", key);
-  prefs.end();
-  server.send(200, "text/plain", "Geo key saved");
-  Serial.println("Saved geolocation key (length=" + String(key.length()) + ")");
-}
 
-// Trigger Wi-Fi based geolocation on the ESP (uses stored geo_key and Mozilla Geolocation service)
-bool espGeolocateUsingWifi(double &outLat, double &outLon, double &outAcc){
+  const char* timeNames[6] = {"fajr", "sunrise", "dhuhr", "asr", "maghrib", "isha"};
+  const char* altNames[6] = {"Fajr", "Sunrise", "Dhuhr", "Asr", "Maghrib", "Isha"};
+  String times[6] = {"", "", "", "", "", ""};
+  bool anyValid = false;
+
+  for(int attempt = 0; attempt < attempts && !anyValid; attempt++){
+    WiFiClientSecure client;
+    client.setInsecure();
+
+    String url = urls[attempt];
+    Serial.printf("Mawaqit request [%d/%d]: https://%s%s\n", attempt + 1, attempts, host.c_str(), url.c_str());
+
+    if(!client.connect(host.c_str(), 443)){
+      Serial.println("Connection to Mawaqit API failed");
+      continue;
+    }
+
+    client.print("GET " + url + " HTTP/1.1\r\n");
+    client.print("Host: " + host + "\r\n");
+    client.print("User-Agent: AdhanBox/1.0\r\n");
+    client.print("Accept: application/json\r\n");
+    client.print("Connection: close\r\n");
+    client.print("\r\n");
+
+    String response = "";
+    unsigned long startTime = millis();
+    while((millis() - startTime < 15000) && (client.connected() || client.available())){
+      if(client.available()){
+        response += (char)client.read();
+      }
+    }
+    client.stop();
+
+    int bodyStart = response.indexOf("\r\n\r\n");
+    int skipLen = 4;
+    if(bodyStart < 0){
+      bodyStart = response.indexOf("\n\n");
+      skipLen = 2;
+    }
+    if(bodyStart < 0){
+      Serial.println("No response body found");
+      continue;
+    }
+
+    String jsonBody = response.substring(bodyStart + skipLen);
+    jsonBody.trim();
+
+    // Handle possible chunked body beginning with hex chunk-size (e.g. "7b")
+    int firstNl = jsonBody.indexOf('\n');
+    if(firstNl > 0){
+      String firstLine = jsonBody.substring(0, firstNl);
+      firstLine.trim();
+      bool looksHex = firstLine.length() > 0 && firstLine.length() <= 8;
+      for(size_t i = 0; i < firstLine.length(); i++){
+        char c = firstLine.charAt(i);
+        bool isHexChar = (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
+        if(!isHexChar){ looksHex = false; break; }
+      }
+      if(looksHex){
+        String dechunked = jsonBody.substring(firstNl + 1);
+        int endChunk = dechunked.lastIndexOf("\n0");
+        if(endChunk > 0){
+          dechunked = dechunked.substring(0, endChunk);
+        }
+        dechunked.trim();
+        jsonBody = dechunked;
+      }
+    }
+
+    Serial.printf("Response body (first 500 chars): %.500s\n", jsonBody.c_str());
+
+    if(jsonBody.indexOf("<!DOCTYPE") >= 0 || jsonBody.indexOf("<html") >= 0){
+      Serial.println("ERROR: Received HTML instead of JSON");
+      continue;
+    }
+
+    for(int i = 0; i < 6; i++){
+      int pos = jsonBody.indexOf(String("\"") + timeNames[i] + "\"");
+      if(pos < 0){
+        pos = jsonBody.indexOf(String("\"") + altNames[i] + "\"");
+      }
+
+      if(pos >= 0){
+        int colonPos = jsonBody.indexOf(":", pos);
+        int q1 = jsonBody.indexOf('"', colonPos + 1);
+        int q2 = jsonBody.indexOf('"', q1 + 1);
+        if(q1 >= 0 && q2 > q1){
+          times[i] = jsonBody.substring(q1 + 1, q2);
+          if(times[i].length() > 5 && times[i].charAt(5) == ':'){
+            times[i] = times[i].substring(0, 5);
+          }
+          Serial.printf("  %s = %s\n", timeNames[i], times[i].c_str());
+        }
+      }
+    }
+
+    for(int i = 0; i < 6; i++){
+      if(times[i].length() >= 5){
+        anyValid = true;
+        break;
+      }
+    }
+
+    if(!anyValid){
+      Serial.println("No valid times parsed from this endpoint, trying fallback...");
+      for(int i = 0; i < 6; i++) times[i] = "";
+    }
+  }
+
+  if(!anyValid){
+    Serial.println("No valid times parsed from Mawaqit endpoints, trying coordinate fallback (Aladhan)...");
+
+    double flat = 0.0, flon = 0.0, facc = 0.0;
+    if(!loadStoredLocation(flat, flon, facc)){
+      server.send(502, "application/json", "{\"error\":\"No valid times and no location for fallback\"}");
+      return;
+    }
+
+    HTTPClient http;
+    String fallbackUrl = "https://api.aladhan.com/v1/timings?latitude=" + String(flat, 6) + "&longitude=" + String(flon, 6) + "&method=12&school=1";
+    Serial.printf("Fallback request: %s\n", fallbackUrl.c_str());
+
+    http.begin(fallbackUrl);
+    http.setTimeout(15000);
+    int httpCode = http.GET();
+
+    if(httpCode != 200){
+      Serial.printf("Fallback HTTP error: %d\n", httpCode);
+      http.end();
+      server.send(503, "application/json", "{\"error\":\"Fallback request failed\"}");
+      return;
+    }
+
+    String fallbackBody = http.getString();
+    http.end();
+    Serial.printf("Fallback body (first 300 chars): %.300s\n", fallbackBody.c_str());
+
+    for(int i = 0; i < 6; i++){
+      int pos = fallbackBody.indexOf(String("\"") + altNames[i] + "\"");
+      if(pos >= 0){
+        int colonPos = fallbackBody.indexOf(":", pos);
+        int q1 = fallbackBody.indexOf('"', colonPos + 1);
+        int q2 = fallbackBody.indexOf('"', q1 + 1);
+        if(q1 >= 0 && q2 > q1){
+          times[i] = fallbackBody.substring(q1 + 1, q2);
+          if(times[i].length() > 5 && times[i].charAt(5) == ':'){
+            times[i] = times[i].substring(0, 5);
+          }
+          Serial.printf("  fallback %s = %s\n", altNames[i], times[i].c_str());
+        }
+      }
+    }
+
+    anyValid = false;
+    for(int i = 0; i < 6; i++){
+      if(times[i].length() >= 5){
+        anyValid = true;
+        break;
+      }
+    }
+
+    if(!anyValid){
+      Serial.println("No valid times parsed from any endpoint (Mawaqit + fallback)");
+      server.send(502, "application/json", "{\"error\":\"No valid times in response\"}");
+      return;
+    }
+  }
+  
+  // Apply user-configured offsets to times
   prefs.begin("adhancfg", true);
-  String key = prefs.getString("geo_key", "");
+  int offsets[6] = {
+    prefs.getInt("mq_off_fajr", 0),
+    prefs.getInt("mq_off_sunrise", 0),
+    prefs.getInt("mq_off_dhuhr", 0),
+    prefs.getInt("mq_off_asr", 0),
+    prefs.getInt("mq_off_maghrib", 0),
+    prefs.getInt("mq_off_isha", 0)
+  };
   prefs.end();
-  if(key.length() == 0){ Serial.println("No geo_key stored"); return false; }
-  if(!WiFi.isConnected()){ Serial.println("Not connected to Wi-Fi, cannot geolocate"); return false; }
-  int n = WiFi.scanNetworks();
-  if(n <= 0){ Serial.println("No networks found for geolocation"); return false; }
-  // Try the payload shape that succeeded in your logs: `wlan` with {mac, rss}
-  int limit = min(n, 30);
-  String wlanArr = "[";
-  for(int i=0;i<limit;i++){
-    String mac = WiFi.BSSIDstr(i);
-    int rssi = WiFi.RSSI(i);
-    wlanArr += "{\"mac\":\"" + mac + "\",\"rss\":" + String(rssi) + "}";
-    if(i < limit-1) wlanArr += ",";
+  
+  Serial.println("Applying offsets to times:");
+  for(int i = 0; i < 6; i++){
+    if(offsets[i] != 0 && times[i].length() >= 5){
+      String original = times[i];
+      times[i] = addMinutesToTime(times[i], offsets[i]);
+      Serial.printf("  %s: %s + %d min = %s\n", timeNames[i], original.c_str(), offsets[i], times[i].c_str());
+    }
   }
-  wlanArr += "]";
-  String payload = "{\"wlan\":" + wlanArr + "}";
-  Serial.println("HERE payload (wlan mac/rss): " + payload);
-  String url = String("https://positioning.hereapi.com/v2/locate?apiKey=") + key;
-  HTTPClient http;
-  http.begin(url);
-  http.addHeader("Content-Type", "application/json");
-  int code = http.POST(payload);
-  String body = http.getString();
-  Serial.printf("HERE POST returned code=%d\n", code);
-  Serial.println("HERE response body:");
-  Serial.println(body);
-  http.end();
-  if(code != HTTP_CODE_OK){
-    Serial.println("HERE request failed or returned non-OK status");
-    return false;
+  
+  // Save to Preferences with RTC timestamp (not millis!)
+  if(!rtc.begin()){
+    Serial.println("RTC missing - cannot timestamp sync");
+    server.send(500, "application/json", "{\"error\":\"RTC missing\"}");
+    return;
   }
-  // Parse HERE v2 response. It commonly returns { "location": { "lat":..., "lng":..., "accuracy":... } }
-  double lat = parseJsonValue(body, "lat");
-  double lng = parseJsonValue(body, "lng");
-  double acc = parseJsonValue(body, "accuracy");
-  if(isnan(lat) || isnan(lng)){
-    Serial.println("Geo response missing lat/lng");
-    return false;
-  }
-  outLat = lat; outLon = lng; outAcc = acc;
+  unsigned long now_epoch = rtc.now().unixtime();
+  
   prefs.begin("adhancfg", false);
-  prefs.putString("lat", String(outLat, 6));
-  prefs.putString("lon", String(outLon, 6));
-  prefs.putString("acc", String(outAcc));
-  prefs.putULong("ts", millis());
+  prefs.putString("mq_fajr", times[0]);
+  prefs.putString("mq_sunrise", times[1]);
+  prefs.putString("mq_dhuhr", times[2]);
+  prefs.putString("mq_asr", times[3]);
+  prefs.putString("mq_maghrib", times[4]);
+  prefs.putString("mq_isha", times[5]);
+  prefs.putULong("mq_sync_ts", now_epoch);
   prefs.end();
-  Serial.printf("ESP geolocated (wlan payload): %f,%f (acc=%f)\n", outLat, outLon, outAcc);
-  return true;
+  
+  Serial.printf("Mawaqit times synced successfully at epoch %lu\n", now_epoch);
+  Serial.printf("  Fajr: %s  Dhuhr: %s  Maghrib: %s  Isha: %s\n", times[0].c_str(), times[2].c_str(), times[4].c_str(), times[5].c_str());
+  server.send(200, "application/json", "{\"ok\":true,\"message\":\"times synced\"}");
 }
 
-void handleGeoWifi(){
-  double lat, lon, acc;
-  if(espGeolocateUsingWifi(lat, lon, acc)){
-    char buf[128]; snprintf(buf, sizeof(buf), "{\"lat\":%.6f,\"lon\":%.6f,\"acc\":%.1f}", lat, lon, acc);
-    server.send(200, "application/json", String(buf));
-  } else {
-    server.send(500, "text/plain", "Geolocation failed");
+// Debug endpoint: dump stored Mawaqit times and freshness status
+void handleMawaqitDebug(){
+  prefs.begin("adhancfg", true);
+  String mq_uuid = prefs.getString("mq_uuid", "");
+  String mq_fajr = prefs.getString("mq_fajr", "");
+  String mq_sunrise = prefs.getString("mq_sunrise", "");
+  String mq_dhuhr = prefs.getString("mq_dhuhr", "");
+  String mq_asr = prefs.getString("mq_asr", "");
+  String mq_maghrib = prefs.getString("mq_maghrib", "");
+  String mq_isha = prefs.getString("mq_isha", "");
+  unsigned long mq_sync_ts = prefs.getULong("mq_sync_ts", 0);
+  prefs.end();
+  
+  String json = "{";
+  json += "\"uuid\":\"" + mq_uuid + "\",";
+  json += "\"times\":{";
+  json += "\"fajr\":\"" + mq_fajr + "\",";
+  json += "\"sunrise\":\"" + mq_sunrise + "\",";
+  json += "\"dhuhr\":\"" + mq_dhuhr + "\",";
+  json += "\"asr\":\"" + mq_asr + "\",";
+  json += "\"maghrib\":\"" + mq_maghrib + "\",";
+  json += "\"isha\":\"" + mq_isha + "\"";
+  json += "},";
+  json += "\"sync_ts\":" + String(mq_sync_ts) + ",";
+  
+  if(rtc.begin()){
+    unsigned long now_epoch = rtc.now().unixtime();
+    unsigned long age_sec = (mq_sync_ts > 0 && now_epoch >= mq_sync_ts) ? (now_epoch - mq_sync_ts) : 999999UL;
+    float age_hours = age_sec / 3600.0;
+    bool fresh = (age_sec < 25UL * 3600UL);
+    json += "\"now_epoch\":" + String(now_epoch) + ",";
+    json += "\"age_seconds\":" + String(age_sec) + ",";
+    json += "\"age_hours\":" + String(age_hours, 2) + ",";
+    json += "\"fresh\":" + String(fresh ? "true" : "false");
+  }else{
+    json += "\"rtc_error\":true";
+  }
+  
+  json += "}";
+  server.send(200, "application/json", json);
+}
+
+void getCalculationAngles(double &fajrAngle, double &ishaAngle, String &methodName){
+  fajrAngle = 18.0;
+  ishaAngle = 17.0;
+  methodName = "mwl";
+
+  prefs.begin("adhancfg", true);
+  String method = prefs.getString("calc_method", "mwl");
+  double customFajr = prefs.getFloat("calc_fajr_angle", 18.0f);
+  double customIsha = prefs.getFloat("calc_isha_angle", 17.0f);
+  prefs.end();
+
+  method.toLowerCase();
+  methodName = method;
+
+  if(method == "isna"){
+    fajrAngle = 15.0;
+    ishaAngle = 15.0;
+  }else if(method == "uoif"){
+    fajrAngle = 12.0;
+    ishaAngle = 12.0;
+  }else if(method == "egypt"){
+    fajrAngle = 19.5;
+    ishaAngle = 17.5;
+  }else if(method == "karachi"){
+    fajrAngle = 18.0;
+    ishaAngle = 18.0;
+  }else if(method == "custom"){
+    fajrAngle = customFajr;
+    ishaAngle = customIsha;
+  }else{
+    methodName = "mwl";
+    fajrAngle = 18.0;
+    ishaAngle = 17.0;
   }
 }
+
+// Configure calculation method/angles for fallback prayer times
+// GET -> current config, POST -> save config
+void handleCalculationConfig(){
+  if(server.method() == HTTP_GET){
+    double fajrAngle, ishaAngle;
+    String methodName;
+    getCalculationAngles(fajrAngle, ishaAngle, methodName);
+    String out = "{\"method\":\"" + methodName + "\",\"fajr_angle\":" + String(fajrAngle, 1) + ",\"isha_angle\":" + String(ishaAngle, 1) + "}";
+    server.send(200, "application/json", out);
+    return;
+  }
+
+  if(server.method() != HTTP_POST){
+    server.send(405, "application/json", "{\"error\":\"Method not allowed\"}");
+    return;
+  }
+
+  String body = server.arg(0);
+  Serial.print("/api/calculation/config body: ");
+  Serial.println(body);
+
+  auto extractJsonString = [&](const String &src, const char* key)->String {
+    int k = src.indexOf(String("\"") + key + "\"");
+    if(k < 0) return "";
+    int colon = src.indexOf(':', k);
+    if(colon < 0) return "";
+    int q1 = src.indexOf('"', colon + 1);
+    if(q1 < 0) return "";
+    int q2 = src.indexOf('"', q1 + 1);
+    if(q2 < 0) return "";
+    return src.substring(q1 + 1, q2);
+  };
+
+  auto extractJsonNumber = [&](const String &src, const char* key, double defVal)->double {
+    int k = src.indexOf(String("\"") + key + "\"");
+    if(k < 0) return defVal;
+    int colon = src.indexOf(':', k);
+    if(colon < 0) return defVal;
+    int endp = src.indexOf(',', colon);
+    if(endp < 0) endp = src.indexOf('}', colon);
+    if(endp < 0) return defVal;
+    String v = src.substring(colon + 1, endp);
+    v.trim();
+    return v.toFloat();
+  };
+
+  String method = extractJsonString(body, "method");
+  if(method.length() == 0) method = "mwl";
+  method.toLowerCase();
+
+  if(!(method == "mwl" || method == "isna" || method == "uoif" || method == "egypt" || method == "karachi" || method == "custom")){
+    server.send(400, "application/json", "{\"error\":\"Invalid method\"}");
+    return;
+  }
+
+  double customFajr = extractJsonNumber(body, "fajr_angle", 18.0);
+  double customIsha = extractJsonNumber(body, "isha_angle", 17.0);
+  if(customFajr < 10.0 || customFajr > 25.0) customFajr = 18.0;
+  if(customIsha < 10.0 || customIsha > 25.0) customIsha = 17.0;
+
+  prefs.begin("adhancfg", false);
+  prefs.putString("calc_method", method);
+  prefs.putFloat("calc_fajr_angle", (float)customFajr);
+  prefs.putFloat("calc_isha_angle", (float)customIsha);
+  prefs.end();
+
+  if(rtc.begin()) scheduleNextPrayerAlarm();
+
+  String out = "{\"ok\":true,\"method\":\"" + method + "\",\"fajr_angle\":" + String(customFajr,1) + ",\"isha_angle\":" + String(customIsha,1) + "}";
+  server.send(200, "application/json", out);
+}
+
+// GET/POST /api/adhan/config - Manage adhan track selection and duaa settings
+void handleAdhanConfig(){
+  if(server.method() == HTTP_GET){
+    // Return current adhan configuration
+    prefs.begin("adhancfg", true);
+    int fajr_track = prefs.getInt("adhan_fajr_track", 1);
+    int dhuhr_track = prefs.getInt("adhan_dhuhr_track", 1);
+    int asr_track = prefs.getInt("adhan_asr_track", 1);
+    int maghrib_track = prefs.getInt("adhan_maghrib_track", 1);
+    int isha_track = prefs.getInt("adhan_isha_track", 1);
+    bool fajr_duaa = prefs.getBool("adhan_fajr_duaa", true);
+    bool dhuhr_duaa = prefs.getBool("adhan_dhuhr_duaa", true);
+    bool asr_duaa = prefs.getBool("adhan_asr_duaa", true);
+    bool maghrib_duaa = prefs.getBool("adhan_maghrib_duaa", true);
+    bool isha_duaa = prefs.getBool("adhan_isha_duaa", true);
+    prefs.end();
+
+    String json = "{";
+    json += "\"fajr_track\":" + String(fajr_track) + ",";
+    json += "\"fajr_duaa\":" + String(fajr_duaa ? "true" : "false") + ",";
+    json += "\"dhuhr_track\":" + String(dhuhr_track) + ",";
+    json += "\"dhuhr_duaa\":" + String(dhuhr_duaa ? "true" : "false") + ",";
+    json += "\"asr_track\":" + String(asr_track) + ",";
+    json += "\"asr_duaa\":" + String(asr_duaa ? "true" : "false") + ",";
+    json += "\"maghrib_track\":" + String(maghrib_track) + ",";
+    json += "\"maghrib_duaa\":" + String(maghrib_duaa ? "true" : "false") + ",";
+    json += "\"isha_track\":" + String(isha_track) + ",";
+    json += "\"isha_duaa\":" + String(isha_duaa ? "true" : "false");
+    json += "}";
+    server.send(200, "application/json", json);
+    return;
+  }
+
+  if(server.method() == HTTP_POST){
+    // Parse and save adhan configuration
+    String body = server.arg("plain");
+    Serial.print("/api/adhan/config POST body: ");
+    Serial.println(body);
+
+    auto extractJsonBool = [&](const String &src, const char* key, bool defVal)->bool {
+      int idx = src.indexOf(String("\"") + key + "\":");
+      if(idx < 0) return defVal;
+      idx += strlen(key) + 3;
+      while(idx < src.length() && (src[idx] == ' ' || src[idx] == '\t')) idx++;
+      if(src.substring(idx, idx+4) == "true") return true;
+      if(src.substring(idx, idx+5) == "false") return false;
+      return defVal;
+    };
+
+    auto extractJsonNumber = [&](const String &src, const char* key, double defVal)->double {
+      int idx = src.indexOf(String("\"") + key + "\":");
+      if(idx < 0) return defVal;
+      idx += strlen(key) + 3;
+      while(idx < src.length() && (src[idx] == ' ' || src[idx] == '\t')) idx++;
+      int endIdx = idx;
+      while(endIdx < src.length() && (isdigit(src[endIdx]) || src[endIdx] == '-' || src[endIdx] == '.')) endIdx++;
+      if(endIdx > idx) return src.substring(idx, endIdx).toDouble();
+      return defVal;
+    };
+
+    int fajr_track = (int)extractJsonNumber(body, "fajr_track", 1);
+    int dhuhr_track = (int)extractJsonNumber(body, "dhuhr_track", 1);
+    int asr_track = (int)extractJsonNumber(body, "asr_track", 1);
+    int maghrib_track = (int)extractJsonNumber(body, "maghrib_track", 1);
+    int isha_track = (int)extractJsonNumber(body, "isha_track", 1);
+    
+    // Constrain to 1-11
+    fajr_track = constrain(fajr_track, 1, 11);
+    dhuhr_track = constrain(dhuhr_track, 1, 11);
+    asr_track = constrain(asr_track, 1, 11);
+    maghrib_track = constrain(maghrib_track, 1, 11);
+    isha_track = constrain(isha_track, 1, 11);
+
+    bool fajr_duaa = extractJsonBool(body, "fajr_duaa", true);
+    bool dhuhr_duaa = extractJsonBool(body, "dhuhr_duaa", true);
+    bool asr_duaa = extractJsonBool(body, "asr_duaa", true);
+    bool maghrib_duaa = extractJsonBool(body, "maghrib_duaa", true);
+    bool isha_duaa = extractJsonBool(body, "isha_duaa", true);
+
+    prefs.begin("adhancfg", false);
+    prefs.putInt("adhan_fajr_track", fajr_track);
+    prefs.putInt("adhan_dhuhr_track", dhuhr_track);
+    prefs.putInt("adhan_asr_track", asr_track);
+    prefs.putInt("adhan_maghrib_track", maghrib_track);
+    prefs.putInt("adhan_isha_track", isha_track);
+    prefs.putBool("adhan_fajr_duaa", fajr_duaa);
+    prefs.putBool("adhan_dhuhr_duaa", dhuhr_duaa);
+    prefs.putBool("adhan_asr_duaa", asr_duaa);
+    prefs.putBool("adhan_maghrib_duaa", maghrib_duaa);
+    prefs.putBool("adhan_isha_duaa", isha_duaa);
+    prefs.end();
+
+    Serial.printf("Adhan config saved: Fajr=%d (duaa:%d), Dhuhr=%d (duaa:%d), Asr=%d (duaa:%d), Maghrib=%d (duaa:%d), Isha=%d (duaa:%d)\n",
+      fajr_track, fajr_duaa, dhuhr_track, dhuhr_duaa, asr_track, asr_duaa, maghrib_track, maghrib_duaa, isha_track, isha_duaa);
+
+    server.send(200, "application/json", "{\"ok\":true}");
+    return;
+  }
+
+  server.send(405, "text/plain", "Method not allowed");
+}
+
+
 
 void handleDisconnectWifi(){
   WiFi.disconnect(true);
@@ -1328,6 +1867,16 @@ void startConfigAP(){
     server.sendHeader("Location", redirect, true);
     server.send(302, "text/plain", "");
   });
+  // Enregistrer toutes les routes et démarrer le serveur
+  setupServerRoutes();
+  server.begin();
+  apRunning = true;
+  apStartTime = millis();
+  Serial.printf("Config AP started: %s\n", ssid);
+}
+
+/// Enregistre toutes les routes du serveur HTTP
+void setupServerRoutes(){
   server.on("/", HTTP_GET, handleRoot);
   server.on("/set_location", HTTP_POST, handleSetLocation);
   server.on("/set_tz", HTTP_POST, handleSetTZ);
@@ -1338,7 +1887,6 @@ void startConfigAP(){
   server.on("/set_led", HTTP_GET, handleSetLed);
   server.on("/led_off", HTTP_GET, handleLedOff);
   server.on("/scan_wifi", HTTP_GET, handleScanWifi);
-  // Expose serial-like commands via HTTP so UI can call them
   server.on("/setrtc", HTTP_GET, handleSetRTC);
   server.on("/set_rtc_manual", HTTP_POST, handleSetRtcManual);
   server.on("/set_alarm_test", HTTP_GET, handleSetAlarmTest);
@@ -1346,23 +1894,33 @@ void startConfigAP(){
   server.on("/show_next_alarm", HTTP_GET, handleShowNextAlarm);
   server.on("/show_loc", HTTP_GET, handleShowLoc);
   server.on("/show_time", HTTP_GET, handleShowTime);
-  server.on("/play", HTTP_GET, handlePlayTrack); // ?track=1
+  server.on("/play", HTTP_GET, handlePlayTrack);
   server.on("/stopplay", HTTP_GET, handleStopPlay);
   server.on("/playtest", HTTP_GET, handlePlayTest);
-    server.on("/set_volume", HTTP_POST, handleSetVolume);
-    server.on("/get_volume", HTTP_GET, handleGetVolume);
-    server.on("/set_brightness", HTTP_POST, handleSetBrightness);
-    server.on("/get_brightness", HTTP_GET, handleGetBrightness);
-    server.on("/connect_wifi", HTTP_POST, handleConnectWifi);
-    server.on("/disconnect_wifi", HTTP_GET, handleDisconnectWifi);
-    server.on("/stop_ap", HTTP_GET, [](){ server.send(200,"text/plain","AP stopped"); stopConfigAP(); });
-    server.on("/set_geo_key", HTTP_POST, handleSetGeoKey);
-    server.on("/geo_wifi", HTTP_GET, handleGeoWifi);
-    server.on("/sync_time", HTTP_GET, [](){ bool ok = syncTimeFromNtp(10000); if(ok){ if(rtc.begin()) scheduleNextPrayerAlarm(); server.send(200,"text/plain","Time synced"); } else server.send(500,"text/plain","Time sync failed"); });
-  server.begin();
-  apRunning = true;
-  apStartTime = millis();
-  Serial.printf("Config AP started: %s\n", ssid);
+  server.on("/set_volume", HTTP_POST, handleSetVolume);
+  server.on("/get_volume", HTTP_GET, handleGetVolume);
+  server.on("/set_brightness", HTTP_POST, handleSetBrightness);
+  server.on("/get_brightness", HTTP_GET, handleGetBrightness);
+  server.on("/connect_wifi", HTTP_POST, handleConnectWifi);
+  server.on("/disconnect_wifi", HTTP_GET, handleDisconnectWifi);
+  server.on("/stop_ap", HTTP_GET, [](){ server.send(200,"text/plain","AP stopped"); stopConfigAP(); });
+  server.on("/api/calculation/config", HTTP_GET, handleCalculationConfig);
+  server.on("/api/calculation/config", HTTP_POST, handleCalculationConfig);
+  server.on("/sync_time", HTTP_GET, [](){ bool ok = syncTimeFromNtp(10000); if(ok){ if(rtc.begin()) scheduleNextPrayerAlarm(); server.send(200,"text/plain","Time synced"); } else server.send(500,"text/plain","Time sync failed"); });
+  server.on("/api/mawaqit/config", HTTP_POST, handleMawaqitConfig);
+  server.on("/api/mawaqit/sync", HTTP_POST, handleMawaqitSync);
+  server.on("/api/mawaqit/debug", HTTP_GET, handleMawaqitDebug);
+  server.on("/api/mawaqit/offsets", HTTP_GET, handleMawaqitGetOffsets);
+  server.on("/api/mawaqit/offsets", HTTP_POST, handleMawaqitSetOffsets);
+  server.on("/api/adhan/config", HTTP_GET, handleAdhanConfig);
+  server.on("/api/adhan/config", HTTP_POST, handleAdhanConfig);
+  
+  // ===== API Aliases for Flutter App =====
+  server.on("/api/config/timezone", HTTP_POST, handleSetTZ);
+  server.on("/api/audio/volume", HTTP_POST, handleSetVolume);
+  server.on("/api/led/brightness", HTTP_POST, handleSetBrightness);
+  server.on("/api/led/brightness", HTTP_GET, handleGetBrightness);
+  server.on("/api/led/scenario", HTTP_POST, handleSetLedScenario);
 }
 
 void stopConfigAP(){
@@ -1396,14 +1954,14 @@ void checkConfigButton(){
         stopPlay();
         // also stop LED scenario
         ledScenario = 0; setLedDuty(0);
-        if(useAddressableLEDs) stripSetAll(0,0,0,0);
+        if(useAddressableLEDs) stripSetAll(0,0,0);
       } else {
         // cycle through scenes but skip the BLINK_INDEX (reserved for AP)
         do {
           ledScenario = (ledScenario + 1) % TOTAL_SCENES;
         } while(ledScenario == BLINK_INDEX);
         // if we switch to off ensure LEDs are off
-        if(ledScenario == 0){ setLedDuty(0); if(useAddressableLEDs) stripSetAll(0,0,0,0); }
+        if(ledScenario == 0){ setLedDuty(0); if(useAddressableLEDs) stripSetAll(0,0,0); }
       }
     }
   }
@@ -1559,8 +2117,10 @@ bool computePrayerTimesForDate(const DateTime &date, double outTimes[6], int &tz
   double Hsun_deg; bool okSun = hourAngleForZenith(90.833, deg2rad(lat), decl, Hsun_deg);
   double sunrise = okSun ? solarNoon - 4.0 * Hsun_deg : NAN;
   double sunset  = okSun ? solarNoon + 4.0 * Hsun_deg : NAN;
-  double Hfajr, Hisha; bool okF = hourAngleForZenith(108.0, deg2rad(lat), decl, Hfajr);
-  bool okI = hourAngleForZenith(107.0, deg2rad(lat), decl, Hisha);
+  double fajrAngle, ishaAngle; String calcMethod;
+  getCalculationAngles(fajrAngle, ishaAngle, calcMethod);
+  double Hfajr, Hisha; bool okF = hourAngleForZenith(90.0 + fajrAngle, deg2rad(lat), decl, Hfajr);
+  bool okI = hourAngleForZenith(90.0 + ishaAngle, deg2rad(lat), decl, Hisha);
   double fajr = okF ? (solarNoon - 4.0 * Hfajr) : NAN;
   double isha = okI ? (solarNoon + 4.0 * Hisha) : NAN;
   double dhuhr = solarNoon;
@@ -1580,6 +2140,41 @@ void handlePrayerTimes(){
     return;
   }
   DateTime now = rtc.now();
+  
+  // PRIORITY: Check if Mawaqit times are stored and valid (synced < 25 hours ago)
+  prefs.begin("adhancfg", true);
+  String mq_fajr = prefs.getString("mq_fajr", "");
+  String mq_sunrise = prefs.getString("mq_sunrise", "");
+  String mq_dhuhr = prefs.getString("mq_dhuhr", "");
+  String mq_asr = prefs.getString("mq_asr", "");
+  String mq_maghrib = prefs.getString("mq_maghrib", "");
+  String mq_isha = prefs.getString("mq_isha", "");
+  unsigned long mq_sync_ts = prefs.getULong("mq_sync_ts", 0);
+  prefs.end();
+  
+  // Check if Mawaqit times are fresh (synced < 25 hours ago)
+  unsigned long now_epoch = rtc.now().unixtime();
+  unsigned long timeSinceSyncSec = (mq_sync_ts > 0 && now_epoch >= mq_sync_ts) ? (now_epoch - mq_sync_ts) : 999999UL;
+  bool mawaqitValid = (mq_fajr.length() >= 5) && (mq_isha.length() >= 5) && (timeSinceSyncSec < 25UL * 3600UL);
+  
+  if(mawaqitValid){
+    Serial.printf("handlePrayerTimes: Returning MAWAQIT times (synced %lu sec ago = %.1f hours)\n", timeSinceSyncSec, timeSinceSyncSec/3600.0);
+    Serial.printf("  Fajr: %s  Dhuhr: %s  Maghrib: %s  Isha: %s\n", mq_fajr.c_str(), mq_dhuhr.c_str(), mq_maghrib.c_str(), mq_isha.c_str());
+    String json = "{";
+    json += "\"fajr\":\"" + mq_fajr + "\",";
+    json += "\"sunrise\":\"" + mq_sunrise + "\",";
+    json += "\"dhuhr\":\"" + mq_dhuhr + "\",";
+    json += "\"asr\":\"" + mq_asr + "\",";
+    json += "\"maghrib\":\"" + mq_maghrib + "\",";
+    json += "\"isha\":\"" + mq_isha + "\",";
+    json += "\"source\":\"mawaqit\"";
+    json += "}";
+    server.send(200, "application/json", json);
+    return;
+  }
+  
+  // Fallback: Return CALCULATED times
+  Serial.printf("handlePrayerTimes: Returning CALCULATED times (Mawaqit age: %lu sec, valid: %s)\n", timeSinceSyncSec, mawaqitValid ? "yes":"no");
   double times[6]; int tzMin; String tzSrc;
   if(!computePrayerTimesForDate(now, times, tzMin, tzSrc)){
     server.send(200, "application/json", "{\"error\":\"location missing\"}");
@@ -1601,8 +2196,11 @@ void handlePrayerTimes(){
     char idxbuf[32]; snprintf(idxbuf, sizeof(idxbuf), "\"next\":\"%s\",\"next_index\":%d,", nbuf, nextIdx);
     json += String(idxbuf);
   }
-  char tzbuf[64]; snprintf(tzbuf, sizeof(tzbuf), "\"tz_min\":%d,\"tz_source\":\"%s\"", tzMin, tzSrc.c_str());
+  char tzbuf[64]; snprintf(tzbuf, sizeof(tzbuf), "\"tz_min\":%d,\"tz_source\":\"%s\",\"source\":\"calculated\"", tzMin, tzSrc.c_str());
   json += String(tzbuf);
+  double fajrAngle, ishaAngle; String methodName;
+  getCalculationAngles(fajrAngle, ishaAngle, methodName);
+  json += ",\"calc_method\":\"" + methodName + "\",\"fajr_angle\":" + String(fajrAngle,1) + ",\"isha_angle\":" + String(ishaAngle,1);
   json += "}";
   server.send(200, "application/json", json);
 }
@@ -2076,17 +2674,18 @@ void setup(){
 
   // Initialize addressable strip (native driver) if enabled
   if(useAddressableLEDs){
-    // configure LED data pin as output
-    gpio_config_t io_led = {};
-    io_led.mode = GPIO_MODE_OUTPUT;
-    io_led.pin_bit_mask = (1ULL << LED_DATA_PIN);
-    gpio_config(&io_led);
-    // clear buffer and send an initial black frame
-    for(uint16_t i=0;i<LED_NUM;i++) LedIc[i][0]=LedIc[i][1]=LedIc[i][2]=LedIc[i][3]=0;
-    Send_GRBW((1u<<LED_DATA_PIN), LedIc, LED_NUM);
-    // send a couple more zero frames and hold line low to ensure reset
-    clearStrip();
-    Serial.printf("Addressable LED strip (native) initialized (%u LEDs) on pin %d\n", (uint32_t)LED_NUM, LED_DATA_PIN);
+    // Initialize Adafruit_NeoPixel library
+    leds.begin();
+    // send initial black frame to clear strip
+    leds.clear();
+    leds.show();
+    delay(50);
+    // send a couple more zero frames to ensure reset
+    for(int i=0;i<2;i++){
+      stripSetAll(0,0,0);
+      delay(20);
+    }
+    Serial.printf("Addressable LED strip (Adafruit_NeoPixel) initialized (%u LEDs) on pin %d\n", (uint32_t)LED_NUM, LED_DATA_PIN);
   }
 
   // Print stored location if any
@@ -2100,10 +2699,55 @@ void setup(){
   } else {
     Serial.println("No stored location yet.");
   }
-  // Always start config AP at boot as requested
-  Serial.println("Starting configuration AP at boot (configuration mode).");
-  startConfigAP();
-  Serial.println("You can also control the AP via serial commands: startap, stopap, showloc");
+  
+  // Try to auto-reconnect to last WiFi
+  bool wifiConnected = false;
+  prefs.begin("adhancfg", true);
+  String savedSSID = prefs.getString("wifi_ssid", "");
+  String savedPass = prefs.getString("wifi_pass", "");
+  prefs.end();
+  
+  if(savedSSID.length() > 0){
+    Serial.printf("Found saved WiFi credentials: SSID=%s\n", savedSSID.c_str());
+    WiFi.mode(WIFI_AP_STA);
+    WiFi.setAutoReconnect(true);
+    Serial.printf("Attempting auto-reconnect to '%s'...\n", savedSSID.c_str());
+    WiFi.begin(savedSSID.c_str(), savedPass.c_str());
+    
+    unsigned long start = millis();
+    while(millis() - start < 15000){  // Wait up to 15 seconds
+      wl_status_t st = WiFi.status();
+      if(st == WL_CONNECTED) break;
+      delay(500);
+      Serial.print(".");
+    }
+    
+    if(WiFi.status() == WL_CONNECTED){
+      Serial.printf("\n✓ WiFi auto-connect successful! IP=%s\n", WiFi.localIP().toString().c_str());
+      wifiConnected = true;
+    } else {
+      Serial.printf("\n✗ WiFi auto-connect failed. Starting configuration AP.\n");
+    }
+  } else {
+    Serial.println("No saved WiFi credentials. Starting configuration AP.");
+  }
+  
+  // If auto-connect failed or no credentials, start config AP
+  if(!wifiConnected){
+    Serial.println("Starting configuration AP for user to connect.");
+    startConfigAP();
+  } else {
+    // WiFi connected, don't start AP but still init web server for normal operations
+    Serial.println("WiFi connected, initializing web server (AP not started).");
+    setupServerRoutes();
+    server.begin();
+    delay(500);  // Give the server time to fully initialize
+    Serial.println("Web server started on normal WiFi connection");
+    Serial.println("API available at http://" + WiFi.localIP().toString());
+    Serial.println("To reconfigure WiFi, connect to AP and use: /stop_ap");
+  }
+  
+  Serial.println("You can also control WiFi via serial commands: startap, stopap, showloc");
 }
 
 void loop(){
@@ -2248,14 +2892,19 @@ void loop(){
       uint32_t phase = (now/20) % 1000;
       // If a LED test is active, run a short moving rainbow/chase
       if(ledTestUntil != 0 && millis() <= ledTestUntil){
-        // moving rainbow across the strip using native driver (more saturated, less white)
+        // moving rainbow across the strip using Adafruit_NeoPixel
         uint8_t offset = (now/10) & 0xFF;
+        leds.clear();
+        uint16_t activeCount = LED_NUM;
         for(uint16_t i=0;i<LED_NUM;i++){
-          uint8_t hue = (uint8_t)((i * 256 / LED_NUM) + offset);
+          uint8_t hue = (uint8_t)((i * 256 / activeCount) + offset);
           uint8_t r,g,b; hsv2rgb(hue, 255, 220, r, g, b); // full saturation, slightly reduced brightness
-          LedIc[i][0] = (r * ledBrightness) / 100; LedIc[i][1] = (g * ledBrightness) / 100; LedIc[i][2] = (b * ledBrightness) / 100; LedIc[i][3] = 0;
+          uint8_t r_adj = (r * ledBrightness) / 100;
+          uint8_t g_adj = (g * ledBrightness) / 100;
+          uint8_t b_adj = (b * ledBrightness) / 100;
+          leds.setPixelColor(i, leds.Color(r_adj, g_adj, b_adj));
         }
-        Send_GRBW((1u<<LED_DATA_PIN), LedIc, LED_NUM);
+        leds.show();
       }else{
         // New scene handling: static colors, blink (reserved), dynamic unified scenes
         if(ledScenario >= 0 && ledScenario < NUM_STATIC_COLORS){
@@ -2263,16 +2912,15 @@ void loop(){
           uint8_t r = STATIC_COLORS[ledScenario][0];
           uint8_t g = STATIC_COLORS[ledScenario][1];
           uint8_t b = STATIC_COLORS[ledScenario][2];
-          uint8_t w = STATIC_COLORS[ledScenario][3];
-          stripSetAll(r,g,b,w);
+          stripSetAll(r,g,b);
         } else if(ledScenario == BLINK_INDEX){
           // blink indication for AP/config mode: solid red, faster
           if((now / 300) % 2 == 0) {
             // ON: solid red
-            stripSetAll(200,0,0,0);
+            stripSetAll(200,0,0);
           } else {
             // OFF: ensure fully black frame (no stray channels)
-            stripSetAll(0,0,0,0);
+            stripSetAll(0,0,0);
           }
         } else if(ledScenario == DYN_HUE_INDEX){
           // dynamic hue: all LEDs same hue, cycling over time
@@ -2281,9 +2929,7 @@ void loop(){
           float breath = 0.8f + 0.2f * sinf((float)now * (2.0f * 3.14159265f / 5000.0f));
           uint8_t v = (uint8_t)constrain((int)(vMax * breath), 0, 255);
           uint8_t r,g,b; hsv2rgb(hue, 255, v, r, g, b);
-          r = (r * ledBrightness) / 100; g = (g * ledBrightness) / 100; b = (b * ledBrightness) / 100;
-          for(uint16_t i=0;i<LED_NUM;i++){ LedIc[i][0]=r; LedIc[i][1]=g; LedIc[i][2]=b; LedIc[i][3]=0; }
-          Send_GRBW((1u<<LED_DATA_PIN), LedIc, LED_NUM);
+          stripSetAll(r, g, b);
         } else if(ledScenario == DYN_FADE_INDEX){
           // dynamic fade between static palette colors (all LEDs same color)
           const uint32_t period = 4000; // ms per transition
@@ -2295,12 +2941,9 @@ void loop(){
           uint8_t r = (uint8_t)((1.0f - ft) * STATIC_COLORS[idx][0] + ft * STATIC_COLORS[next][0]);
           uint8_t g = (uint8_t)((1.0f - ft) * STATIC_COLORS[idx][1] + ft * STATIC_COLORS[next][1]);
           uint8_t b = (uint8_t)((1.0f - ft) * STATIC_COLORS[idx][2] + ft * STATIC_COLORS[next][2]);
-          uint8_t w = 0;
-          r = (r * ledBrightness) / 100; g = (g * ledBrightness) / 100; b = (b * ledBrightness) / 100; w = (w * ledBrightness) / 100;
-          for(uint16_t i=0;i<LED_NUM;i++){ LedIc[i][0]=r; LedIc[i][1]=g; LedIc[i][2]=b; LedIc[i][3]=w; }
-          Send_GRBW((1u<<LED_DATA_PIN), LedIc, LED_NUM);
+          stripSetAll(r, g, b);
         } else {
-          stripSetAll(0,0,0,0);
+          stripSetAll(0,0,0);
         }
       }
     } else {
@@ -2393,10 +3036,13 @@ void loop(){
     // Re-schedule next prayer
     scheduleNextPrayerAlarm();
   }
+  
+  // Handle HTTP server requests (always, whether in AP mode or normal WiFi)
+  server.handleClient();
+  
   if(apRunning){
     // process captive DNS requests so clients are redirected to our AP IP
     dnsServer.processNextRequest();
-    server.handleClient();
     // auto-stop after timeout removed: AP will stop only when requested
     // by the UI ("Arrêter AP") or via serial command to avoid unwanted
     // disconnections during configuration.

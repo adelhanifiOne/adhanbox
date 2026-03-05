@@ -1,8 +1,10 @@
 // lib/providers/adhanbox_provider.dart
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/adhanbox_api.dart';
+import '../services/esp32_discovery_service.dart';
 import '../models/prayer_time.dart';
 
 // Provider pour l'instance API
@@ -23,12 +25,69 @@ final currentDeviceIpProvider = StateProvider<String?>((ref) {
   return null;
 });
 
+// Provider pour la reconnexion automatique au démarrage
+final autoReconnectProvider = FutureProvider<String?>((ref) async {
+  final prefs = await SharedPreferences.getInstance();
+  
+  // 1. Essayer d'abord adhanbox.local (mDNS)
+  print('DEBUG: Tentative de connexion via mDNS (adhanbox.local)...');
+  try {
+    final api = AdhanBoxAPI(baseUrl: 'http://adhanbox.local', timeout: const Duration(seconds: 3));
+    await api.getStatus().timeout(const Duration(seconds: 3));
+    print('DEBUG: ✓ ESP32 accessible via adhanbox.local');
+    await prefs.setString('deviceIp', 'adhanbox.local');
+    ref.read(currentDeviceIpProvider.notifier).state = 'adhanbox.local';
+    return 'adhanbox.local';
+  } catch (e) {
+    print('DEBUG: ✗ mDNS échoué: $e');
+  }
+
+  // 2. Essayer l'IP sauvegardée
+  var savedIp = prefs.getString('deviceIp');
+  if (savedIp != null && savedIp != 'adhanbox.local') {
+    print('DEBUG: Tentative de connexion à IP sauvegardée: $savedIp');
+    try {
+      final api = AdhanBoxAPI(baseUrl: 'http://$savedIp', timeout: const Duration(seconds: 3));
+      await api.getStatus().timeout(const Duration(seconds: 3));
+      print('DEBUG: ✓ ESP32 accessible à $savedIp');
+      ref.read(currentDeviceIpProvider.notifier).state = savedIp;
+      return savedIp;
+    } catch (e) {
+      print('DEBUG: ✗ IP sauvegardée échouée: $e');
+    }
+  }
+
+  // 3. Scanner le réseau local
+  print('DEBUG: Lancement de la découverte réseau...');
+  try {
+    final discovery = ESP32DiscoveryService();
+    final device = await discovery.findAdhanBox(timeout: const Duration(seconds: 3)).timeout(
+      const Duration(seconds: 3),
+      onTimeout: () => null,
+    );
+
+    if (device != null) {
+      print('DEBUG: ✓ ESP32 trouvé à ${device.host}');
+      await prefs.setString('deviceIp', device.host);
+      ref.read(currentDeviceIpProvider.notifier).state = device.host;
+      return device.host;
+    }
+  } catch (e) {
+    print('DEBUG: ✗ Découverte réseau échouée: $e');
+  }
+
+  // 4. Échec - aucune connexion possible
+  print('DEBUG: ✗ Impossible de trouver l\'ESP32 automatiquement');
+  return null;
+});
+
 // Provider pour sauvegarder l'IP du device
 Future<void> saveDeviceIp(WidgetRef ref, String ip) async {
   final prefs = await SharedPreferences.getInstance();
   await prefs.setString('deviceIp', ip);
   ref.read(currentDeviceIpProvider.notifier).state = ip;
   ref.invalidate(deviceIpProvider);
+  ref.invalidate(autoReconnectProvider);
 }
 
 // Provider pour le statut du device
@@ -50,6 +109,35 @@ final prayerTimesProvider = FutureProvider<PrayerTimes>((ref) async {
   final api = ref.watch(adhanboxApiProvider);
   if (api == null) throw Exception('Aucun appareil configuré');
   return api.getPrayerTimes();
+});
+
+// Provider pour les offsets de fine-tuning
+final prayerOffsetsProvider = FutureProvider<Map<String, int>>((ref) async {
+  final api = ref.watch(adhanboxApiProvider);
+  if (api == null) return {};
+  try {
+    final response = await api.getOffsets();
+    return {
+      'fajr': response['fajr'] as int? ?? 0,
+      'sunrise': response['sunrise'] as int? ?? 0,
+      'dhuhr': response['dhuhr'] as int? ?? 0,
+      'asr': response['asr'] as int? ?? 0,
+      'maghrib': response['maghrib'] as int? ?? 0,
+      'isha': response['isha'] as int? ?? 0,
+    };
+  } catch (e) {
+    debugPrint('Error loading prayer offsets: $e');
+    return {};
+  }
+});
+
+// Provider pour les horaires avec offsets appliqués
+final adjustedPrayerTimesProvider = FutureProvider<PrayerTimes>((ref) async {
+  final prayerTimes = await ref.watch(prayerTimesProvider.future);
+  final offsets = await ref.watch(prayerOffsetsProvider.future);
+  
+  // Appliquer les offsets
+  return prayerTimes.applyOffsets(offsets);
 });
 
 // Provider pour les horaires Mawaqit
