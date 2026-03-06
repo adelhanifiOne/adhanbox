@@ -5,6 +5,26 @@ import '../providers/adhanbox_provider.dart';
 class AboutScreen extends ConsumerWidget {
   const AboutScreen({Key? key}) : super(key: key);
 
+  String _readString(Map<String, dynamic> status, List<String> keys, {String fallback = 'N/A'}) {
+    for (final key in keys) {
+      final value = status[key];
+      if (value != null) {
+        final text = value.toString().trim();
+        if (text.isNotEmpty && text.toLowerCase() != 'null') {
+          return text;
+        }
+      }
+    }
+    return fallback;
+  }
+
+  String _readLocation(Map<String, dynamic> status) {
+    final lat = _readString(status, const ['latitude', 'lat'], fallback: '');
+    final lon = _readString(status, const ['longitude', 'lon'], fallback: '');
+    if (lat.isEmpty || lon.isEmpty) return 'N/A';
+    return '$lat, $lon';
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final statusAsync = ref.watch(deviceStatusProvider);
@@ -97,14 +117,12 @@ class AboutScreen extends ConsumerWidget {
                     data: (status) => Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _buildInfoRow('Firmware', status['firmware'] ?? 'N/A'),
-                        _buildInfoRow(
-                            'Adresse MAC', status['mac_address'] ?? 'N/A'),
-                        _buildInfoRow('Heure RTC', status['rtc_time'] ?? 'N/A'),
-                        _buildInfoRow('Temps depuis démarrage',
-                            status['uptime'] ?? 'N/A'),
-                        _buildInfoRow('Emplacement',
-                            '${status['latitude']?.toStringAsFixed(4) ?? 'N/A'}, ${status['longitude']?.toStringAsFixed(4) ?? 'N/A'}'),
+                        _buildInfoRow('Firmware', _readString(status, const ['firmware', 'version'])),
+                        _buildInfoRow('Adresse MAC', _readString(status, const ['mac_address', 'mac'])),
+                        _buildInfoRow('IP', _readString(status, const ['ip'])),
+                        _buildInfoRow('Heure RTC', _readString(status, const ['rtc_time', 'rtc'])),
+                        _buildInfoRow('Temps depuis démarrage', _readString(status, const ['uptime'])),
+                        _buildInfoRow('Emplacement', _readLocation(status)),
                       ],
                     ),
                     loading: () => const CircularProgressIndicator(),
