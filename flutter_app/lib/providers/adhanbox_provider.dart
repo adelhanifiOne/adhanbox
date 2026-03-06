@@ -28,6 +28,19 @@ final currentDeviceIpProvider = StateProvider<String?>((ref) {
 // Provider pour la reconnexion automatique au démarrage
 final autoReconnectProvider = FutureProvider<String?>((ref) async {
   final prefs = await SharedPreferences.getInstance();
+  final savedIp = prefs.getString('deviceIp');
+  
+  // Helper: synchroniser l'heure du RTC après connexion
+  Future<void> syncRtcTime(String deviceIp) async {
+    try {
+      final api = AdhanBoxAPI(baseUrl: 'http://$deviceIp', timeout: const Duration(seconds: 5));
+      final now = DateTime.now();
+      await api.setRtcTime(now);
+      print('DEBUG: ✓ Heure RTC synchronisée automatiquement');
+    } catch (e) {
+      print('DEBUG: ✗ Échec sync RTC automatique: $e (peut être fait manuellement)');
+    }
+  }
   
   // 1. Essayer d'abord adhanbox.local (mDNS)
   print('DEBUG: Tentative de connexion via mDNS (adhanbox.local)...');
@@ -37,13 +50,13 @@ final autoReconnectProvider = FutureProvider<String?>((ref) async {
     print('DEBUG: ✓ ESP32 accessible via adhanbox.local');
     await prefs.setString('deviceIp', 'adhanbox.local');
     ref.read(currentDeviceIpProvider.notifier).state = 'adhanbox.local';
+    await syncRtcTime('adhanbox.local');
     return 'adhanbox.local';
   } catch (e) {
     print('DEBUG: ✗ mDNS échoué: $e');
   }
 
   // 2. Essayer l'IP sauvegardée
-  var savedIp = prefs.getString('deviceIp');
   if (savedIp != null && savedIp != 'adhanbox.local') {
     print('DEBUG: Tentative de connexion à IP sauvegardée: $savedIp');
     try {
@@ -51,6 +64,7 @@ final autoReconnectProvider = FutureProvider<String?>((ref) async {
       await api.getStatus().timeout(const Duration(seconds: 3));
       print('DEBUG: ✓ ESP32 accessible à $savedIp');
       ref.read(currentDeviceIpProvider.notifier).state = savedIp;
+      await syncRtcTime(savedIp);
       return savedIp;
     } catch (e) {
       print('DEBUG: ✗ IP sauvegardée échouée: $e');
@@ -61,8 +75,8 @@ final autoReconnectProvider = FutureProvider<String?>((ref) async {
   print('DEBUG: Lancement de la découverte réseau...');
   try {
     final discovery = ESP32DiscoveryService();
-    final device = await discovery.findAdhanBox(timeout: const Duration(seconds: 3)).timeout(
-      const Duration(seconds: 3),
+    final device = await discovery.findAdhanBox(timeout: const Duration(seconds: 10)).timeout(
+      const Duration(seconds: 12),
       onTimeout: () => null,
     );
 
@@ -70,6 +84,7 @@ final autoReconnectProvider = FutureProvider<String?>((ref) async {
       print('DEBUG: ✓ ESP32 trouvé à ${device.host}');
       await prefs.setString('deviceIp', device.host);
       ref.read(currentDeviceIpProvider.notifier).state = device.host;
+      await syncRtcTime(device.host);
       return device.host;
     }
   } catch (e) {
@@ -78,6 +93,13 @@ final autoReconnectProvider = FutureProvider<String?>((ref) async {
 
   // 4. Échec - aucune connexion possible
   print('DEBUG: ✗ Impossible de trouver l\'ESP32 automatiquement');
+  // Si un appareil a déjà été configuré, conserver l'IP sauvegardée
+  // pour éviter de revenir à l'écran "Aucun appareil configuré".
+  if (savedIp != null && savedIp.isNotEmpty) {
+    print('DEBUG: ↺ Appareil déjà configuré, fallback sur IP sauvegardée: $savedIp');
+    ref.read(currentDeviceIpProvider.notifier).state = savedIp;
+    return savedIp;
+  }
   return null;
 });
 

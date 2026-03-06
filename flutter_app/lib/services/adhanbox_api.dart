@@ -387,6 +387,33 @@ class AdhanBoxAPI {
     }
   }
 
+  /// Synchronise l'heure du RTC avec l'heure du smartphone
+  Future<void> setRtcTime(DateTime dateTime) async {
+    try {
+      final dateStr = '${dateTime.year.toString().padLeft(4, '0')}-${dateTime.month.toString().padLeft(2, '0')}-${dateTime.day.toString().padLeft(2, '0')}';
+      final timeStr = '${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}:${dateTime.second.toString().padLeft(2, '0')}';
+      
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/set_rtc_manual'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'date': dateStr,
+              'time': timeStr,
+            }),
+          )
+          .timeout(timeout);
+
+      if (response.statusCode != 200) {
+        throw Exception('Failed to set RTC time: ${response.statusCode}');
+      }
+      print('DEBUG: ✓ RTC synchronisé avec l\'heure du smartphone: $dateStr $timeStr');
+    } catch (e) {
+      print('DEBUG: ✗ Échec sync RTC: $e');
+      throw Exception('API Error: $e');
+    }
+  }
+
   // ===== LED =====
   Future<Map<String, dynamic>> getLedStatus() async {
     try {

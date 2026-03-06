@@ -104,6 +104,15 @@ class HomeScreen extends ConsumerWidget {
                     // Connexion réussie, sauvegarder l'IP
                     print('DEBUG: Connexion réussie!');
                     await saveDeviceIp(ref, ip);
+                    
+                    // Synchroniser l'heure RTC automatiquement
+                    try {
+                      await api.setRtcTime(DateTime.now());
+                      print('DEBUG: ✓ Heure RTC synchronisée');
+                    } catch (e) {
+                      print('DEBUG: ✗ Échec sync RTC: $e');
+                    }
+                    
                     ref.invalidate(autoReconnectProvider);
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(

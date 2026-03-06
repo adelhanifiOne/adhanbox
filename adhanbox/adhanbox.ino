@@ -134,6 +134,8 @@ void handleLedTest();
 void setupServerRoutes();
 void stopConfigAP();
 void getCalculationAngles(double &fajrAngle, double &ishaAngle, String &methodName);
+void scanI2CBusAndReport();
+void probeIP5306();
 
 // LED timing and bit-bang functions removed - using Adafruit_NeoPixel instead
 
@@ -2298,6 +2300,44 @@ bool ds3231SetAlarm2Daily(uint8_t hour, uint8_t minute){
   return true;
 }
 
+// ---------------- I2C diagnostics helpers ----------------
+void scanI2CBusAndReport(){
+  Serial.println("I2C bus scan start...");
+  uint8_t found = 0;
+  for(uint8_t addr = 1; addr < 127; addr++){
+    Wire.beginTransmission(addr);
+    uint8_t err = Wire.endTransmission();
+    if(err == 0){
+      Serial.printf("I2C device found at 0x%02X\n", addr);
+      found++;
+    }
+  }
+  if(found == 0){
+    Serial.println("I2C scan done: no devices found");
+  } else {
+    Serial.printf("I2C scan done: %u device(s) found\n", found);
+  }
+}
+
+void probeIP5306(){
+  // Try multiple possible I2C addresses for IP5306 on Wire bus (shared with DS3231)
+  const uint8_t ip5306Addrs[] = {0x74, 0x75, 0x76, 0x77};
+  bool found = false;
+  for(int i = 0; i < 4; i++){
+    Wire.beginTransmission(ip5306Addrs[i]);
+    uint8_t err = Wire.endTransmission();
+    if(err == 0){
+      Serial.printf("IP5306 probe: detected at 0x%02X (I2C communication OK!)\n", ip5306Addrs[i]);
+      found = true;
+      break;
+    }
+  }
+  if(!found){
+    Serial.println("IP5306 probe: not detected at 0x74/0x75/0x76/0x77");
+    Serial.println("Check: GPIO8/9 bridged to GPIO4/5, pullups, power, and connections.");
+  }
+}
+
 // ISR for DS3231 INT pin
 void IRAM_ATTR ds3231_isr(){
   ds3231AlarmFlag = true;
@@ -2610,11 +2650,14 @@ void setup(){
     Serial.println("DFPlayer not detected. Check wiring and power.");
   }
 
-  // Initialize I2C using the pins you connected:
-  // SDA -> GPIO5, SCL -> GPIO4 (user wiring)
+  // Initialize I2C bus (Wire) for DS3231 + IP5306:
+  // SDA -> GPIO5, SCL -> GPIO4
+  // IP5306 on GPIO8/9 bridged to GPIO4/5 (shared bus)
   Wire.begin(/*sda=*/5, /*scl=*/4);
   delay(50);
-  Serial.println("I2C initialized SDA=5 SCL=4");
+  Serial.println("I2C bus initialized: SDA=GPIO5, SCL=GPIO4");
+  scanI2CBusAndReport();
+  probeIP5306();
 
   // Initialize DS3231 RTC using RTClib
   if (!rtc.begin()) {

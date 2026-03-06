@@ -44,6 +44,7 @@ class ESP32ConnectionState {
 class ConnectionService {
   final AdhanBoxAPI api;
   Timer? _periodicTimer;
+  DateTime? _lastRtcSync;
 
   ConnectionService(this.api);
 
@@ -62,6 +63,17 @@ class ConnectionService {
 
       // Essaye de contacter l'API status avec timeout court
       await api.getStatus();
+
+      // Maintient le RTC aligné périodiquement (toutes les 10 minutes)
+      final now = DateTime.now();
+      if (_lastRtcSync == null || now.difference(_lastRtcSync!) >= const Duration(minutes: 10)) {
+        try {
+          await api.setRtcTime(now);
+          _lastRtcSync = now;
+        } catch (_) {
+          // Ne pas échouer le check de connexion si la sync RTC rate ponctuellement.
+        }
+      }
 
       return ESP32ConnectionState(
         status: ConnectionStatus.connected,

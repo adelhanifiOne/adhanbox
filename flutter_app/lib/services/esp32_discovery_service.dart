@@ -149,9 +149,10 @@ class ESP32DiscoveryService {
 
       for (var interface in interfaces) {
         for (var addr in interface.addresses) {
-          // Cherche les IP locales (192.168.x.x ou 10.x.x.x)
+          // Cherche les IP locales (192.168.x.x, 10.x.x.x, ou 172.x.x.x pour hotspots mobiles)
           if (addr.address.startsWith('192.168.') || 
-              addr.address.startsWith('10.')) {
+              addr.address.startsWith('10.') ||
+              addr.address.startsWith('172.')) {
             return addr.address;
           }
         }

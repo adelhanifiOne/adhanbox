@@ -540,6 +540,32 @@ class _DeviceSetupScreenState extends ConsumerState<DeviceSetupScreen> {
               ref.read(currentDeviceIpProvider.notifier).state = foundIp;
               ref.invalidate(deviceIpProvider);
 
+              // Envoyer automatiquement la position GPS à l'ESP
+              try {
+                print('DEBUG: Envoi automatique de la position GPS...');
+                final position = await Geolocator.getCurrentPosition(
+                  desiredAccuracy: LocationAccuracy.high,
+                  timeLimit: const Duration(seconds: 10),
+                );
+                await api.setLocation(
+                  position.latitude,
+                  position.longitude,
+                  position.accuracy,
+                );
+                print('DEBUG: ✓ Position GPS envoyée: ${position.latitude}, ${position.longitude}');
+              } catch (e) {
+                print('DEBUG: ✗ Échec envoi GPS automatique: $e (peut être configuré manuellement plus tard)');
+              }
+
+              // Synchroniser l'heure du RTC avec le smartphone
+              try {
+                print('DEBUG: Synchronisation de l\'heure RTC...');
+                await api.setRtcTime(DateTime.now());
+                print('DEBUG: ✓ Heure RTC synchronisée');
+              } catch (e) {
+                print('DEBUG: ✗ Échec sync RTC: $e');
+              }
+
               setState(() {
                 _deviceIp = foundIp;
                 _step = 5; // Configuration finale
@@ -602,6 +628,32 @@ class _DeviceSetupScreenState extends ConsumerState<DeviceSetupScreen> {
         await prefs.setString('deviceIp', ip);
         ref.read(currentDeviceIpProvider.notifier).state = ip;
         ref.invalidate(deviceIpProvider);
+
+        // Envoyer automatiquement la position GPS à l'ESP
+        try {
+          print('DEBUG: Envoi automatique de la position GPS (connexion manuelle)...');
+          final position = await Geolocator.getCurrentPosition(
+            desiredAccuracy: LocationAccuracy.high,
+            timeLimit: const Duration(seconds: 10),
+          );
+          await api.setLocation(
+            position.latitude,
+            position.longitude,
+            position.accuracy,
+          );
+          print('DEBUG: ✓ Position GPS envoyée: ${position.latitude}, ${position.longitude}');
+        } catch (e) {
+          print('DEBUG: ✗ Échec envoi GPS automatique: $e (peut être configuré manuellement plus tard)');
+        }
+
+        // Synchroniser l'heure du RTC avec le smartphone
+        try {
+          print('DEBUG: Synchronisation de l\'heure RTC (connexion manuelle)...');
+          await api.setRtcTime(DateTime.now());
+          print('DEBUG: ✓ Heure RTC synchronisée');
+        } catch (e) {
+          print('DEBUG: ✗ Échec sync RTC: $e');
+        }
 
         setState(() {
           _deviceIp = ip;
