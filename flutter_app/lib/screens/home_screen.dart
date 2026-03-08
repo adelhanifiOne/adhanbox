@@ -1,10 +1,13 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../models/prayer_time.dart';
 import '../services/connection_service.dart';
 import '../services/adhanbox_api.dart';
 import '../providers/adhanbox_provider.dart';
-import '../widgets/wifi_config_dialog.dart';
+import '../theme/app_theme.dart';
 import 'device_setup_screen.dart';
 import 'calculation_setup_screen.dart';
 
@@ -14,815 +17,815 @@ class HomeScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final autoConnectAsync = ref.watch(autoReconnectProvider);
-
     return autoConnectAsync.when(
-      data: (deviceIp) {
-        if (deviceIp == null) {
-          return _buildNoDeviceScreen(context, ref);
-        } else {
-          return _buildNormalHomeScreen(context, ref);
-        }
-      },
-      loading: () => Scaffold(
-        appBar: AppBar(title: const Text('AdhanBox')),
-        body: const Center(child: CircularProgressIndicator()),
+      data: (deviceIp) => deviceIp == null
+          ? _NoDeviceScreen(ref: ref)
+          : _MainHomeScreen(ref: ref),
+      loading: () => const _SplashScreen(),
+      error: (_, __) => _ErrorScreen(ref: ref),
+    );
+  }
+}
+
+// ─────────────────────────── SPLASH ───────────────────────────
+class _SplashScreen extends StatelessWidget {
+  const _SplashScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _MosqueIcon(size: 80)
+                .animate()
+                .scale(duration: 600.ms, curve: Curves.elasticOut),
+            const SizedBox(height: 28),
+            Text('AdhanBox', style: Theme.of(context).textTheme.displaySmall),
+            const SizedBox(height: 8),
+            Text('Connexion en cours...', style: Theme.of(context).textTheme.bodyMedium),
+            const SizedBox(height: 36),
+            const SizedBox(
+              width: 24,
+              height: 24,
+              child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.emerald),
+            ),
+          ],
+        ),
       ),
-      error: (error, __) {
-        print('Erreur de connexion: $error');
-        return _buildConnectionErrorScreen(context, ref);
-      },
+    );
+  }
+}
+
+// ─────────────────────────── NO DEVICE ───────────────────────────
+class _NoDeviceScreen extends StatelessWidget {
+  final WidgetRef ref;
+  const _NoDeviceScreen({required this.ref});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 28),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              const SizedBox(height: 64),
+              _MosqueIcon(size: 96)
+                  .animate()
+                  .scale(duration: 500.ms, curve: Curves.elasticOut)
+                  .then()
+                  .shimmer(duration: 1600.ms, color: AppTheme.emerald.withOpacity(0.25)),
+              const SizedBox(height: 32),
+              Text('AdhanBox', style: Theme.of(context).textTheme.displaySmall),
+              const SizedBox(height: 8),
+              Text(
+                'Votre compagnon de prière intelligent',
+                style: Theme.of(context).textTheme.bodyMedium,
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 48),
+              _FeatureTile(
+                icon: Icons.access_time_rounded,
+                color: AppTheme.emerald,
+                title: 'Horaires précis',
+                subtitle: 'Calcul automatique selon votre position',
+              ).animate().fadeIn(delay: 150.ms).slideX(begin: -0.15),
+              const SizedBox(height: 14),
+              _FeatureTile(
+                icon: Icons.light_rounded,
+                color: AppTheme.gold,
+                title: 'Ambiance LED',
+                subtitle: 'Éclairage personnalisé pour chaque moment',
+              ).animate().fadeIn(delay: 250.ms).slideX(begin: -0.15),
+              const SizedBox(height: 14),
+              _FeatureTile(
+                icon: Icons.music_note_rounded,
+                color: AppTheme.fajrColor,
+                title: 'Adhan personnalisé',
+                subtitle: 'Choisissez votre appel à la prière',
+              ).animate().fadeIn(delay: 350.ms).slideX(begin: -0.15),
+              const Spacer(),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const DeviceSetupScreen()),
+                  ),
+                  icon: const Icon(Icons.add_rounded),
+                  label: const Text('Configurer mon appareil'),
+                  style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16)),
+                ),
+              ).animate().fadeIn(delay: 450.ms).slideY(begin: 0.2),
+              const SizedBox(height: 12),
+              TextButton.icon(
+                onPressed: () => _showHelp(context),
+                icon: const Icon(Icons.help_outline_rounded, size: 18),
+                label: const Text('Comment configurer ?'),
+              ),
+              const SizedBox(height: 24),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
-  /// Écran en cas d'erreur de connexion
-  Widget _buildConnectionErrorScreen(BuildContext context, WidgetRef ref) {
-    final ipController = TextEditingController();
-
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('AdhanBox'),
-        elevation: 0,
+  void _showHelp(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Configuration AdhanBox'),
+        content: const Text(
+          '1. Allumez votre AdhanBox\n\n'
+          '2. L\'appareil crée un réseau WiFi "AdhanBox"\n\n'
+          '3. Appuyez sur "Configurer mon appareil"\n\n'
+          '4. Suivez l\'assistant pas à pas\n\n'
+          '5. L\'appareil rejoindra votre WiFi maison',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Compris')),
+        ],
       ),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
+    );
+  }
+}
+
+// ─────────────────────────── ERROR SCREEN ───────────────────────────
+class _ErrorScreen extends StatelessWidget {
+  final WidgetRef ref;
+  const _ErrorScreen({required this.ref});
+
+  @override
+  Widget build(BuildContext context) {
+    final ipController = TextEditingController();
+    return Scaffold(
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
           child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(
-                Icons.wifi_off,
-                size: 80,
-                color: Colors.red[300],
-              ),
+              const SizedBox(height: 64),
+              Container(
+                width: 88,
+                height: 88,
+                decoration: BoxDecoration(
+                  color: Colors.orange.withOpacity(0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.wifi_off_rounded, size: 44, color: Colors.orange),
+              ).animate().scale(duration: 400.ms),
               const SizedBox(height: 24),
+              Text('Appareil introuvable', style: Theme.of(context).textTheme.displaySmall),
+              const SizedBox(height: 10),
               Text(
-                'Erreur de connexion',
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.grey[800],
-                ),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                'Impossible de se connecter à l\'AdhanBox.\nSi l\'appareil est connecté au WiFi, essayez d\'entrer son IP manuellement.',
+                'Vérifiez que votre AdhanBox est allumée\net connectée au même réseau WiFi.',
+                style: Theme.of(context).textTheme.bodyMedium,
                 textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 16,
-                  color: Colors.grey[600],
-                ),
               ),
-              const SizedBox(height: 32),
+              const SizedBox(height: 40),
               TextField(
                 controller: ipController,
-                decoration: InputDecoration(
-                  hintText: '172.20.10.4',
-                  labelText: 'Adresse IP de l\'AdhanBox',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  prefixIcon: const Icon(Icons.router),
+                decoration: const InputDecoration(
+                  labelText: 'Adresse IP manuelle',
+                  hintText: '192.168.1.x',
+                  prefixIcon: Icon(Icons.router_rounded),
                 ),
                 keyboardType: TextInputType.number,
               ),
-              const SizedBox(height: 24),
-              ElevatedButton.icon(
-                onPressed: () async {
-                  final ip = ipController.text.trim();
-                  if (ip.isEmpty) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Veuillez entrer une IP')),
-                    );
-                    return;
-                  }
-
-                  // Tenter la connexion
-                  final api = AdhanBoxAPI(baseUrl: 'http://$ip');
-                  try {
-                    print('DEBUG: Test connexion à $ip...');
-                    await api.getStatus().timeout(const Duration(seconds: 5));
-                    // Connexion réussie, sauvegarder l'IP
-                    print('DEBUG: Connexion réussie!');
-                    await saveDeviceIp(ref, ip);
-                    
-                    // Synchroniser l'heure RTC automatiquement
+              const SizedBox(height: 14),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () async {
+                    final ip = ipController.text.trim();
+                    if (ip.isEmpty) return;
+                    final api = AdhanBoxAPI(baseUrl: 'http://$ip');
                     try {
-                      await api.setRtcTime(DateTime.now());
-                      print('DEBUG: ✓ Heure RTC synchronisée');
-                    } catch (e) {
-                      print('DEBUG: ✗ Échec sync RTC: $e');
-                    }
-                    
-                    ref.invalidate(autoReconnectProvider);
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Connecté! Actualisation...'),
-                          backgroundColor: Colors.green,
-                        ),
-                      );
-                    }
-                  } catch (e) {
-                    print('DEBUG: Erreur de connexion: $e');
-                    if (context.mounted) {
-                      showDialog(
-                        context: context,
-                        builder: (context) => AlertDialog(
-                          title: const Text('Erreur de connexion'),
-                          content: SingleChildScrollView(
-                            child: Text(
-                              'Impossible de se connecter à http://$ip\n\nDétails:\n$e',
-                              style: const TextStyle(fontSize: 14),
-                            ),
+                      await api.getStatus().timeout(const Duration(seconds: 5));
+                      await saveDeviceIp(ref, ip);
+                      try { await api.setRtcTime(DateTime.now()); } catch (_) {}
+                      ref.invalidate(autoReconnectProvider);
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Connecté avec succès !'),
+                            backgroundColor: AppTheme.emerald,
                           ),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.pop(context),
-                              child: const Text('OK'),
-                            ),
-                          ],
-                        ),
-                      );
+                        );
+                      }
+                    } catch (_) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Impossible de joindre $ip')),
+                        );
+                      }
                     }
-                  }
-                },
-                icon: const Icon(Icons.connect_without_contact, size: 28),
-                label: const Text(
-                  'Connecter',
-                  style: TextStyle(fontSize: 18),
-                ),
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 40,
-                    vertical: 20,
-                  ),
-                  backgroundColor: Colors.green,
-                  foregroundColor: Colors.white,
+                  },
+                  icon: const Icon(Icons.connect_without_contact_rounded),
+                  label: const Text('Se connecter'),
                 ),
               ),
-              const SizedBox(height: 16),
-              ElevatedButton.icon(
-                onPressed: () {
-                  ref.invalidate(autoReconnectProvider);
-                },
-                icon: const Icon(Icons.refresh, size: 28),
-                label: const Text(
-                  'Réessayer la détection',
-                  style: TextStyle(fontSize: 18),
-                ),
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 40,
-                    vertical: 20,
-                  ),
-                  backgroundColor: Colors.orange,
-                  foregroundColor: Colors.white,
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () => ref.invalidate(autoReconnectProvider),
+                  icon: const Icon(Icons.refresh_rounded),
+                  label: const Text('Relancer la détection'),
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 10),
               TextButton.icon(
-                onPressed: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => const DeviceSetupScreen(),
-                    ),
-                  );
-                },
-                icon: const Icon(Icons.settings),
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const DeviceSetupScreen()),
+                ),
+                icon: const Icon(Icons.settings_rounded, size: 18),
                 label: const Text('Configuration avancée'),
               ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildNoDeviceScreen(BuildContext context, WidgetRef ref) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('AdhanBox'),
-        elevation: 0,
-      ),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                Icons.devices_outlined,
-                size: 80,
-                color: Colors.grey[400],
-              ),
               const SizedBox(height: 24),
-              Text(
-                'Aucun appareil configuré',
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.grey[800],
-                ),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                'Configurez votre AdhanBox pour commencer',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 16,
-                  color: Colors.grey[600],
-                ),
-              ),
-              const SizedBox(height: 40),
-              ElevatedButton.icon(
-                onPressed: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => const DeviceSetupScreen(),
-                    ),
-                  );
-                },
-                icon: const Icon(Icons.add_box_outlined, size: 28),
-                label: const Text(
-                  'Configurer un appareil',
-                  style: TextStyle(fontSize: 18),
-                ),
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 40,
-                    vertical: 20,
-                  ),
-                  backgroundColor: Colors.blue,
-                  foregroundColor: Colors.white,
-                ),
-              ),
-              const SizedBox(height: 16),
-              TextButton.icon(
-                onPressed: () {
-                  // Afficher les instructions
-                  showDialog(
-                    context: context,
-                    builder: (context) => AlertDialog(
-                      title: const Text('Configuration AdhanBox'),
-                      content: const SingleChildScrollView(
-                        child: Text(
-                          '1. Allumez votre ESP32 AdhanBox\n\n'
-                          '2. L\'ESP32 créera un réseau WiFi "AdhanBox"\n\n'
-                          '3. Cliquez sur "Configurer un appareil"\n\n'
-                          '4. Suivez l\'assistant de configuration\n\n'
-                          '5. Connectez l\'ESP32 à votre WiFi maison',
-                          style: TextStyle(fontSize: 15),
-                        ),
-                      ),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(context),
-                          child: const Text('Compris'),
-                        ),
-                      ],
-                    ),
-                  );
-                },
-                icon: const Icon(Icons.help_outline),
-                label: const Text('Comment configurer ?'),
-              ),
             ],
           ),
         ),
       ),
     );
   }
+}
 
-  Widget _buildNormalHomeScreen(BuildContext context, WidgetRef ref) {
+// ─────────────────────────── MAIN HOME ───────────────────────────
+class _MainHomeScreen extends ConsumerWidget {
+  final WidgetRef ref;
+  const _MainHomeScreen({required this.ref});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
     final prayerTimesAsync = ref.watch(adjustedPrayerTimesProvider);
     final connectionState = ref.watch(connectionStateProvider);
+    final isDisconnected = connectionState.status == ConnectionStatus.disconnected ||
+        connectionState.status == ConnectionStatus.error;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('AdhanBox'),
-        elevation: 0,
-        actions: [
-          // Bouton pour ajouter/reconfigurer un appareil
-          IconButton(
-            icon: const Icon(Icons.add_box_outlined),
-            tooltip: 'Configurer un appareil',
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => const DeviceSetupScreen(),
-                ),
-              );
-            },
-          ),
-          Padding(
-            padding: const EdgeInsets.all(8.0),
-            child:
-                _buildConnectionIndicator(context, connectionState, ref),
-          ),
-        ],
-      ),
       body: RefreshIndicator(
+        color: AppTheme.emerald,
         onRefresh: () async {
           ref.invalidate(prayerTimesProvider);
           ref.invalidate(prayerOffsetsProvider);
           ref.invalidate(adjustedPrayerTimesProvider);
         },
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            // WiFi Disconnected Warning (if applicable)
-            if (connectionState.status == ConnectionStatus.disconnected ||
-                connectionState.status == ConnectionStatus.error)
-              _buildWiFiDisconnectedCard(context, ref),
-            if (connectionState.status == ConnectionStatus.disconnected ||
-                connectionState.status == ConnectionStatus.error)
-              const SizedBox(height: 16),
-            // Next Prayer Card
-            prayerTimesAsync.when(
-              data: (prayerTimes) =>
-                  _buildNextPrayerCard(context, prayerTimes),
-              loading: () => const _LoadingCard(),
-              error: (error, stack) =>
-                  _buildErrorCard('Erreur prières', error),
-            ),
-            const SizedBox(height: 20),
-            // Today's Prayers Preview
-            prayerTimesAsync.when(
-              data: (prayerTimes) =>
-                  _buildTodayPrayersPreview(context, prayerTimes),
-              loading: () => const _LoadingCard(),
-              error: (error, stack) =>
-                  _buildErrorCard('Erreur horaires', error),
-            ),
-          ],
-        ),
-      ),
-      floatingActionButton: connectionState.status == ConnectionStatus.disconnected ||
-              connectionState.status == ConnectionStatus.error
-          ? FloatingActionButton.extended(
-              onPressed: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => const DeviceSetupScreen(),
-                  ),
-                );
-              },
-              icon: const Icon(Icons.settings_input_antenna),
-              label: const Text('Configurer'),
-              backgroundColor: Colors.orange[700],
-            )
-          : null,
-    );
-  }
-
-  Widget _buildStatusCard(BuildContext context, Map<String, dynamic> status) {
-    final wifiRaw = status['wifi'];
-    final locationRaw = status['location'];
-    final wifi = wifiRaw is Map ? Map<String, dynamic>.from(wifiRaw) : <String, dynamic>{};
-    final location = locationRaw is Map ? Map<String, dynamic>.from(locationRaw) : <String, dynamic>{};
-
-    final connected = wifi['connected'] == true || wifiRaw?.toString().toLowerCase() == 'connected';
-    final ssid = wifi['ssid']?.toString() ?? 'N/A';
-    final ip = wifi['ip']?.toString() ?? (status['ip']?.toString() ?? 'N/A');
-    final signal = wifi['signal']?.toString() ?? 'N/A';
-    final latVal = location['lat'];
-    final lonVal = location['lon'];
-    final lat = latVal is num ? latVal.toStringAsFixed(3) : (status['lat']?.toString() ?? 'N/A');
-    final lon = lonVal is num ? lonVal.toStringAsFixed(3) : (status['lon']?.toString() ?? 'N/A');
-    final rtcOk = status['rtc_ok'] == true || status['rtc_ok'] == 1;
-    final timestamp = status['timestamp']?.toString() ?? status['rtc']?.toString() ?? '0';
-    final wifiText = connected ? '$ssid ($ip, $signal dBm)' : (wifiRaw?.toString() ?? 'Deconnecte');
-    final rtcText = rtcOk ? 'OK (ts: $timestamp)' : 'Non disponible';
-
-    return Card(
-      elevation: 4,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'État du système',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 12),
-            _buildStatusRow('WiFi', wifiText),
-            _buildStatusRow('RTC', rtcText),
-            _buildStatusRow('Emplacement', '$lat, $lon'),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildStatusRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label, style: const TextStyle(color: Colors.grey)),
-          Text(value, style: const TextStyle(fontWeight: FontWeight.bold)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildNextPrayerCard(BuildContext context, PrayerTimes prayerTimes) {
-    final next = _findNextPrayer(prayerTimes);
-
-    if (next == null) {
-      return Card(
-        elevation: 4,
-        color: Colors.amber[50],
-        child: const Padding(
-          padding: EdgeInsets.all(16),
-          child: Text('Pas de prière aujourd\'hui'),
-        ),
-      );
-    }
-
-    return Card(
-      elevation: 4,
-      color: Colors.green[50],
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            const Text(
-              'Prochaine prière',
-              style: TextStyle(fontSize: 14, color: Colors.grey),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              next['name'] as String,
-              style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Dans ${next['minutesLeft']} minutes',
-              style: const TextStyle(fontSize: 16, color: Colors.green),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTodayPrayersPreview(
-      BuildContext context, PrayerTimes prayerTimes) {
-    final times = prayerTimes.times;
-
-    if (times.isEmpty) {
-      return const SizedBox();
-    }
-
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Expanded(
-                  child: Text(
-                    'Horaires d\'aujourd\'hui',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF1B5E20),
-                    ),
-                  ),
+        child: CustomScrollView(
+          slivers: [
+            // ── Gradient Header ──
+            SliverAppBar(
+              expandedHeight: 220,
+              pinned: true,
+              floating: false,
+              backgroundColor: AppTheme.emeraldDeep,
+              flexibleSpace: FlexibleSpaceBar(
+                collapseMode: CollapseMode.parallax,
+                background: _HeaderBackground(
+                  prayerTimesAsync: prayerTimesAsync,
                 ),
-                const SizedBox(width: 12),
-                InkWell(
-                  onTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => const CalculationSetupScreen(),
-                      ),
-                    );
-                  },
-                  borderRadius: BorderRadius.circular(8),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF1B5E20).withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(8),
+              ),
+              title: Row(
+                children: [
+                  const _MosqueIcon(size: 26, color: Colors.white),
+                  const SizedBox(width: 10),
+                  Text(
+                    'AdhanBox',
+                    style: GoogleFonts.poppins(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w600,
                     ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: const [
-                        Icon(
-                          Icons.tune,
-                          size: 18,
-                          color: Color(0xFF1B5E20),
-                        ),
-                        SizedBox(width: 6),
-                        Text(
-                          'Ajuster',
-                          style: TextStyle(
-                            color: Color(0xFF1B5E20),
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                _ConnectionChip(state: connectionState),
+                IconButton(
+                  icon: const Icon(Icons.add_rounded, color: Colors.white),
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const DeviceSetupScreen()),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 16),
-            ...times.map<Widget>((prayer) {
-              return Padding(
-                padding: const EdgeInsets.symmetric(vertical: 10),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      prayer.name,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    Text(
-                      prayer.calculatedTime,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 18,
-                        color: Color(0xFF1B5E20),
-                      ),
-                    ),
-                  ],
+
+            // ── Disconnected Banner ──
+            if (isDisconnected)
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                sliver: SliverToBoxAdapter(
+                  child: _DisconnectedBanner(ref: ref),
                 ),
-              );
-            }).toList(),
+              ),
+
+            // ── Prayer List ──
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
+              sliver: prayerTimesAsync.when(
+                data: (times) => _PrayerSliver(times: times),
+                loading: () => const SliverToBoxAdapter(child: _SkeletonList()),
+                error: (e, _) => SliverToBoxAdapter(child: _InlineError(message: e.toString())),
+              ),
+            ),
           ],
         ),
       ),
     );
   }
+}
 
-  Map<String, dynamic>? _findNextPrayer(PrayerTimes prayerTimes) {
-    if (prayerTimes.times.isEmpty) return null;
+// ─────────────────────────── HEADER BACKGROUND ───────────────────────────
+class _HeaderBackground extends StatelessWidget {
+  final AsyncValue<PrayerTimes> prayerTimesAsync;
+  const _HeaderBackground({required this.prayerTimesAsync});
 
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF064E3B), Color(0xFF065F46), Color(0xFF059669)],
+        ),
+      ),
+      child: Stack(
+        children: [
+          // Subtle geometric pattern
+          Positioned.fill(child: CustomPaint(painter: _GeomPainter())),
+          // Next prayer info
+          Positioned(
+            bottom: 24,
+            left: 20,
+            right: 20,
+            child: prayerTimesAsync.when(
+              data: (t) => _NextPrayerInfo(times: t),
+              loading: () => const SizedBox.shrink(),
+              error: (_, __) => const SizedBox.shrink(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _NextPrayerInfo extends StatelessWidget {
+  final PrayerTimes times;
+  const _NextPrayerInfo({required this.times});
+
+  @override
+  Widget build(BuildContext context) {
     final now = DateTime.now();
-    final nowMinutes = now.hour * 60 + now.minute;
+    final nowMins = now.hour * 60 + now.minute;
+    PrayerTime? next;
+    int minsLeft = 0;
 
-    int? firstTime;
-    PrayerTime? firstPrayer;
-
-    for (final prayer in prayerTimes.times) {
-      final minutes = _timeToMinutes(prayer.calculatedTime);
-      if (minutes == null) continue;
-
-      firstTime ??= minutes;
-      firstPrayer ??= prayer;
-
-      if (minutes > nowMinutes) {
-        return {
-          'name': prayer.name,
-          'minutesLeft': minutes - nowMinutes,
-        };
+    for (final p in times.times) {
+      final parts = p.calculatedTime.split(':');
+      if (parts.length != 2) continue;
+      final h = int.tryParse(parts[0]);
+      final m = int.tryParse(parts[1]);
+      if (h == null || m == null) continue;
+      final mins = h * 60 + m;
+      if (mins > nowMins) {
+        next = p;
+        minsLeft = mins - nowMins;
+        break;
       }
     }
+    next ??= times.times.isNotEmpty ? times.times.first : null;
+    if (next == null) return const SizedBox.shrink();
 
-    if (firstTime == null || firstPrayer == null) return null;
+    final h = minsLeft ~/ 60;
+    final m = minsLeft % 60;
+    final countdown = h > 0 ? '${h}h ${m}min' : '${m} min';
 
-    return {
-      'name': firstPrayer.name,
-      'minutesLeft': (24 * 60 - nowMinutes) + firstTime,
-    };
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Prochaine prière',
+          style: GoogleFonts.inter(color: Colors.white70, fontSize: 13),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          next.name,
+          style: GoogleFonts.poppins(
+            color: Colors.white,
+            fontSize: 34,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            _Pill(
+              icon: Icons.access_time_rounded,
+              label: next.calculatedTime,
+              bg: Colors.white.withOpacity(0.18),
+              fg: Colors.white,
+            ),
+            const SizedBox(width: 8),
+            _Pill(
+              icon: Icons.hourglass_bottom_rounded,
+              label: 'Dans $countdown',
+              bg: AppTheme.gold.withOpacity(0.28),
+              fg: AppTheme.goldLight,
+            ),
+          ],
+        ),
+      ],
+    );
   }
+}
 
-  int? _timeToMinutes(String value) {
-    final parts = value.split(':');
-    if (parts.length != 2) return null;
-    final h = int.tryParse(parts[0]);
-    final m = int.tryParse(parts[1]);
-    if (h == null || m == null) return null;
-    return h * 60 + m;
+class _Pill extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color bg;
+  final Color fg;
+  const _Pill({required this.icon, required this.label, required this.bg, required this.fg});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(20)),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: fg, size: 13),
+          const SizedBox(width: 5),
+          Text(
+            label,
+            style: GoogleFonts.inter(color: fg, fontSize: 13, fontWeight: FontWeight.w600),
+          ),
+        ],
+      ),
+    );
   }
+}
 
-  Widget _buildConnectionIndicator(
-    BuildContext context,
-    ESP32ConnectionState connectionState,
-    WidgetRef ref,
-  ) {
-    late Color statusColor;
-    late IconData statusIcon;
-    late String statusText;
+// ─────────────────────────── PRAYER SLIVER ───────────────────────────
+class _PrayerSliver extends StatelessWidget {
+  final PrayerTimes times;
+  const _PrayerSliver({required this.times});
 
-    switch (connectionState.status) {
-      case ConnectionStatus.connected:
-        statusColor = Colors.green;
-        statusIcon = Icons.wifi;
-        statusText = 'ESP32 Connecté';
-        break;
-      case ConnectionStatus.disconnected:
-        statusColor = Colors.orange;
-        statusIcon = Icons.wifi_off;
-        statusText = 'Déconnecté';
-        break;
-      case ConnectionStatus.checking:
-        statusColor = Colors.blue;
-        statusIcon = Icons.wifi_find;
-        statusText = 'Vérification...';
-        break;
-      case ConnectionStatus.error:
-        statusColor = Colors.red;
-        statusIcon = Icons.error_outline;
-        statusText = 'Erreur';
-        break;
+  int _findNextIndex() {
+    final nowMins = DateTime.now().hour * 60 + DateTime.now().minute;
+    for (int i = 0; i < times.times.length; i++) {
+      final parts = times.times[i].calculatedTime.split(':');
+      if (parts.length != 2) continue;
+      final h = int.tryParse(parts[0]);
+      final m = int.tryParse(parts[1]);
+      if (h != null && m != null && h * 60 + m > nowMins) return i;
     }
+    return 0;
+  }
 
-    return Tooltip(
-      message: connectionState.message ?? statusText,
-      child: InkWell(
-        onTap: () {
-          // If disconnected, show options menu
-          if (connectionState.status == ConnectionStatus.disconnected ||
-              connectionState.status == ConnectionStatus.error) {
-            showDialog(
-              context: context,
-              builder: (context) => AlertDialog(
-                title: const Text('ESP32 Déconnecté'),
-                content: const Text(
-                  'L\'ESP32 n\'est pas accessible. Voulez-vous configurer sa connexion WiFi ?',
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('Annuler'),
-                  ),
-                  TextButton(
-                    onPressed: () {
-                      Navigator.pop(context);
-                      ref.read(connectionStateProvider.notifier).checkNow();
-                    },
-                    child: const Text('Réessayer'),
-                  ),
-                  ElevatedButton(
-                    onPressed: () {
-                      Navigator.pop(context);
-                      showWiFiConfigDialog(context, ref);
-                    },
-                    child: const Text('Configurer WiFi'),
+  @override
+  Widget build(BuildContext context) {
+    final prayers = times.times;
+    final nextIndex = _findNextIndex();
+    return SliverList(
+      delegate: SliverChildBuilderDelegate(
+        (ctx, i) {
+          if (i == 0) {
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 16),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text("Aujourd'hui", style: Theme.of(ctx).textTheme.headlineMedium),
+                  TextButton.icon(
+                    onPressed: () => Navigator.of(ctx).push(
+                      MaterialPageRoute(builder: (_) => const CalculationSetupScreen()),
+                    ),
+                    icon: const Icon(Icons.tune_rounded, size: 15),
+                    label: const Text('Ajuster'),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    ),
                   ),
                 ],
               ),
             );
-          } else {
-            // If connected, just refresh
-            ref.read(connectionStateProvider.notifier).checkNow();
           }
+          final prayer = prayers[i - 1];
+          final isNext = (i - 1) == nextIndex;
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: _PrayerCard(prayer: prayer, isNext: isNext)
+                .animate()
+                .fadeIn(delay: Duration(milliseconds: 60 * i))
+                .slideY(begin: 0.08, curve: Curves.easeOut),
+          );
         },
-        borderRadius: BorderRadius.circular(20),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          decoration: BoxDecoration(
-            color: statusColor.withOpacity(0.2),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: statusColor, width: 1),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(statusIcon, size: 18, color: statusColor),
-              const SizedBox(width: 6),
-              if (!connectionState.isChecking)
-                Text(
-                  connectionState.isConnected ? '✓' : '✗',
-                  style: TextStyle(
-                    color: statusColor,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-            ],
-          ),
-        ),
+        childCount: prayers.length + 1,
       ),
     );
   }
 }
 
-class _LoadingCard extends StatelessWidget {
-  const _LoadingCard();
+class _PrayerCard extends StatelessWidget {
+  final PrayerTime prayer;
+  final bool isNext;
+  const _PrayerCard({required this.prayer, required this.isNext});
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      elevation: 4,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: const [
-            CircularProgressIndicator(),
-            SizedBox(height: 16),
-            Text('Chargement...'),
-          ],
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final color = AppTheme.prayerColor(prayer.name);
+    final icon = AppTheme.prayerIcon(prayer.name);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: isNext
+            ? AppTheme.emerald.withOpacity(isDark ? 0.12 : 0.07)
+            : (isDark ? AppTheme.darkCard : AppTheme.lightCard),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isNext
+              ? AppTheme.emerald.withOpacity(0.5)
+              : (isDark ? AppTheme.darkBorder : AppTheme.lightBorder),
+          width: isNext ? 1.5 : 1,
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 46,
+            height: 46,
+            decoration: BoxDecoration(
+              color: color.withOpacity(isDark ? 0.18 : 0.1),
+              borderRadius: BorderRadius.circular(13),
+            ),
+            child: Icon(icon, color: color, size: 22),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  prayer.name,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    color: isNext ? AppTheme.emerald : null,
+                    fontWeight: isNext ? FontWeight.w700 : FontWeight.w500,
+                  ),
+                ),
+                if (isNext)
+                  Text(
+                    'Prochaine',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppTheme.emerald),
+                  ),
+              ],
+            ),
+          ),
+          Text(
+            prayer.calculatedTime,
+            style: GoogleFonts.poppins(
+              fontSize: 20,
+              fontWeight: FontWeight.w600,
+              color: isNext
+                  ? AppTheme.emerald
+                  : (isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────── HELPERS ───────────────────────────
+class _ConnectionChip extends StatelessWidget {
+  final ESP32ConnectionState state;
+  const _ConnectionChip({required this.state});
+
+  @override
+  Widget build(BuildContext context) {
+    final (color, icon) = switch (state.status) {
+      ConnectionStatus.connected => (AppTheme.emeraldLight, Icons.wifi_rounded),
+      ConnectionStatus.disconnected => (Colors.orange, Icons.wifi_off_rounded),
+      ConnectionStatus.checking => (Colors.blue[300]!, Icons.wifi_find_rounded),
+      ConnectionStatus.error => (Colors.red[300]!, Icons.error_outline_rounded),
+    };
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.18),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          state.isChecking
+              ? const SizedBox(
+                  width: 12,
+                  height: 12,
+                  child: CircularProgressIndicator(strokeWidth: 1.5, color: Colors.white),
+                )
+              : Icon(icon, color: color, size: 14),
+          const SizedBox(width: 4),
+          Container(width: 6, height: 6, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+        ],
+      ),
+    );
+  }
+}
+
+class _DisconnectedBanner extends ConsumerWidget {
+  final WidgetRef ref;
+  const _DisconnectedBanner({required this.ref});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.orange.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.orange.withOpacity(0.3)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.wifi_off_rounded, color: Colors.orange, size: 20),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              'AdhanBox hors ligne',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.orange),
+            ),
+          ),
+          TextButton(
+            onPressed: () => ref.read(connectionStateProvider.notifier).checkNow(),
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.orange,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+            ),
+            child: const Text('Réessayer'),
+          ),
+        ],
+      ),
+    ).animate().slideY(begin: -0.1).fadeIn();
+  }
+}
+
+class _SkeletonList extends StatelessWidget {
+  const _SkeletonList();
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Column(
+      children: List.generate(
+        5,
+        (i) => Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: Container(
+            height: 74,
+            decoration: BoxDecoration(
+              color: isDark ? AppTheme.darkCard : AppTheme.lightCard,
+              borderRadius: BorderRadius.circular(16),
+            ),
+          )
+              .animate(onPlay: (c) => c.repeat())
+              .shimmer(duration: 1200.ms, color: AppTheme.emerald.withOpacity(0.06)),
         ),
       ),
     );
   }
 }
 
-  Widget _buildWiFiDisconnectedCard(BuildContext context, WidgetRef ref) {
-    return Card(
-      elevation: 6,
-      color: Colors.orange[50],
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            Row(
-              children: [
-                Icon(Icons.wifi_off, color: Colors.orange[700], size: 32),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'ESP32 Déconnecté',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.orange[900],
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'L\'appareil n\'est pas accessible sur le réseau WiFi',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.orange[800],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () {
-                      ref.read(connectionStateProvider.notifier).checkNow();
-                    },
-                    icon: const Icon(Icons.refresh),
-                    label: const Text('Réessayer'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.orange[700],
-                      side: BorderSide(color: Colors.orange[700]!),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: () {
-                      showWiFiConfigDialog(context, ref);
-                    },
-                    icon: const Icon(Icons.wifi),
-                    label: const Text('Configurer WiFi'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.orange[700],
-                      foregroundColor: Colors.white,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
+class _InlineError extends StatelessWidget {
+  final String message;
+  const _InlineError({required this.message});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.red.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.red.withOpacity(0.25)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.error_outline_rounded, color: Colors.red, size: 20),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(message, style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.red)),
+          ),
+        ],
       ),
     );
   }
+}
 
-Widget _buildErrorCard(String title, dynamic error) {
-  return Card(
-    elevation: 4,
-    color: Colors.red[50],
-    child: Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
+class _FeatureTile extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final String title;
+  final String subtitle;
+  const _FeatureTile({required this.icon, required this.color, required this.title, required this.subtitle});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: isDark ? AppTheme.darkCard : AppTheme.lightCard,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: isDark ? AppTheme.darkBorder : AppTheme.lightBorder),
+      ),
+      child: Row(
         children: [
-          const Icon(Icons.error_outline, color: Colors.red),
-          const SizedBox(height: 8),
-          Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
-          const SizedBox(height: 4),
-          Text(error.toString(), style: const TextStyle(fontSize: 12)),
+          Container(
+            width: 46,
+            height: 46,
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(13),
+            ),
+            child: Icon(icon, color: color, size: 22),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: Theme.of(context).textTheme.titleMedium),
+                Text(subtitle, style: Theme.of(context).textTheme.bodySmall),
+              ],
+            ),
+          ),
         ],
       ),
-    ),
-  );
+    );
+  }
+}
+
+// ─────────────────────────── MOSQUE ICON ───────────────────────────
+class _MosqueIcon extends StatelessWidget {
+  final double size;
+  final Color color;
+  const _MosqueIcon({this.size = 48, this.color = AppTheme.emerald});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.12),
+        shape: BoxShape.circle,
+      ),
+      child: Icon(Icons.mosque_rounded, size: size * 0.5, color: color),
+    );
+  }
+}
+
+// ─────────────────────────── GEOMETRIC PATTERN ───────────────────────────
+class _GeomPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.white.withOpacity(0.045)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 0.8;
+    const step = 56.0;
+    for (double x = 0; x < size.width + step; x += step) {
+      for (double y = 0; y < size.height + step; y += step) {
+        _drawStar(canvas, paint, Offset(x, y), 18);
+      }
+    }
+  }
+
+  void _drawStar(Canvas canvas, Paint paint, Offset center, double r) {
+    const n = 8;
+    final path = Path();
+    for (int i = 0; i < n * 2; i++) {
+      final angle = (i * math.pi / n) - math.pi / 2;
+      final radius = i % 2 == 0 ? r : r * 0.42;
+      final x = center.dx + radius * math.cos(angle);
+      final y = center.dy + radius * math.sin(angle);
+      if (i == 0) path.moveTo(x, y);
+      else path.lineTo(x, y);
+    }
+    path.close();
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

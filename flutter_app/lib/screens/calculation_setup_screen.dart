@@ -1,778 +1,628 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
 import '../models/prayer_time.dart';
 import '../providers/adhanbox_provider.dart';
+import '../theme/app_theme.dart';
 
 class CalculationSetupScreen extends ConsumerStatefulWidget {
   const CalculationSetupScreen({Key? key}) : super(key: key);
 
   @override
-  ConsumerState<CalculationSetupScreen> createState() =>
-      _CalculationSetupScreenState();
+  ConsumerState<CalculationSetupScreen> createState() => _CalculationSetupScreenState();
 }
 
-class _CalculationSetupScreenState
-    extends ConsumerState<CalculationSetupScreen> {
+class _CalculationSetupScreenState extends ConsumerState<CalculationSetupScreen> {
   bool _isLoading = true;
   bool _isSaving = false;
   String? _errorMessage;
   String? _deviceIp;
 
-  // Configuration actuelle
-  String _method = 'mwl'; // Muslim World League par défaut
-  int _school = 0; // Shafi par défaut
-  
-  // Offsets pour fine-tuning
+  String _method = 'mwl';
+  int _school = 0;
+
   final Map<String, int> _offsets = {
-    'fajr': 0,
-    'sunrise': 0,
-    'dhuhr': 0,
-    'asr': 0,
-    'maghrib': 0,
-    'isha': 0,
+    'fajr': 0, 'sunrise': 0, 'dhuhr': 0,
+    'asr': 0, 'maghrib': 0, 'isha': 0,
   };
 
-  // Preview des horaires
   Map<String, String> _basePreviewTimes = {};
   Map<String, String> _previewTimes = {};
 
-  final Map<String, String> _methods = {
-    'mwl': 'Ligue islamique mondiale (MWL)',
-    'karachi': 'Université des sciences islamiques (Karachi)',
-    'uoif': 'Union des organisations islamiques de France (UOIF)',
-    'egypt': 'Autorité générale égyptienne de sondage',
-    'isna': 'ISNA (Amérique du Nord)',
+  static const _methods = {
+    'mwl':     'Ligue islamique mondiale (MWL)',
+    'karachi': 'Sciences islamiques — Karachi',
+    'uoif':    'UOIF — France',
+    'egypt':   'Autorité égyptienne de sondage',
+    'isna':    'ISNA — Amérique du Nord',
   };
 
-  final Map<int, String> _schools = {
+  static const _schools = {
     0: 'École Shafi (standard)',
     1: 'École Hanafi',
   };
 
-  final Map<String, String> _prayerNames = {
-    'fajr': 'Fajr',
-    'sunrise': 'Chourouk',
-    'dhuhr': 'Dhuhr',
-    'asr': 'Asr',
-    'maghrib': 'Maghrib',
-    'isha': 'Isha',
-  };
-
-  final Map<String, IconData> _prayerIcons = {
-    'fajr': Icons.wb_twilight,
-    'sunrise': Icons.wb_sunny,
-    'dhuhr': Icons.wb_sunny_outlined,
-    'asr': Icons.light_mode,
-    'maghrib': Icons.wb_twilight,
-    'isha': Icons.nights_stay,
+  static const _prayerNames = {
+    'fajr': 'Fajr', 'sunrise': 'Chourouk', 'dhuhr': 'Dhuhr',
+    'asr': 'Asr', 'maghrib': 'Maghrib', 'isha': 'Isha',
   };
 
   @override
   void initState() {
     super.initState();
-    // Charger l'IP depuis les SharedPreferences via le provider
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _loadIpAndConfig();
-    });
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadIpAndConfig());
   }
 
   Future<void> _loadIpAndConfig() async {
     try {
-      // Charger l'IP depuis le provider (FutureProvider)
-      final deviceIpAsync = await ref.read(deviceIpProvider.future);
-      
-      if (deviceIpAsync == null) {
-        setState(() {
-          _errorMessage = 'Aucun appareil configuré';
-          _isLoading = false;
-        });
+      final ip = await ref.read(deviceIpProvider.future);
+      if (ip == null) {
+        setState(() { _errorMessage = 'Aucun appareil configuré'; _isLoading = false; });
         return;
       }
-      
-      setState(() => _deviceIp = deviceIpAsync);
+      setState(() => _deviceIp = ip);
       await _loadConfiguration();
     } catch (e) {
-      debugPrint('IP loading error: $e');
-      setState(() {
-        _errorMessage = 'Erreur au chargement de l\'IP: $e';
-        _isLoading = false;
-      });
+      setState(() { _errorMessage = 'Erreur: $e'; _isLoading = false; });
     }
   }
 
   Future<void> _loadConfiguration() async {
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
-
+    setState(() { _isLoading = true; _errorMessage = null; });
     try {
-      if (_deviceIp == null) {
-        setState(() {
-          _errorMessage = 'Aucun appareil connecté';
-          _isLoading = false;
-        });
-        return;
-      }
-
-      // Charger la config de calcul (continue même si ça échoue)
+      // Méthode de calcul
       try {
-        final configUrl = Uri.parse('http://$_deviceIp/api/calculation/config');
-        final configResponse = await http.get(configUrl).timeout(
-          const Duration(seconds: 5),
-        );
-
-        if (configResponse.statusCode == 200) {
-          final data = jsonDecode(configResponse.body);
+        final r = await http.get(Uri.parse('http://$_deviceIp/api/calculation/config'))
+            .timeout(const Duration(seconds: 5));
+        if (r.statusCode == 200) {
+          final d = jsonDecode(r.body);
+          final m = (d['method'] ?? 'mwl').toString().toLowerCase();
           setState(() {
-            final methodFromApi = (data['method'] ?? 'mwl').toString().toLowerCase();
-            _method = _methods.containsKey(methodFromApi) ? methodFromApi : 'mwl';
-            _school = data['school'] ?? 0;
+            _method = _methods.containsKey(m) ? m : 'mwl';
+            _school = d['school'] ?? 0;
           });
         }
-      } catch (e) {
-        debugPrint('Config load error: $e (using defaults)');
-      }
+      } catch (_) {}
 
-      // Charger les offsets (continue même si ça échoue)
+      // Offsets
       try {
-        final offsetsUrl = Uri.parse('http://$_deviceIp/api/mawaqit/offsets');
-        final offsetsResponse = await http.get(offsetsUrl).timeout(
-          const Duration(seconds: 5),
-        );
-
-        if (offsetsResponse.statusCode == 200) {
-          final data = jsonDecode(offsetsResponse.body);
+        final r = await http.get(Uri.parse('http://$_deviceIp/api/mawaqit/offsets'))
+            .timeout(const Duration(seconds: 5));
+        if (r.statusCode == 200) {
+          final d = jsonDecode(r.body);
           setState(() {
-            _offsets['fajr'] = data['fajr'] ?? 0;
-            _offsets['sunrise'] = data['sunrise'] ?? 0;
-            _offsets['dhuhr'] = data['dhuhr'] ?? 0;
-            _offsets['asr'] = data['asr'] ?? 0;
-            _offsets['maghrib'] = data['maghrib'] ?? 0;
-            _offsets['isha'] = data['isha'] ?? 0;
+            for (final k in _offsets.keys) _offsets[k] = d[k] ?? 0;
           });
         }
-      } catch (e) {
-        debugPrint('Offsets load error: $e (using defaults)');
-      }
+      } catch (_) {}
 
-      // Charger le preview des horaires
-      try {
-        await _loadPreview();
-      } catch (e) {
-        debugPrint('Preview load error: $e');
-      }
-
+      try { await _loadPreview(); } catch (_) {}
       setState(() => _isLoading = false);
     } catch (e) {
-      debugPrint('Config initialization error: $e');
-      setState(() {
-        _errorMessage = 'Erreur de connexion au ESP32';
-        _isLoading = false;
-      });
+      setState(() { _errorMessage = 'Erreur de connexion'; _isLoading = false; });
     }
   }
 
   Future<void> _loadPreview() async {
-    try {
-      if (_deviceIp == null) return;
-
-      final url = Uri.parse('http://$_deviceIp/prayer_times');
-      final response = await http.get(url).timeout(
-        const Duration(seconds: 10),
-      );
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final base = {
-          'fajr': (data['fajr'] ?? '--:--').toString(),
-          'sunrise': (data['sunrise'] ?? '--:--').toString(),
-          'dhuhr': (data['dhuhr'] ?? '--:--').toString(),
-          'asr': (data['asr'] ?? '--:--').toString(),
-          'maghrib': (data['maghrib'] ?? '--:--').toString(),
-          'isha': (data['isha'] ?? '--:--').toString(),
-        };
-        setState(() {
-          _basePreviewTimes = base;
-          _previewTimes = _applyOffsetsToTimes(base, _offsets);
-        });
-      }
-    } catch (e) {
-      debugPrint('Preview load error: $e');
+    if (_deviceIp == null) return;
+    final r = await http.get(Uri.parse('http://$_deviceIp/prayer_times'))
+        .timeout(const Duration(seconds: 10));
+    if (r.statusCode == 200) {
+      final d = jsonDecode(r.body);
+      final base = {
+        for (final k in _offsets.keys) k: (d[k] ?? '--:--').toString(),
+      };
+      setState(() {
+        _basePreviewTimes = base;
+        _previewTimes = _applyOffsets(base);
+      });
     }
   }
 
-  Future<void> _refreshPreviewForMethodOrSchool() async {
+  Future<void> _refreshPreview() async {
     if (_deviceIp == null) return;
     try {
-      final configUrl = Uri.parse('http://$_deviceIp/api/calculation/config');
-      final response = await http.post(
-        configUrl,
+      await http.post(
+        Uri.parse('http://$_deviceIp/api/calculation/config'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'method': _method, 'school': _school}),
       ).timeout(const Duration(seconds: 6));
-
-      if (response.statusCode >= 200 && response.statusCode < 300) {
-        await _loadPreview();
-      }
-    } catch (e) {
-      debugPrint('Live method/school preview error: $e');
-    }
+      await _loadPreview();
+    } catch (_) {}
   }
 
-  Map<String, String> _applyOffsetsToTimes(
-    Map<String, String> base,
-    Map<String, int> offsets,
-  ) {
-    final result = <String, String>{};
-    for (final key in _prayerNames.keys) {
-      final source = base[key] ?? '--:--';
-      result[key] = _addMinutes(source, offsets[key] ?? 0);
-    }
-    return result;
+  Map<String, String> _applyOffsets(Map<String, String> base) {
+    return {for (final k in _prayerNames.keys) k: _addMins(base[k] ?? '--:--', _offsets[k] ?? 0)};
   }
 
-  String _addMinutes(String time, int delta) {
-    final parts = time.split(':');
-    if (parts.length != 2) return time;
-    final h = int.tryParse(parts[0]);
-    final m = int.tryParse(parts[1]);
+  String _addMins(String time, int delta) {
+    final p = time.split(':');
+    if (p.length != 2) return time;
+    final h = int.tryParse(p[0]), m = int.tryParse(p[1]);
     if (h == null || m == null) return time;
-
-    var total = h * 60 + m + delta;
-    while (total < 0) total += 24 * 60;
-    while (total >= 24 * 60) total -= 24 * 60;
-    final hh = (total ~/ 60).toString().padLeft(2, '0');
-    final mm = (total % 60).toString().padLeft(2, '0');
-    return '$hh:$mm';
+    var t = h * 60 + m + delta;
+    t = ((t % 1440) + 1440) % 1440;
+    return '${(t ~/ 60).toString().padLeft(2, '0')}:${(t % 60).toString().padLeft(2, '0')}';
   }
 
-  Future<void> _saveAndApply() async {
-    setState(() {
-      _isSaving = true;
-      _errorMessage = null;
-    });
+  Map<String, String> _fromPrayerTimes(PrayerTimes? pt) {
+    if (pt == null) return {};
+    final r = <String, String>{};
+    for (final p in pt.times) {
+      final k = p.name.toLowerCase();
+      if (k.contains('fajr')) r['fajr'] = p.calculatedTime;
+      if (k.contains('sunrise') || k.contains('chour') || k.contains('shuru')) r['sunrise'] = p.calculatedTime;
+      if (k.contains('dhuhr') || k.contains('dohr')) r['dhuhr'] = p.calculatedTime;
+      if (k.contains('asr')) r['asr'] = p.calculatedTime;
+      if (k.contains('maghrib')) r['maghrib'] = p.calculatedTime;
+      if (k.contains('isha')) r['isha'] = p.calculatedTime;
+    }
+    return r;
+  }
 
+  Future<void> _save() async {
+    setState(() { _isSaving = true; _errorMessage = null; });
     try {
-      if (_deviceIp == null) {
-        throw Exception('Aucun appareil connecté');
-      }
-
-      // Sauvegarder la méthode de calcul
-      final configUrl = Uri.parse('http://$_deviceIp/api/calculation/config');
-      final configResponse = await http.post(
-        configUrl,
+      if (_deviceIp == null) throw Exception('Aucun appareil connecté');
+      final r = await http.post(
+        Uri.parse('http://$_deviceIp/api/calculation/config'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'method': _method, 'school': _school}),
       ).timeout(const Duration(seconds: 10));
-
-      if (configResponse.statusCode < 200 || configResponse.statusCode >= 300) {
-        throw Exception('Échec sauvegarde configuration (HTTP ${configResponse.statusCode})');
+      if (r.statusCode < 200 || r.statusCode >= 300) {
+        throw Exception('HTTP ${r.statusCode}');
       }
-
-      // Sauvegarder les offsets (optionnel si endpoint indisponible)
       try {
-        final offsetsUrl = Uri.parse('http://$_deviceIp/api/mawaqit/offsets');
         await http.post(
-          offsetsUrl,
+          Uri.parse('http://$_deviceIp/api/mawaqit/offsets'),
           headers: {'Content-Type': 'application/json'},
           body: jsonEncode(_offsets),
         ).timeout(const Duration(seconds: 8));
       } catch (_) {}
 
-      // Recharger le preview
       await _loadPreview();
-      
-      // Invalider les providers pour rafraîchir
       ref.invalidate(prayerTimesProvider);
       ref.invalidate(prayerOffsetsProvider);
       ref.invalidate(adjustedPrayerTimesProvider);
-
       setState(() => _isSaving = false);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('✓ Configuration enregistrée'),
-            backgroundColor: Colors.green,
-            duration: Duration(seconds: 2),
-          ),
+          const SnackBar(content: Text('Configuration enregistrée'), backgroundColor: AppTheme.emerald),
         );
       }
     } catch (e) {
-      setState(() {
-        _errorMessage = 'Impossible de sauvegarder (${_deviceIp ?? 'IP inconnue'}): $e';
-        _isSaving = false;
-      });
+      setState(() { _errorMessage = e.toString(); _isSaving = false; });
     }
   }
+
+  // ─────────────────────────── BUILD ───────────────────────────
 
   @override
   Widget build(BuildContext context) {
-    final providerPreview = _previewFromPrayerTimes(ref.watch(prayerTimesProvider).valueOrNull);
-
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final providerPreview = _fromPrayerTimes(ref.watch(prayerTimesProvider).valueOrNull);
     if (_basePreviewTimes.isEmpty && providerPreview.isNotEmpty && _previewTimes.isEmpty) {
-      _basePreviewTimes = Map<String, String>.from(providerPreview);
-      _previewTimes = _applyOffsetsToTimes(_basePreviewTimes, _offsets);
+      _basePreviewTimes = Map.from(providerPreview);
+      _previewTimes = _applyOffsets(_basePreviewTimes);
     }
 
     return Scaffold(
-      backgroundColor: Colors.grey[50],
-      appBar: AppBar(
-        elevation: 0,
-        title: const Text(
-          'Configuration des horaires',
-          style: TextStyle(fontWeight: FontWeight.w600),
-        ),
-        backgroundColor: const Color(0xFF1B5E20),
-      ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
-              child: Column(
-                children: [
-                  // Header avec preview des horaires
-                  Container(
-                    width: double.infinity,
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          const Color(0xFF1B5E20),
-                          const Color(0xFF2E7D32),
-                        ],
-                      ),
-                    ),
-                    padding: const EdgeInsets.fromLTRB(20, 20, 20, 30),
-                    child: Column(
-                      children: [
-                        const Icon(
-                          Icons.access_time,
-                          size: 48,
-                          color: Colors.white,
-                        ),
-                        const SizedBox(height: 12),
-                        const Text(
-                          'Aperçu des horaires',
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
-                        if (_deviceIp != null) ...[
-                          const SizedBox(height: 4),
-                          Text(
-                            'Appareil: $_deviceIp',
-                            style: const TextStyle(color: Colors.white70, fontSize: 12),
-                          ),
-                        ],
-                        const SizedBox(height: 20),
-                        _buildPreviewGrid(providerPreview),
-                      ],
-                    ),
-                  ),
-
-                  // Configuration
-                  Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        if (_errorMessage != null)
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            margin: const EdgeInsets.only(bottom: 20),
-                            decoration: BoxDecoration(
-                              color: Colors.red[50],
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: Colors.red[200]!),
-                            ),
-                            child: Row(
-                              children: [
-                                Icon(Icons.error_outline, color: Colors.red[700]),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Text(
-                                    _errorMessage!,
-                                    style: TextStyle(color: Colors.red[700]),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-
-                        // Méthode de calcul
-                        _buildSectionHeader('Méthode de calcul', Icons.calculate),
-                        const SizedBox(height: 12),
-                        _buildMethodSelector(),
-                        const SizedBox(height: 24),
-
-                        // École juridique
-                        _buildSectionHeader('École juridique', Icons.school),
-                        const SizedBox(height: 12),
-                        _buildSchoolSelector(),
-                        const SizedBox(height: 32),
-
-                        // Fine-tuning
-                        _buildSectionHeader('Ajustements fins', Icons.tune),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Ajustez chaque horaire si nécessaire',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.grey[600],
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        ..._buildOffsetSliders(providerPreview),
-                        const SizedBox(height: 32),
-
-                        // Bouton de sauvegarde
-                        ElevatedButton(
-                          onPressed: _isSaving ? null : _saveAndApply,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF1B5E20),
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            elevation: 2,
-                          ),
-                          child: _isSaving
-                              ? const SizedBox(
-                                  height: 20,
-                                  width: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    valueColor: AlwaysStoppedAnimation<Color>(
-                                        Colors.white),
-                                  ),
-                                )
-                              : const Text(
-                                  'Enregistrer',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+      body: CustomScrollView(
+        slivers: [
+          // ── AppBar ──
+          SliverAppBar(
+            expandedHeight: 250,
+            pinned: true,
+            backgroundColor: AppTheme.emeraldDeep,
+            flexibleSpace: FlexibleSpaceBar(
+              collapseMode: CollapseMode.parallax,
+              background: _PreviewHeader(
+                previewTimes: _previewTimes.isNotEmpty ? _previewTimes : providerPreview,
+                deviceIp: _deviceIp,
               ),
             ),
+            title: Text(
+              'Horaires de Prière',
+              style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 20),
+            ),
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+              onPressed: () => Navigator.pop(context),
+            ),
+          ),
+
+          if (_isLoading)
+            const SliverFillRemaining(
+              child: Center(child: CircularProgressIndicator(color: AppTheme.emerald)),
+            )
+          else
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
+              sliver: SliverList(
+                delegate: SliverChildListDelegate([
+                  // Erreur
+                  if (_errorMessage != null) ...[
+                    _ErrorBanner(message: _errorMessage!),
+                    const SizedBox(height: 16),
+                  ],
+
+                  // ── Méthode ──
+                  _SectionLabel(label: 'Méthode de calcul', icon: Icons.calculate_rounded),
+                  const SizedBox(height: 10),
+                  _SelectCard(
+                    items: _methods.entries.map((e) => _SelectItem(key: e.key, label: e.value)).toList(),
+                    selected: _method,
+                    onSelect: (k) { setState(() => _method = k); _refreshPreview(); },
+                  ).animate().fadeIn(delay: 50.ms).slideY(begin: 0.06),
+
+                  const SizedBox(height: 24),
+
+                  // ── École ──
+                  _SectionLabel(label: 'École juridique', icon: Icons.school_rounded),
+                  const SizedBox(height: 10),
+                  _SelectCard(
+                    items: _schools.entries.map((e) => _SelectItem(key: e.key.toString(), label: e.value)).toList(),
+                    selected: _school.toString(),
+                    onSelect: (k) { setState(() => _school = int.parse(k)); _refreshPreview(); },
+                  ).animate().fadeIn(delay: 100.ms).slideY(begin: 0.06),
+
+                  const SizedBox(height: 24),
+
+                  // ── Ajustements ──
+                  _SectionLabel(label: 'Ajustements fins', icon: Icons.tune_rounded),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Décalez chaque horaire de ±30 minutes si nécessaire.',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  const SizedBox(height: 12),
+
+                  ..._prayerNames.keys.indexed.map((entry) {
+                    final (i, prayer) = entry;
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: _OffsetCard(
+                        prayer: prayer,
+                        name: _prayerNames[prayer]!,
+                        offset: _offsets[prayer]!,
+                        baseTime: _basePreviewTimes[prayer] ?? providerPreview[prayer] ?? '--:--',
+                        adjustedTime: _previewTimes[prayer] ?? '--:--',
+                        onChanged: (v) {
+                          setState(() {
+                            _offsets[prayer] = v;
+                            final src = _basePreviewTimes.isNotEmpty ? _basePreviewTimes : providerPreview;
+                            _previewTimes = _applyOffsets(src);
+                          });
+                        },
+                      ).animate().fadeIn(delay: Duration(milliseconds: 120 + 40 * i)).slideY(begin: 0.06),
+                    );
+                  }),
+
+                  const SizedBox(height: 24),
+
+                  // ── Bouton ──
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: _isSaving ? null : _save,
+                      style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16)),
+                      child: _isSaving
+                          ? const SizedBox(
+                              width: 20, height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                            )
+                          : const Text('Enregistrer la configuration'),
+                    ),
+                  ).animate().fadeIn(delay: 350.ms),
+                ]),
+              ),
+            ),
+        ],
+      ),
     );
   }
+}
 
-  Widget _buildPreviewGrid(Map<String, String> providerPreview) {
+// ─────────────────────────── PREVIEW HEADER ───────────────────────────
+class _PreviewHeader extends StatelessWidget {
+  final Map<String, String> previewTimes;
+  final String? deviceIp;
+  const _PreviewHeader({required this.previewTimes, this.deviceIp});
+
+  static const _icons = {
+    'fajr': Icons.wb_twilight_rounded,
+    'sunrise': Icons.wb_sunny_outlined,
+    'dhuhr': Icons.wb_sunny_rounded,
+    'asr': Icons.light_mode_rounded,
+    'maghrib': Icons.nightlight_round,
+    'isha': Icons.dark_mode_rounded,
+  };
+
+  static const _names = {
+    'fajr': 'Fajr', 'sunrise': 'Chourouk', 'dhuhr': 'Dhuhr',
+    'asr': 'Asr', 'maghrib': 'Maghrib', 'isha': 'Isha',
+  };
+
+  @override
+  Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF064E3B), Color(0xFF065F46), Color(0xFF059669)],
+        ),
+      ),
+      padding: const EdgeInsets.fromLTRB(20, 80, 20, 20),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Column(
+              children: [
+                Row(
+                  children: ['fajr', 'sunrise', 'dhuhr'].map((p) => Expanded(child: _PreviewCell(prayer: p, time: previewTimes[p] ?? '--:--', icon: _icons[p]!, name: _names[p]!))).toList(),
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: ['asr', 'maghrib', 'isha'].map((p) => Expanded(child: _PreviewCell(prayer: p, time: previewTimes[p] ?? '--:--', icon: _icons[p]!, name: _names[p]!))).toList(),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PreviewCell extends StatelessWidget {
+  final String prayer, time, name;
+  final IconData icon;
+  const _PreviewCell({required this.prayer, required this.time, required this.icon, required this.name});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Icon(icon, color: Colors.white70, size: 20),
+        const SizedBox(height: 4),
+        Text(name, style: GoogleFonts.inter(color: Colors.white60, fontSize: 10)),
+        const SizedBox(height: 2),
+        Text(time, style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+      ],
+    );
+  }
+}
+
+// ─────────────────────────── SELECT CARD ───────────────────────────
+class _SelectItem {
+  final String key, label;
+  const _SelectItem({required this.key, required this.label});
+}
+
+class _SelectCard extends StatelessWidget {
+  final List<_SelectItem> items;
+  final String selected;
+  final ValueChanged<String> onSelect;
+  const _SelectCard({required this.items, required this.selected, required this.onSelect});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.15),
+        color: isDark ? AppTheme.darkCard : AppTheme.lightCard,
         borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: isDark ? AppTheme.darkBorder : AppTheme.lightBorder),
+      ),
+      child: Column(
+        children: items.asMap().entries.map((e) {
+          final isLast = e.key == items.length - 1;
+          final item = e.value;
+          final isSelected = selected == item.key;
+          return InkWell(
+            onTap: () => onSelect(item.key),
+            borderRadius: isLast
+                ? const BorderRadius.vertical(bottom: Radius.circular(16))
+                : BorderRadius.zero,
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  child: Row(
+                    children: [
+                      AnimatedContainer(
+                        duration: 200.ms,
+                        width: 22, height: 22,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: isSelected ? AppTheme.emerald : (isDark ? AppTheme.darkBorder : AppTheme.lightBorder),
+                            width: isSelected ? 2 : 1.5,
+                          ),
+                        ),
+                        child: isSelected
+                            ? Center(
+                                child: Container(
+                                  width: 10, height: 10,
+                                  decoration: const BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: AppTheme.emerald,
+                                  ),
+                                ),
+                              )
+                            : null,
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Text(
+                          item.label,
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: isSelected
+                                ? (isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary)
+                                : (isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary),
+                            fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (!isLast)
+                  Divider(
+                    height: 1,
+                    indent: 52,
+                    color: isDark ? AppTheme.darkBorder : AppTheme.lightBorder,
+                  ),
+              ],
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────── OFFSET CARD ───────────────────────────
+class _OffsetCard extends StatelessWidget {
+  final String prayer, name, baseTime, adjustedTime;
+  final int offset;
+  final ValueChanged<int> onChanged;
+  const _OffsetCard({
+    required this.prayer, required this.name, required this.offset,
+    required this.baseTime, required this.adjustedTime, required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final color = AppTheme.prayerColor(name);
+    final icon = AppTheme.prayerIcon(name);
+    final hasOffset = offset != 0;
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
+      decoration: BoxDecoration(
+        color: isDark ? AppTheme.darkCard : AppTheme.lightCard,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: hasOffset
+              ? AppTheme.emerald.withOpacity(0.4)
+              : (isDark ? AppTheme.darkBorder : AppTheme.lightBorder),
+        ),
       ),
       child: Column(
         children: [
           Row(
             children: [
-              Expanded(child: _buildPreviewItem('fajr', providerPreview)),
-              const SizedBox(width: 12),
-              Expanded(child: _buildPreviewItem('sunrise', providerPreview)),
-              const SizedBox(width: 12),
-              Expanded(child: _buildPreviewItem('dhuhr', providerPreview)),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(child: _buildPreviewItem('asr', providerPreview)),
-              const SizedBox(width: 12),
-              Expanded(child: _buildPreviewItem('maghrib', providerPreview)),
-              const SizedBox(width: 12),
-              Expanded(child: _buildPreviewItem('isha', providerPreview)),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPreviewItem(String prayer, Map<String, String> providerPreview) {
-    final time = _previewTimes[prayer] ?? providerPreview[prayer] ?? '--:--';
-    return Column(
-      children: [
-        Icon(
-          _prayerIcons[prayer],
-          color: Colors.white,
-          size: 24,
-        ),
-        const SizedBox(height: 6),
-        Text(
-          _prayerNames[prayer]!,
-          style: const TextStyle(
-            fontSize: 11,
-            color: Colors.white70,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          time,
-          style: const TextStyle(
-            fontSize: 16,
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Map<String, String> _previewFromPrayerTimes(PrayerTimes? prayerTimes) {
-    if (prayerTimes == null) return const {};
-    final Map<String, String> result = {};
-    for (final prayer in prayerTimes.times) {
-      final key = prayer.name.toLowerCase();
-      if (key.contains('fajr')) result['fajr'] = prayer.calculatedTime;
-      if (key.contains('sunrise') || key.contains('chour') || key.contains('shuru')) result['sunrise'] = prayer.calculatedTime;
-      if (key.contains('dhuhr') || key.contains('dohr')) result['dhuhr'] = prayer.calculatedTime;
-      if (key.contains('asr')) result['asr'] = prayer.calculatedTime;
-      if (key.contains('maghrib')) result['maghrib'] = prayer.calculatedTime;
-      if (key.contains('isha')) result['isha'] = prayer.calculatedTime;
-    }
-    return result;
-  }
-
-  Widget _buildSectionHeader(String title, IconData icon) {
-    return Row(
-      children: [
-        Icon(icon, color: const Color(0xFF1B5E20), size: 24),
-        const SizedBox(width: 8),
-        Text(
-          title,
-          style: const TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: Color(0xFF1B5E20),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildMethodSelector() {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        children: _methods.entries.map((entry) {
-          final isSelected = _method == entry.key;
-          return InkWell(
-            onTap: () {
-              setState(() => _method = entry.key);
-              _refreshPreviewForMethodOrSchool();
-            },
-            child: Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                border: Border(
-                  bottom: entry.key != _methods.keys.last
-                      ? BorderSide(color: Colors.grey[200]!)
-                      : BorderSide.none,
+              Container(
+                width: 40, height: 40,
+                decoration: BoxDecoration(
+                  color: color.withOpacity(isDark ? 0.18 : 0.1),
+                  borderRadius: BorderRadius.circular(11),
                 ),
+                child: Icon(icon, color: color, size: 20),
               ),
-              child: Row(
-                children: [
-                  Icon(
-                    isSelected
-                        ? Icons.radio_button_checked
-                        : Icons.radio_button_unchecked,
-                    color: isSelected
-                        ? const Color(0xFF1B5E20)
-                        : Colors.grey[400],
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      entry.value,
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight:
-                            isSelected ? FontWeight.w600 : FontWeight.normal,
-                        color: isSelected ? Colors.black87 : Colors.black54,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        }).toList(),
-      ),
-    );
-  }
-
-  Widget _buildSchoolSelector() {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        children: _schools.entries.map((entry) {
-          final isSelected = _school == entry.key;
-          return InkWell(
-            onTap: () {
-              setState(() => _school = entry.key);
-              _refreshPreviewForMethodOrSchool();
-            },
-            child: Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                border: Border(
-                  bottom: entry.key != _schools.keys.last
-                      ? BorderSide(color: Colors.grey[200]!)
-                      : BorderSide.none,
-                ),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    isSelected
-                        ? Icons.radio_button_checked
-                        : Icons.radio_button_unchecked,
-                    color: isSelected
-                        ? const Color(0xFF1B5E20)
-                        : Colors.grey[400],
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      entry.value,
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight:
-                            isSelected ? FontWeight.w600 : FontWeight.normal,
-                        color: isSelected ? Colors.black87 : Colors.black54,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        }).toList(),
-      ),
-    );
-  }
-
-  List<Widget> _buildOffsetSliders(Map<String, String> providerPreview) {
-    return _offsets.keys.map((prayer) {
-      return Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 10,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(
-                      _prayerIcons[prayer],
-                      color: const Color(0xFF1B5E20),
-                      size: 20,
-                    ),
-                    const SizedBox(width: 8),
+                    Text(name, style: Theme.of(context).textTheme.titleMedium),
                     Text(
-                      _prayerNames[prayer]!,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
+                      hasOffset ? '$baseTime → $adjustedTime' : baseTime,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: hasOffset ? AppTheme.emerald : null,
                       ),
                     ),
                   ],
                 ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: _offsets[prayer] == 0
-                        ? Colors.grey[200]
-                        : const Color(0xFF1B5E20).withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    _offsets[prayer] == 0
-                        ? '0'
-                        : '${_offsets[prayer]! > 0 ? '+' : ''}${_offsets[prayer]}\'',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
-                      color: _offsets[prayer] == 0
-                          ? Colors.grey[700]
-                          : const Color(0xFF1B5E20),
-                    ),
+              ),
+              AnimatedContainer(
+                duration: 200.ms,
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: hasOffset
+                      ? AppTheme.emerald.withOpacity(0.12)
+                      : (isDark ? AppTheme.darkSurface : AppTheme.lightBg),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: hasOffset ? AppTheme.emerald.withOpacity(0.3) : Colors.transparent,
                   ),
                 ),
-              ],
-            ),
-            Slider(
-              value: _offsets[prayer]!.toDouble(),
-              min: -30,
-              max: 30,
-              divisions: 60,
-              activeColor: const Color(0xFF1B5E20),
-              inactiveColor: Colors.grey[300],
-              onChanged: (value) {
-                setState(() {
-                  _offsets[prayer] = value.round();
-                  final source = _basePreviewTimes.isNotEmpty
-                      ? _basePreviewTimes
-                      : providerPreview;
-                  _previewTimes = _applyOffsetsToTimes(source, _offsets);
-                });
-              },
-            ),
-          ],
+                child: Text(
+                  offset == 0 ? '0' : '${offset > 0 ? '+' : ''}${offset}\'',
+                  style: GoogleFonts.poppins(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: hasOffset ? AppTheme.emerald : (isDark ? AppTheme.darkTextMuted : AppTheme.lightTextMuted),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          Slider(
+            value: offset.toDouble(),
+            min: -30, max: 30, divisions: 60,
+            onChanged: (v) => onChanged(v.round()),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────── HELPERS ───────────────────────────
+class _SectionLabel extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  const _SectionLabel({required this.label, required this.icon});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, color: AppTheme.emerald, size: 18),
+        const SizedBox(width: 8),
+        Text(
+          label,
+          style: Theme.of(context).textTheme.headlineSmall?.copyWith(color: AppTheme.emerald),
         ),
-      );
-    }).toList();
+      ],
+    );
+  }
+}
+
+class _ErrorBanner extends StatelessWidget {
+  final String message;
+  const _ErrorBanner({required this.message});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.red.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.red.withOpacity(0.25)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.error_outline_rounded, color: Colors.red, size: 18),
+          const SizedBox(width: 10),
+          Expanded(child: Text(message, style: const TextStyle(color: Colors.red, fontSize: 13))),
+        ],
+      ),
+    );
   }
 }

@@ -1,8 +1,10 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wifi_scan/wifi_scan.dart';
@@ -10,6 +12,7 @@ import 'package:app_settings/app_settings.dart';
 import '../providers/adhanbox_provider.dart';
 import '../services/adhanbox_api.dart';
 import '../services/esp32_discovery_service.dart';
+import '../theme/app_theme.dart';
 import 'calculation_setup_screen.dart';
 
 class DeviceSetupScreen extends ConsumerStatefulWidget {
@@ -19,1508 +22,1451 @@ class DeviceSetupScreen extends ConsumerStatefulWidget {
   ConsumerState<DeviceSetupScreen> createState() => _DeviceSetupScreenState();
 }
 
-class _DeviceSetupScreenState extends ConsumerState<DeviceSetupScreen> {
-  // États du processus de configuration
+class _DeviceSetupScreenState extends ConsumerState<DeviceSetupScreen>
+    with SingleTickerProviderStateMixin {
   int _step = 1;
   String? _error;
 
-  // Étape 1: Scan des réseaux WiFi disponibles (ceux émis par les ESP32)
+  // Step 1
   List<Map<String, dynamic>> _adhanboxNetworks = [];
   bool _isScanningAdhanboxWifi = false;
   String? _selectedAdhanboxWifi;
 
-  // Étape 2: Connexion automatique au WiFi AdhanBox
+  // Step 2
   bool _isConnectingToAdhanbox = false;
 
-  // Étape 3: Récupération des réseaux WiFi visibles par l'ESP32
+  // Step 3
   List<Map<String, dynamic>> _homeWifiNetworks = [];
   bool _isScanningHomeWifi = false;
   String? _selectedHomeWifi;
   bool _isSendingCredentials = false;
+  bool _showPassword = false;
+  final TextEditingController _passwordController = TextEditingController();
 
-  // Étape 4: Recherche de l'ESP32 sur le réseau maison
+  // Step 4
   bool _isSearchingOnHomeNetwork = false;
   String? _deviceIp;
   String _networkScanProgress = '';
   bool _step4ReadyToSearch = false;
   final TextEditingController _manualIpController = TextEditingController();
 
+  late AnimationController _pulseController;
+
+  static const _steps = [
+    _StepMeta(icon: Icons.search_rounded, label: 'Détection'),
+    _StepMeta(icon: Icons.link_rounded, label: 'Connexion'),
+    _StepMeta(icon: Icons.wifi_rounded, label: 'WiFi'),
+    _StepMeta(icon: Icons.devices_rounded, label: 'Réseau'),
+    _StepMeta(icon: Icons.check_circle_rounded, label: 'Terminé'),
+  ];
+
   @override
   void initState() {
     super.initState();
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+    )..repeat(reverse: true);
     _scanForAdhanBoxNetworks();
   }
 
-  /// Ouvre les paramètres WiFi du système
+  @override
+  void dispose() {
+    _pulseController.dispose();
+    _passwordController.dispose();
+    _manualIpController.dispose();
+    super.dispose();
+  }
+
+  // ─────────────────── BUSINESS LOGIC ───────────────────
+
   Future<void> _openWiFiSettings() async {
     try {
-      // app_settings ouvre directement les paramètres WiFi
       await AppSettings.openAppSettings(type: AppSettingsType.wifi);
-      
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('✅ Paramètres WiFi ouverts - Revenez après connexion'),
-            backgroundColor: Colors.green,
-            duration: Duration(seconds: 2),
-          ),
-        );
-      }
-    } catch (e) {
-      // Fallback: ouvre les paramètres généraux
+    } catch (_) {
       try {
         await AppSettings.openAppSettings(type: AppSettingsType.settings);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Ouvrez WiFi dans les paramètres'),
-              backgroundColor: Colors.orange,
-            ),
-          );
-        }
-      } catch (e2) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Erreur: Ouvrez WiFi manuellement dans Paramètres'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
-      }
+      } catch (_) {}
     }
   }
-
-  /// ========== ÉTAPE 1: Scanner les réseaux WiFi Adhanbox ==========
 
   Future<void> _scanForAdhanBoxNetworks() async {
-    setState(() {
-      _isScanningAdhanboxWifi = true;
-      _error = null;
-    });
-
+    setState(() { _isScanningAdhanboxWifi = true; _error = null; });
     try {
-      // Sur Flutter Web, wifi_scan n'est pas disponible
-      // On passe donc en mode manuel (pas de simulation)
       if (kIsWeb) {
         await Future.delayed(const Duration(milliseconds: 400));
-        setState(() {
-          _adhanboxNetworks = [];
-          _error = null;
-        });
+        setState(() { _adhanboxNetworks = []; });
       } else {
-        final locationServiceEnabled =
-            await Geolocator.isLocationServiceEnabled();
-        if (!locationServiceEnabled) {
-          setState(() {
-            _error =
-                'La localisation du téléphone est désactivée. Activez le GPS puis relancez le scan.';
-          });
+        final locationEnabled = await Geolocator.isLocationServiceEnabled();
+        if (!locationEnabled) {
+          setState(() => _error = 'Activez la localisation (GPS) pour détecter les réseaux WiFi.');
           return;
         }
-
-        final locationPermission = await Permission.locationWhenInUse.request();
-        if (!locationPermission.isGranted) {
-          setState(() {
-            _error =
-                'Permission localisation refusée. Autorisez-la pour détecter les réseaux WiFi.';
-          });
+        final perm = await Permission.locationWhenInUse.request();
+        if (!perm.isGranted) {
+          setState(() => _error = 'Permission localisation requise pour le scan WiFi.');
           return;
         }
-
-        // Sur Android/iOS, utiliser wifi_scan réel
         final canScan = await WiFiScan.instance.canStartScan();
-
         if (canScan != CanStartScan.yes) {
-          setState(() {
-            _error =
-                'Scan WiFi indisponible ($canScan). Vérifiez WiFi, GPS et permissions.';
-          });
-          setState(() => _isScanningAdhanboxWifi = false);
+          setState(() => _error = 'Scan WiFi indisponible. Vérifiez WiFi, GPS et permissions.');
           return;
         }
-
-        // Démarrer le scan WiFi réel
         await WiFiScan.instance.startScan();
-
         await Future.delayed(const Duration(seconds: 2));
-
-        final canGetResults = await WiFiScan.instance.canGetScannedResults();
-        if (canGetResults != CanGetScannedResults.yes) {
-          setState(() {
-            _error =
-                'Impossible de lire les résultats du scan ($canGetResults). Vérifiez permissions et GPS.';
-          });
+        final canGet = await WiFiScan.instance.canGetScannedResults();
+        if (canGet != CanGetScannedResults.yes) {
+          setState(() => _error = 'Impossible de lire les résultats du scan.');
           return;
         }
-
-        // Récupérer les résultats du scan
         final results = await WiFiScan.instance.getScannedResults();
-
-        // Filtrer les réseaux AdhanBox (tolérant: adhanbox / adhan-box / adhan)
-        final adhanboxNetworks = results
-            .where((network) {
-              final ssid = network.ssid.toLowerCase();
-              return ssid.contains('adhanbox') ||
-                  ssid.contains('adhan-box') ||
-                  ssid.contains('adhan');
+        final networks = results
+            .where((n) {
+              final ssid = n.ssid.toLowerCase();
+              return ssid.contains('adhanbox') || ssid.contains('adhan-box') || ssid.contains('adhan');
             })
-            .map((network) => {
-                  'ssid': network.ssid,
-                  'rssi': network.level,
-                  'security': network.capabilities.toLowerCase().contains('wpa')
-                      ? 'WPA2'
-                      : (network.capabilities.toLowerCase().contains('wep')
-                          ? 'WEP'
-                          : 'Open'),
-                })
+            .map((n) => {
+              'ssid': n.ssid,
+              'rssi': n.level,
+              'security': n.capabilities.toLowerCase().contains('wpa')
+                  ? 'WPA2'
+                  : (n.capabilities.toLowerCase().contains('wep') ? 'WEP' : 'Open'),
+            })
             .toList();
-
         setState(() {
-          _adhanboxNetworks = adhanboxNetworks;
+          _adhanboxNetworks = networks;
+          if (networks.isEmpty) _error = 'Aucun AdhanBox détecté à proximité.';
         });
-
-        if (_adhanboxNetworks.isEmpty) {
-          setState(() {
-            _error =
-                'Aucun AdhanBox détecté. Vérifiez que l\'ESP32 émet bien un SSID visible (ex: AdhanBox_xxxx), en 2.4 GHz, et reste proche du téléphone.';
-          });
-        }
       }
     } catch (e) {
-      setState(() {
-        _error = 'Erreur lors du scan WiFi: $e';
-      });
+      setState(() => _error = 'Erreur lors du scan WiFi: $e');
     } finally {
-      setState(() {
-        _isScanningAdhanboxWifi = false;
-      });
+      if (mounted) setState(() => _isScanningAdhanboxWifi = false);
     }
   }
-
-  /// ========== ÉTAPE 2: Connexion automatique au WiFi AdhanBox ==========
 
   Future<void> _connectToAdhanBoxWifi() async {
     if (_selectedAdhanboxWifi == null) return;
-
-    setState(() {
-      _isConnectingToAdhanbox = true;
-      _error = null;
-    });
-
+    setState(() { _isConnectingToAdhanbox = true; _error = null; });
     try {
-      // Vérifier la connexion à l'ESP32 avec plusieurs tentatives
       const maxAttempts = 5;
-      bool connected = false;
-      Exception? lastError;
-
       for (int attempt = 1; attempt <= maxAttempts; attempt++) {
         try {
-          setState(() {
-            _error = 'Vérification de la connexion... ($attempt/$maxAttempts)';
-          });
-
-          final api = AdhanBoxAPI(
-            baseUrl: 'http://192.168.4.1',
-            timeout: const Duration(seconds: 8),
-          );
-
+          setState(() => _error = 'Vérification de la connexion ($attempt/$maxAttempts)...');
+          final api = AdhanBoxAPI(baseUrl: 'http://192.168.4.1', timeout: const Duration(seconds: 8));
           final status = await api.getStatus();
-          // Vérifier que le JSON contient des clés attendues (wifi, rtc_ok, etc.)
           if (status.containsKey('wifi') && status.containsKey('rtc_ok')) {
-            // Connexion réussie! Passer à l'étape suivante
-            setState(() {
-              _step = 3;
-              _isConnectingToAdhanbox = false;
-              _error = null;
-            });
-
-            // Demander à l'ESP32 de scanner les réseaux WiFi disponibles
+            setState(() { _step = 3; _isConnectingToAdhanbox = false; _error = null; });
             await _getHomeWifiNetworksFromESP32();
-            connected = true;
-            break;
-          } else {
-            throw Exception('Réponse JSON invalide');
+            return;
           }
-        } catch (e) {
-          lastError = e as Exception;
-          if (attempt < maxAttempts) {
-            await Future.delayed(const Duration(seconds: 3));
-          }
+        } catch (_) {
+          if (attempt < maxAttempts) await Future.delayed(const Duration(seconds: 3));
         }
       }
-
-      if (!connected) {
-        setState(() {
-          _error =
-              '❌ Impossible de contacter l\'ESP32\n\n'
-              'Vérifiez que:\n'
-              '• Vous êtes connecté au WiFi "$_selectedAdhanboxWifi"\n'
-              '• L\'ESP32 est allumé\n'
-              '• Vous êtes près de l\'ESP32\n\n'
-              'Puis réessayez.';
-          _isConnectingToAdhanbox = false;
-        });
-      }
-    } catch (e) {
       setState(() {
-        _error = '❌ Erreur: $e';
+        _error = 'Impossible de contacter l\'ESP32. Vérifiez que vous êtes connecté au réseau "$_selectedAdhanboxWifi".';
         _isConnectingToAdhanbox = false;
       });
+    } catch (e) {
+      setState(() { _error = 'Erreur: $e'; _isConnectingToAdhanbox = false; });
     }
   }
 
-  /// ========== ÉTAPE 3: Récupérer les réseaux WiFi visibles par l'ESP32 ==========
-
   Future<void> _getHomeWifiNetworksFromESP32() async {
-    setState(() {
-      _isScanningHomeWifi = true;
-      _error = null;
-    });
-
+    setState(() { _isScanningHomeWifi = true; _error = null; });
     try {
-      final api = AdhanBoxAPI(
-        baseUrl: 'http://192.168.4.1',
-        timeout: const Duration(seconds: 10),
-      );
-
-      // L'ESP32 doit avoir un endpoint pour scanner les réseaux WiFi
-      // TODO: Implémenter GET /api/wifi/scan dans le firmware ESP32
+      final api = AdhanBoxAPI(baseUrl: 'http://192.168.4.1', timeout: const Duration(seconds: 10));
       final response = await api.scanWifiNetworks();
-
       setState(() {
         _homeWifiNetworks = (response['networks'] as List<dynamic>? ?? [])
-            .map((n) => {
-                  'ssid': n['ssid'],
-                  'rssi': n['rssi'],
-                  'security': n['security'],
-                })
+            .map((n) => {'ssid': n['ssid'], 'rssi': n['rssi'], 'security': n['security']})
             .toList();
         _isScanningHomeWifi = false;
+        if (_homeWifiNetworks.isEmpty) _error = 'Aucun réseau WiFi détecté par l\'AdhanBox.';
       });
-
-      if (_homeWifiNetworks.isEmpty) {
-        setState(() {
-          _error = 'Aucun réseau WiFi détecté par l\'AdhanBox.';
-        });
-      }
-    } catch (e) {
-      // Si l'ESP32 n'est pas encore configuré, scanner directement les réseaux disponibles avec le téléphone
+    } catch (_) {
       try {
         await WiFiScan.instance.startScan();
         await Future.delayed(const Duration(seconds: 2));
-
         final results = await WiFiScan.instance.getScannedResults();
-
-        // Récupérer tous les réseaux WiFi réels visibles par le téléphone
-        final realNetworks = results
-            .where((network) => network.ssid.isNotEmpty)
-            .map((network) => {
-                  'ssid': network.ssid,
-                  'rssi': network.level,
-                  'security': network.capabilities.toLowerCase().contains('wpa')
-                      ? 'WPA2'
-                      : (network.capabilities.toLowerCase().contains('wep')
-                          ? 'WEP'
-                          : 'Open'),
-                })
+        final networks = results
+            .where((n) => n.ssid.isNotEmpty)
+            .map((n) => {
+              'ssid': n.ssid,
+              'rssi': n.level,
+              'security': n.capabilities.toLowerCase().contains('wpa')
+                  ? 'WPA2'
+                  : (n.capabilities.toLowerCase().contains('wep') ? 'WEP' : 'Open'),
+            })
             .toList();
-
-        setState(() {
-          _homeWifiNetworks = realNetworks;
-          _isScanningHomeWifi = false;
-        });
-
-        if (_homeWifiNetworks.isEmpty) {
-          setState(() {
-            _error = 'Aucun réseau WiFi détecté.';
-          });
-        }
-      } catch (scanError) {
-        setState(() {
-          _error = 'Erreur lors du scan WiFi local: $scanError';
-          _isScanningHomeWifi = false;
-        });
+        setState(() { _homeWifiNetworks = networks; _isScanningHomeWifi = false; });
+        if (_homeWifiNetworks.isEmpty) setState(() => _error = 'Aucun réseau WiFi détecté.');
+      } catch (e) {
+        setState(() { _error = 'Erreur scan WiFi: $e'; _isScanningHomeWifi = false; });
       }
     }
   }
 
-  /// Envoyer les credentials WiFi maison à l'ESP32
-  Future<void> _sendWifiCredentialsToESP32(String password) async {
+  Future<void> _sendWifiCredentials() async {
     if (_selectedHomeWifi == null) return;
-
-    setState(() {
-      _isSendingCredentials = true;
-      _error = null;
-    });
-
+    setState(() { _isSendingCredentials = true; _error = null; });
     try {
-      final api = AdhanBoxAPI(
-        baseUrl: 'http://192.168.4.1',
-        timeout: const Duration(seconds: 10),
-      );
-
-      // Envoyer les credentials à l'ESP32
-      await api.connectWiFi(_selectedHomeWifi!, password);
-
-      // Attendre que l'ESP32 se connecte (environ 10 secondes)
+      final api = AdhanBoxAPI(baseUrl: 'http://192.168.4.1', timeout: const Duration(seconds: 10));
+      await api.connectWiFi(_selectedHomeWifi!, _passwordController.text);
       await Future.delayed(const Duration(seconds: 10));
-
-      setState(() {
-        _step = 4;
-        _step4ReadyToSearch = false;
-        _isSendingCredentials = false;
-      });
-
-      // NE PAS lancer la recherche automatiquement - attendre que l'utilisateur
-      // se reconnecte au WiFi maison et clique sur "Continuer"
+      setState(() { _step = 4; _step4ReadyToSearch = false; _isSendingCredentials = false; });
     } catch (e) {
-      setState(() {
-        _error = 'Erreur lors de l\'envoi des credentials: $e\n'
-            'Vérifiez le mot de passe WiFi.';
-        _isSendingCredentials = false;
-      });
+      setState(() { _error = 'Erreur: vérifiez le mot de passe WiFi.'; _isSendingCredentials = false; });
     }
   }
 
-  /// ========== ÉTAPE 4: Retrouver l'ESP32 sur le réseau maison ==========
-
-  /// Récupérer l'IP locale du téléphone
   Future<String?> _getLocalIp() async {
     if (kIsWeb) return null;
-
     try {
-      for (var interface in await NetworkInterface.list()) {
-        for (var addr in interface.addresses) {
-          // Chercher une IPv4 du réseau local (192.168.x.x, 10.x.x.x, ou 172.16.x.x-172.31.x.x)
+      for (var iface in await NetworkInterface.list()) {
+        for (var addr in iface.addresses) {
           if (addr.type == InternetAddressType.IPv4 && !addr.isLoopback) {
             final ip = addr.address;
-            if (ip.startsWith('192.168.') || ip.startsWith('10.')) {
-              return ip;
-            }
-            // Vérifier aussi les adresses 172.16.x.x à 172.31.x.x
+            if (ip.startsWith('192.168.') || ip.startsWith('10.')) return ip;
             if (ip.startsWith('172.')) {
-              final secondOctet = int.tryParse(ip.split('.')[1]) ?? 0;
-              if (secondOctet >= 16 && secondOctet <= 31) {
-                return ip;
-              }
+              final second = int.tryParse(ip.split('.')[1]) ?? 0;
+              if (second >= 16 && second <= 31) return ip;
             }
           }
         }
       }
-    } catch (e) {
-      debugPrint('Erreur lors de la récupération de l\'IP locale: $e');
-    }
+    } catch (_) {}
     return null;
-  }
-
-  /// Scanner le réseau local pour trouver l'AdhanBox
-  Future<String?> _scanNetworkForAdhanBox() async {
-    final localIp = await _getLocalIp();
-    if (localIp == null) {
-      setState(() {
-        _networkScanProgress = 'Impossible de déterminer l\'IP locale';
-      });
-      return null;
-    }
-
-    // Extraire le préfixe du réseau (ex: "192.168.1" de "192.168.1.45")
-    final parts = localIp.split('.');
-    if (parts.length != 4) return null;
-
-    final networkPrefix = '${parts[0]}.${parts[1]}.${parts[2]}';
-    debugPrint('Scan du réseau: $networkPrefix.0/24');
-
-    setState(() {
-      _networkScanProgress = 'Scan de $networkPrefix.0/24';
-    });
-
-    // Liste des IPs à tester (1-254, en excluant l'IP du téléphone)
-    final hostNumber = int.tryParse(parts[3]) ?? 0;
-    final ipsToTest = <String>[];
-
-    for (int i = 1; i <= 254; i++) {
-      if (i != hostNumber) {
-        ipsToTest.add('$networkPrefix.$i');
-      }
-    }
-
-    // Tester les IPs par lots de 15 en parallèle avec timeout de 5 secondes
-    const batchSize = 15;
-    int tested = 0;
-
-    for (int i = 0; i < ipsToTest.length; i += batchSize) {
-      final batch = ipsToTest.sublist(
-        i,
-        (i + batchSize < ipsToTest.length) ? i + batchSize : ipsToTest.length,
-      );
-
-      // Tester ce lot en parallèle
-      final results = await Future.wait(
-        batch.map((ip) => _testIpForAdhanBox(ip)),
-      );
-
-      // Vérifier si on a trouvé l'AdhanBox
-      for (int j = 0; j < results.length; j++) {
-        if (results[j]) {
-          return batch[j];
-        }
-      }
-
-      tested += batch.length;
-      setState(() {
-        _networkScanProgress = 'Testé $tested/${ipsToTest.length} adresses...';
-      });
-    }
-
-    return null;
-  }
-
-  /// Tester si une IP correspond à l'AdhanBox
-  Future<bool> _testIpForAdhanBox(String ip) async {
-    try {
-      final api = AdhanBoxAPI(
-        baseUrl: 'http://$ip',
-        timeout: const Duration(seconds: 5),
-      );
-
-      final status = await api.getStatus();
-
-      // Vérifier si c'est bien un AdhanBox (vérifier les champs qui existent)
-      if (status.containsKey('wifi') && status.containsKey('rtc_ok')) {
-        debugPrint('AdhanBox trouvée à $ip');
-        return true;
-      }
-    } catch (e) {
-      // IP ne répond pas ou n'est pas un AdhanBox
-    }
-    return false;
   }
 
   Future<void> _findESP32OnHomeNetwork() async {
     setState(() {
       _isSearchingOnHomeNetwork = true;
       _error = null;
-      _networkScanProgress = 'Recherche de l\'AdhanBox sur le réseau...';
+      _networkScanProgress = 'Recherche en cours...';
     });
-
     try {
-      // Essayer de scanner le réseau pour trouver une IP réelle (pas mDNS)
-      const maxAttempts = 3;
-      bool connected = false;
-      Exception? lastError;
-      String? foundIp;
-
-      for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+      for (int attempt = 1; attempt <= 3; attempt++) {
         try {
-          setState(() {
-            _networkScanProgress = 'Tentative $attempt/$maxAttempts...';
-          });
-
-          // Utiliser le discovery service pour trouver l'ESP32
+          setState(() => _networkScanProgress = 'Tentative $attempt/3...');
           final discovery = ESP32DiscoveryService();
-          final device = await discovery.findAdhanBox(timeout: const Duration(seconds: 5)).timeout(
-            const Duration(seconds: 6),
-            onTimeout: () => null,
-          );
-
+          final device = await discovery.findAdhanBox(timeout: const Duration(seconds: 5))
+              .timeout(const Duration(seconds: 6), onTimeout: () => null);
           if (device != null) {
-            // Tester la connexion avec l'IP trouvée
-            final api = AdhanBoxAPI(
-              baseUrl: 'http://${device.host}',
-              timeout: const Duration(seconds: 5),
-            );
-
+            final api = AdhanBoxAPI(baseUrl: 'http://${device.host}', timeout: const Duration(seconds: 5));
             final status = await api.getStatus();
-
             if (status.containsKey('wifi') && status.containsKey('rtc_ok')) {
-              foundIp = device.host;
               final prefs = await SharedPreferences.getInstance();
-              await prefs.setString('deviceIp', foundIp!);
-              ref.read(currentDeviceIpProvider.notifier).state = foundIp;
+              await prefs.setString('deviceIp', device.host);
+              ref.read(currentDeviceIpProvider.notifier).state = device.host;
               ref.invalidate(deviceIpProvider);
-
-              // Envoyer automatiquement la position GPS à l'ESP
               try {
-                print('DEBUG: Envoi automatique de la position GPS...');
-                final position = await Geolocator.getCurrentPosition(
-                  desiredAccuracy: LocationAccuracy.high,
-                  timeLimit: const Duration(seconds: 10),
-                );
-                await api.setLocation(
-                  position.latitude,
-                  position.longitude,
-                  position.accuracy,
-                );
-                print('DEBUG: ✓ Position GPS envoyée: ${position.latitude}, ${position.longitude}');
-              } catch (e) {
-                print('DEBUG: ✗ Échec envoi GPS automatique: $e (peut être configuré manuellement plus tard)');
-              }
-
-              // Synchroniser l'heure du RTC avec le smartphone
-              try {
-                print('DEBUG: Synchronisation de l\'heure RTC...');
-                await api.setRtcTime(DateTime.now());
-                print('DEBUG: ✓ Heure RTC synchronisée');
-              } catch (e) {
-                print('DEBUG: ✗ Échec sync RTC: $e');
-              }
-
+                final pos = await Geolocator.getCurrentPosition(
+                    desiredAccuracy: LocationAccuracy.high,
+                    timeLimit: const Duration(seconds: 10));
+                await api.setLocation(pos.latitude, pos.longitude, pos.accuracy);
+              } catch (_) {}
+              try { await api.setRtcTime(DateTime.now()); } catch (_) {}
               setState(() {
-                _deviceIp = foundIp;
-                _step = 5; // Configuration finale
+                _deviceIp = device.host;
+                _step = 5;
                 _isSearchingOnHomeNetwork = false;
                 _networkScanProgress = '';
               });
-              connected = true;
-              break;
+              return;
             }
           }
         } catch (e) {
-          lastError = e as Exception;
-          print('DEBUG: Tentative $attempt échouée: $e');
-          if (attempt < maxAttempts) {
-            await Future.delayed(const Duration(seconds: 2));
-          }
+          if (attempt < 3) await Future.delayed(const Duration(seconds: 2));
         }
       }
-
-      if (!connected) {
-        setState(() {
-          _error = 'Impossible de trouver l\'AdhanBox sur le réseau après $maxAttempts tentatives.\n\n'
-              'Assurez-vous que:\n'
-              '1. L\'ESP32 est connecté au WiFi\n'
-              '2. Le téléphone est sur le même réseau\n'
-              '3. L\'adresse IP est dans la plage 172.20.x.x ou 192.168.x.x\n\n'
-              'Vous pouvez aussi entrer l\'IP manuellement.';
-          _isSearchingOnHomeNetwork = false;
-          _networkScanProgress = '';
-        });
-      }
+      setState(() {
+        _error = 'AdhanBox introuvable sur le réseau. Vérifiez la connexion WiFi ou entrez l\'IP manuellement.';
+        _isSearchingOnHomeNetwork = false;
+        _networkScanProgress = '';
+      });
     } catch (e) {
       setState(() {
-        _error = 'Erreur: $e\n'
-            'Vous pouvez entrer l\'IP manuellement.';
+        _error = 'Erreur: $e';
         _isSearchingOnHomeNetwork = false;
         _networkScanProgress = '';
       });
     }
   }
 
-  /// Tester manuellement une IP fournie par l'utilisateur
   Future<void> _testManualIp(String ip) async {
-    setState(() {
-      _isSearchingOnHomeNetwork = true;
-      _error = null;
-    });
-
+    setState(() { _isSearchingOnHomeNetwork = true; _error = null; });
     try {
-      final api = AdhanBoxAPI(
-        baseUrl: 'http://$ip',
-        timeout: const Duration(seconds: 5),
-      );
-
+      final api = AdhanBoxAPI(baseUrl: 'http://$ip', timeout: const Duration(seconds: 5));
       final status = await api.getStatus();
-
       if (status.containsKey('wifi') && status.containsKey('rtc_ok')) {
-        // Sauvegarder l'IP
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('deviceIp', ip);
         ref.read(currentDeviceIpProvider.notifier).state = ip;
         ref.invalidate(deviceIpProvider);
-
-        // Envoyer automatiquement la position GPS à l'ESP
         try {
-          print('DEBUG: Envoi automatique de la position GPS (connexion manuelle)...');
-          final position = await Geolocator.getCurrentPosition(
-            desiredAccuracy: LocationAccuracy.high,
-            timeLimit: const Duration(seconds: 10),
-          );
-          await api.setLocation(
-            position.latitude,
-            position.longitude,
-            position.accuracy,
-          );
-          print('DEBUG: ✓ Position GPS envoyée: ${position.latitude}, ${position.longitude}');
-        } catch (e) {
-          print('DEBUG: ✗ Échec envoi GPS automatique: $e (peut être configuré manuellement plus tard)');
-        }
-
-        // Synchroniser l'heure du RTC avec le smartphone
-        try {
-          print('DEBUG: Synchronisation de l\'heure RTC (connexion manuelle)...');
-          await api.setRtcTime(DateTime.now());
-          print('DEBUG: ✓ Heure RTC synchronisée');
-        } catch (e) {
-          print('DEBUG: ✗ Échec sync RTC: $e');
-        }
-
-        setState(() {
-          _deviceIp = ip;
-          _step = 5;
-          _isSearchingOnHomeNetwork = false;
-        });
+          final pos = await Geolocator.getCurrentPosition(
+              desiredAccuracy: LocationAccuracy.high,
+              timeLimit: const Duration(seconds: 10));
+          await api.setLocation(pos.latitude, pos.longitude, pos.accuracy);
+        } catch (_) {}
+        try { await api.setRtcTime(DateTime.now()); } catch (_) {}
+        setState(() { _deviceIp = ip; _step = 5; _isSearchingOnHomeNetwork = false; });
       } else {
-        setState(() {
-          _error = 'Cette adresse ne correspond pas à un AdhanBox';
-          _isSearchingOnHomeNetwork = false;
-        });
+        setState(() { _error = 'Cette adresse ne correspond pas à un AdhanBox.'; _isSearchingOnHomeNetwork = false; });
       }
     } catch (e) {
-      setState(() {
-        _error = 'Impossible de contacter l\'appareil à $ip: $e';
-        _isSearchingOnHomeNetwork = false;
-      });
+      setState(() { _error = 'Impossible de contacter $ip.'; _isSearchingOnHomeNetwork = false; });
     }
   }
+
+  void _goBack() {
+    setState(() {
+      _error = null;
+      if (_step == 2) _step = 1;
+      else if (_step == 3) _step = 2;
+      else if (_step == 4) _step = 3;
+      else Navigator.pop(context);
+    });
+  }
+
+  // ─────────────────── BUILD ───────────────────
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Configuration AdhanBox'),
-        leading: _step > 1
-            ? IconButton(
-                icon: const Icon(Icons.arrow_back),
-                onPressed: () {
-                  if (_step == 2) {
-                    setState(() => _step = 1);
-                  } else if (_step == 3) {
-                    setState(() => _step = 2);
-                  } else {
-                    Navigator.pop(context);
-                  }
-                },
-              )
-            : null,
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          _buildStepIndicator(),
-          const SizedBox(height: 24),
+      body: CustomScrollView(
+        slivers: [
+          // ── Gradient AppBar ──
+          SliverAppBar(
+            expandedHeight: 180,
+            pinned: true,
+            backgroundColor: AppTheme.emeraldDeep,
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+              onPressed: _step > 1 ? _goBack : () => Navigator.pop(context),
+            ),
+            flexibleSpace: FlexibleSpaceBar(
+              collapseMode: CollapseMode.parallax,
+              background: _SetupHeader(step: _step),
+            ),
+            title: Text(
+              'Configuration',
+              style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 20),
+            ),
+          ),
 
-          // Étape 1: Scanner les WiFi Adhanbox
-          if (_step == 1) _buildStep1_ScanAdhanbox(),
+          // ── Step Indicator ──
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
+            sliver: SliverToBoxAdapter(
+              child: _ModernStepIndicator(current: _step, steps: _steps),
+            ),
+          ),
 
-          // Étape 2: Connexion auto au WiFi Adhanbox
-          if (_step == 2) _buildStep2_ConnectToAdhanbox(),
-
-          // Étape 3: Configurer le WiFi maison
-          if (_step == 3) _buildStep3_ConfigureHomeWifi(),
-
-          // Étape 4: Recherche sur réseau maison
-          if (_step == 4) _buildStep4_FindOnHomeNetwork(),
-
-          // Étape 5: Configuration finale
-          if (_step == 5) _buildStep5_FinalConfig(),
-
-          // Afficher les erreurs
-          if (_error != null) ...[
-            const SizedBox(height: 16),
-            Card(
-              color: Colors.red.shade50,
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Icon(Icons.error_outline, color: Colors.red),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        _error!,
-                        style: const TextStyle(color: Colors.red),
-                      ),
-                    ),
-                  ],
-                ),
+          // ── Error Banner ──
+          if (_error != null)
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+              sliver: SliverToBoxAdapter(
+                child: _ErrorBanner(message: _error!, onDismiss: () => setState(() => _error = null))
+                    .animate().fadeIn().slideY(begin: -0.1),
               ),
             ),
-          ],
+
+          // ── Step Content ──
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+            sliver: SliverToBoxAdapter(
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 300),
+                switchInCurve: Curves.easeOut,
+                switchOutCurve: Curves.easeIn,
+                transitionBuilder: (child, animation) => FadeTransition(
+                  opacity: animation,
+                  child: SlideTransition(
+                    position: Tween(begin: const Offset(0.05, 0), end: Offset.zero).animate(animation),
+                    child: child,
+                  ),
+                ),
+                child: _buildCurrentStep(),
+              ),
+            ),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildStepIndicator() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-      children: [
-        _buildStepDot(1, 'Scan'),
-        _buildStepLine(),
-        _buildStepDot(2, 'Connect'),
-        _buildStepLine(),
-        _buildStepDot(3, 'WiFi'),
-        _buildStepLine(),
-        _buildStepDot(4, 'Réseau'),
-        _buildStepLine(),
-        _buildStepDot(5, 'Config'),
-      ],
-    );
+  Widget _buildCurrentStep() {
+    switch (_step) {
+      case 1: return _buildStep1(key: const ValueKey(1));
+      case 2: return _buildStep2(key: const ValueKey(2));
+      case 3: return _buildStep3(key: const ValueKey(3));
+      case 4: return _buildStep4(key: const ValueKey(4));
+      case 5: return _buildStep5(key: const ValueKey(5));
+      default: return const SizedBox.shrink();
+    }
   }
 
-  Widget _buildStepDot(int step, String label) {
-    final isActive = _step >= step;
-    final isCurrent = _step == step;
+  // ─────────────────── STEP 1: SCAN ───────────────────
 
+  Widget _buildStep1({Key? key}) {
     return Column(
-      children: [
-        Container(
-          width: 40,
-          height: 40,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: isActive ? Colors.green : Colors.grey[300],
-            border: Border.all(
-              color: isCurrent ? Colors.green : Colors.transparent,
-              width: 2,
-            ),
-          ),
-          child: Center(
-            child: Text(
-              step.toString(),
-              style: TextStyle(
-                color: isActive ? Colors.white : Colors.grey[600],
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 10,
-            color: isActive ? Colors.green : Colors.grey,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildStepLine() {
-    return Expanded(
-      child: Container(
-        height: 2,
-        color: _step > 1 ? Colors.green : Colors.grey[300],
-      ),
-    );
-  }
-
-  /// ========== WIDGETS DES ÉTAPES ==========
-
-  /// Étape 1: Scanner les WiFi AdhanBox disponibles
-  Widget _buildStep1_ScanAdhanbox() {
-    return Column(
+      key: key,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          '📡 Recherche d\'AdhanBox',
-          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+        _StepTitle(
+          icon: Icons.search_rounded,
+          title: 'Détection d\'AdhanBox',
+          subtitle: 'Recherche des appareils à proximité',
         ),
-        const SizedBox(height: 8),
-        const Text(
-          'Scan des réseaux WiFi émis par vos appareils AdhanBox...',
-          style: TextStyle(color: Colors.grey),
-        ),
-        const SizedBox(height: 24),
-        if (_isScanningAdhanboxWifi)
-          const Center(
-            child: Column(
-              children: [
-                CircularProgressIndicator(),
-                SizedBox(height: 16),
-                Text('Scan en cours...'),
-              ],
-            ),
-          )
-        else if (_adhanboxNetworks.isEmpty)
-          Center(
-            child: Column(
-              children: [
-                const Icon(Icons.wifi_off, size: 64, color: Colors.orange),
-                const SizedBox(height: 16),
-                const Text(
-                  'Aucun AdhanBox trouvé',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  kIsWeb
-                      ? 'Le scan WiFi natif n\'est pas disponible sur navigateur. Connectez votre PC au WiFi AdhanBox puis continuez.'
-                      : 'Vérifiez que l\'ESP32 est allumé',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.grey),
-                ),
-                const SizedBox(height: 24),
-                if (kIsWeb)
-                  ElevatedButton.icon(
-                    onPressed: () {
-                      setState(() {
-                        _selectedAdhanboxWifi = 'AdhanBox (manuel)';
-                        _step = 2;
-                      });
-                      _connectToAdhanBoxWifi();
-                    },
-                    icon: const Icon(Icons.arrow_forward),
-                    label: const Text('Je suis connecté à AdhanBox'),
-                  )
-                else
-                  ElevatedButton.icon(
-                    onPressed: _scanForAdhanBoxNetworks,
-                    icon: const Icon(Icons.refresh),
-                    label: const Text('Rescanner'),
-                  ),
-              ],
-            ),
-          )
-        else
-          Column(
-            children: [
-              ..._adhanboxNetworks.map((network) {
-                final ssid = network['ssid']?.toString() ?? 'Unknown';
-                final rssi = network['rssi'] as int? ?? 0;
-                final isSelected = _selectedAdhanboxWifi == ssid;
+        const SizedBox(height: 20),
 
-                return Card(
-                  color: isSelected ? Colors.blue.shade50 : null,
-                  elevation: isSelected ? 4 : 1,
-                  margin: const EdgeInsets.only(bottom: 8),
-                  child: ListTile(
-                    leading: Icon(
-                      Icons.router,
-                      color: isSelected ? Colors.green : Colors.grey,
-                      size: 32,
-                    ),
-                    title: Text(
-                      ssid,
-                      style: TextStyle(
-                        fontWeight:
-                            isSelected ? FontWeight.bold : FontWeight.normal,
-                      ),
-                    ),
-                    subtitle: Text('Signal: $rssi dBm'),
-                    trailing: Radio<String>(
-                      value: ssid,
-                      groupValue: _selectedAdhanboxWifi,
-                      onChanged: (value) {
-                        setState(() => _selectedAdhanboxWifi = value);
-                      },
-                    ),
-                    onTap: () {
-                      setState(() => _selectedAdhanboxWifi = ssid);
-                    },
-                  ),
-                );
-              }).toList(),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: _scanForAdhanBoxNetworks,
-                      icon: const Icon(Icons.refresh),
-                      label: const Text('Rescanner'),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    flex: 2,
-                    child: ElevatedButton.icon(
-                      onPressed: _selectedAdhanboxWifi == null
-                          ? null
-                          : () {
-                              setState(() => _step = 2);
-                              _connectToAdhanBoxWifi();
-                            },
-                      icon: const Icon(Icons.arrow_forward),
-                      label: const Text('Connecter'),
-                    ),
-                  ),
-                ],
+        if (_isScanningAdhanboxWifi) ...[
+          _LoadingCard(
+            icon: Icons.radar_rounded,
+            title: 'Scan en cours...',
+            subtitle: 'Recherche des réseaux AdhanBox',
+            pulseController: _pulseController,
+          ),
+        ] else if (_adhanboxNetworks.isEmpty) ...[
+          _EmptyStateCard(
+            icon: Icons.wifi_find_rounded,
+            title: 'Aucun appareil détecté',
+            subtitle: kIsWeb
+                ? 'Connectez votre appareil au WiFi AdhanBox puis continuez.'
+                : 'Vérifiez que votre AdhanBox est allumé et proche.',
+            actions: [
+              if (kIsWeb)
+                _ActionBtn(
+                  label: 'Je suis connecté',
+                  icon: Icons.arrow_forward_rounded,
+                  onPressed: () {
+                    setState(() { _selectedAdhanboxWifi = 'AdhanBox (manuel)'; _step = 2; });
+                    _connectToAdhanBoxWifi();
+                  },
+                )
+              else
+                _ActionBtn(
+                  label: 'Relancer le scan',
+                  icon: Icons.refresh_rounded,
+                  isPrimary: false,
+                  onPressed: _scanForAdhanBoxNetworks,
+                ),
+            ],
+          ),
+        ] else ...[
+          ..._adhanboxNetworks.asMap().entries.map((e) {
+            final i = e.key;
+            final network = e.value;
+            final ssid = network['ssid']?.toString() ?? 'Inconnu';
+            final rssi = network['rssi'] as int? ?? 0;
+            final isSelected = _selectedAdhanboxWifi == ssid;
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: _WifiNetworkTile(
+                ssid: ssid,
+                rssi: rssi,
+                isSelected: isSelected,
+                isAdhanbox: true,
+                onTap: () => setState(() => _selectedAdhanboxWifi = ssid),
+              ).animate().fadeIn(delay: Duration(milliseconds: 60 * i)).slideY(begin: 0.08),
+            );
+          }),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _scanForAdhanBoxNetworks,
+                  icon: const Icon(Icons.refresh_rounded, size: 18),
+                  label: const Text('Rescanner'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                flex: 2,
+                child: ElevatedButton.icon(
+                  onPressed: _selectedAdhanboxWifi == null
+                      ? null
+                      : () { setState(() { _step = 2; _error = null; }); _connectToAdhanBoxWifi(); },
+                  icon: const Icon(Icons.arrow_forward_rounded, size: 18),
+                  label: const Text('Continuer'),
+                ),
               ),
             ],
           ),
+        ],
       ],
     );
   }
 
-  /// Étape 2: Connexion automatique au WiFi AdhanBox
-  Widget _buildStep2_ConnectToAdhanbox() {
+  // ─────────────────── STEP 2: CONNECT ───────────────────
+
+  Widget _buildStep2({Key? key}) {
     return Column(
+      key: key,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          '🔗 Connexion à l\'AdhanBox',
-          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+        _StepTitle(
+          icon: Icons.link_rounded,
+          title: 'Connexion à l\'AdhanBox',
+          subtitle: 'Réseau: $_selectedAdhanboxWifi',
         ),
-        const SizedBox(height: 8),
-        Text(
-          'Réseau sélectionné: $_selectedAdhanboxWifi',
-          style: const TextStyle(color: Colors.grey),
+        const SizedBox(height: 20),
+
+        if (_isConnectingToAdhanbox) ...[
+          _LoadingCard(
+            icon: Icons.link_rounded,
+            title: 'Connexion en cours...',
+            subtitle: 'Vérification de la communication',
+            pulseController: _pulseController,
+          ),
+        ] else ...[
+          _InstructionCard(
+            icon: Icons.smartphone_rounded,
+            iconColor: AppTheme.fajrColor,
+            title: 'Connectez-vous au réseau AdhanBox',
+            steps: [
+              'Ouvrez les paramètres WiFi de votre téléphone',
+              'Sélectionnez le réseau "$_selectedAdhanboxWifi"',
+              'Aucun mot de passe nécessaire',
+              'Revenez dans l\'application',
+            ],
+            action: OutlinedButton.icon(
+              onPressed: _openWiFiSettings,
+              icon: const Icon(Icons.settings_rounded, size: 18),
+              label: const Text('Ouvrir paramètres WiFi'),
+            ),
+          ),
+          const SizedBox(height: 20),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: _connectToAdhanBoxWifi,
+              icon: const Icon(Icons.check_circle_rounded, size: 20),
+              label: const Text('Je suis connecté'),
+              style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16)),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  // ─────────────────── STEP 3: WIFI CONFIG ───────────────────
+
+  Widget _buildStep3({Key? key}) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Column(
+      key: key,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _StepTitle(
+          icon: Icons.wifi_rounded,
+          title: 'Réseau WiFi domestique',
+          subtitle: 'Connectez l\'AdhanBox à votre WiFi',
         ),
-        const SizedBox(height: 24),
-        if (_isConnectingToAdhanbox)
-          const Center(
+        const SizedBox(height: 20),
+
+        if (_isScanningHomeWifi) ...[
+          _LoadingCard(
+            icon: Icons.wifi_find_rounded,
+            title: 'Détection des réseaux...',
+            subtitle: 'Récupération de la liste WiFi',
+            pulseController: _pulseController,
+          ),
+        ] else if (_homeWifiNetworks.isEmpty) ...[
+          _EmptyStateCard(
+            icon: Icons.wifi_off_rounded,
+            title: 'Aucun réseau détecté',
+            subtitle: 'Vérifiez que le WiFi est activé.',
+            actions: [
+              _ActionBtn(
+                label: 'Réessayer',
+                icon: Icons.refresh_rounded,
+                isPrimary: false,
+                onPressed: _getHomeWifiNetworksFromESP32,
+              ),
+            ],
+          ),
+        ] else ...[
+          // Network list
+          _ThemedCard(
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                CircularProgressIndicator(),
-                SizedBox(height: 16),
-                Text('Connexion en cours...'),
-                SizedBox(height: 8),
-                Text(
-                  'Tentative de connexion à l\'AdhanBox',
-                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.wifi_rounded, color: AppTheme.emerald, size: 18),
+                      const SizedBox(width: 8),
+                      Text('Réseaux disponibles', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+                      const Spacer(),
+                      GestureDetector(
+                        onTap: _getHomeWifiNetworksFromESP32,
+                        child: Icon(Icons.refresh_rounded, color: isDark ? AppTheme.darkTextMuted : AppTheme.lightTextMuted, size: 20),
+                      ),
+                    ],
+                  ),
+                ),
+                Divider(height: 1, color: isDark ? AppTheme.darkBorder : AppTheme.lightBorder),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 260),
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    padding: EdgeInsets.zero,
+                    itemCount: _homeWifiNetworks.length,
+                    separatorBuilder: (_, __) => Divider(
+                      height: 1, indent: 56,
+                      color: isDark ? AppTheme.darkBorder : AppTheme.lightBorder,
+                    ),
+                    itemBuilder: (_, i) {
+                      final n = _homeWifiNetworks[i];
+                      final ssid = n['ssid']?.toString() ?? '';
+                      final rssi = n['rssi'] as int? ?? 0;
+                      final isSelected = _selectedHomeWifi == ssid;
+                      final strength = _signalPercent(rssi);
+                      return ListTile(
+                        dense: true,
+                        leading: _SignalIcon(strength: strength),
+                        title: Text(ssid, style: TextStyle(fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal)),
+                        subtitle: Text('Signal $strength%', style: Theme.of(context).textTheme.bodySmall),
+                        trailing: isSelected
+                            ? const Icon(Icons.check_circle_rounded, color: AppTheme.emerald, size: 22)
+                            : Icon(Icons.circle_outlined, color: isDark ? AppTheme.darkBorder : AppTheme.lightBorder, size: 22),
+                        onTap: () => setState(() => _selectedHomeWifi = ssid),
+                      );
+                    },
+                  ),
                 ),
               ],
             ),
-          )
-        else
-          Center(
-            child: Column(
-              children: [
-                const Icon(Icons.wifi_tethering, size: 64, color: Colors.blue),
-                const SizedBox(height: 16),
-                const Text(
-                  'Action requise',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 16),
-                Card(
-                  color: Colors.blue.shade50,
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+          ),
+
+          // Password input
+          if (_selectedHomeWifi != null) ...[
+            const SizedBox(height: 16),
+            _ThemedCard(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
                       children: [
-                        const Text(
-                          '📱 Connectez-vous au réseau AdhanBox',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        OutlinedButton.icon(
-                          onPressed: _openWiFiSettings,
-                          icon: const Icon(Icons.settings, size: 20),
-                          label: const Text('Ouvrir les paramètres WiFi'),
-                          style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 20,
-                              vertical: 12,
-                            ),
-                            side: const BorderSide(color: Colors.blue, width: 2),
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        const Text(
-                          '1. Cliquez sur le bouton ci-dessus',
-                          style: TextStyle(fontSize: 14),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          '2. Sélectionnez "$_selectedAdhanboxWifi"',
-                          style: const TextStyle(fontSize: 14),
-                        ),
-                        const SizedBox(height: 4),
-                        const Text(
-                          '3. Revenez dans l\'app',
-                          style: TextStyle(fontSize: 14),
-                        ),
-                        const SizedBox(height: 12),
-                        const Text(
-                          '💡 Aucun mot de passe nécessaire',
-                          style: TextStyle(
-                            color: Colors.green,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
+                        const Icon(Icons.lock_rounded, color: AppTheme.gold, size: 18),
+                        const SizedBox(width: 8),
+                        Text('Mot de passe WiFi', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
                       ],
                     ),
-                  ),
+                    const SizedBox(height: 4),
+                    Text('Réseau: $_selectedHomeWifi', style: Theme.of(context).textTheme.bodySmall),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _passwordController,
+                      obscureText: !_showPassword,
+                      decoration: InputDecoration(
+                        hintText: 'Entrez le mot de passe',
+                        prefixIcon: const Icon(Icons.key_rounded),
+                        suffixIcon: IconButton(
+                          icon: Icon(_showPassword ? Icons.visibility_off_rounded : Icons.visibility_rounded, size: 20),
+                          onPressed: () => setState(() => _showPassword = !_showPassword),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 20),
-                ElevatedButton.icon(
-                  onPressed: _connectToAdhanBoxWifi,
-                  icon: const Icon(Icons.check_circle),
-                  label: const Text('Je suis connecté'),
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 32, vertical: 16),
-                    backgroundColor: Colors.green,
-                    foregroundColor: Colors.white,
-                    textStyle: const TextStyle(fontSize: 16),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextButton.icon(
-                  onPressed: () {
-                    setState(() {
-                      _step = 1;
-                    });
-                  },
-                  icon: const Icon(Icons.arrow_back),
-                  label: const Text('Retour au scan'),
-                ),
-              ],
+              ),
+            ).animate().fadeIn().slideY(begin: 0.06),
+          ],
+
+          const SizedBox(height: 20),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: (_selectedHomeWifi == null || _isSendingCredentials) ? null : _sendWifiCredentials,
+              icon: _isSendingCredentials
+                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  : const Icon(Icons.send_rounded, size: 18),
+              label: Text(_isSendingCredentials ? 'Configuration...' : 'Configurer l\'AdhanBox'),
+              style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16)),
             ),
           ),
+        ],
       ],
     );
   }
 
-  /// Étape 3: Configuration du WiFi maison
-  Widget _buildStep3_ConfigureHomeWifi() {
-    final passwordController = TextEditingController();
+  // ─────────────────── STEP 4: FIND DEVICE ───────────────────
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          '🏠 Configuration WiFi maison',
-          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 8),
-        const Text(
-          'Choisissez le réseau WiFi auquel l\'AdhanBox doit se connecter',
-          style: TextStyle(color: Colors.grey),
-        ),
-        const SizedBox(height: 24),
-        if (_isScanningHomeWifi)
-          const Center(
-            child: Column(
-              children: [
-                CircularProgressIndicator(),
-                SizedBox(height: 16),
-                Text('Récupération des réseaux disponibles...'),
-              ],
-            ),
-          )
-        else if (_homeWifiNetworks.isEmpty)
-          const Center(
-            child: Text('Aucun réseau détecté'),
-          )
-        else
-          Column(
-            children: [
-              const Text(
-                'Réseaux WiFi disponibles:',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 8),
-              ..._homeWifiNetworks.map((network) {
-                final ssid = network['ssid']?.toString() ?? 'Unknown';
-                final rssi = network['rssi'] as int? ?? 0;
-                final isSelected = _selectedHomeWifi == ssid;
-
-                return Card(
-                  color: isSelected ? Colors.green.shade50 : null,
-                  margin: const EdgeInsets.only(bottom: 8),
-                  child: ListTile(
-                    leading: Icon(
-                      Icons.wifi,
-                      color: isSelected ? Colors.green : Colors.grey,
-                    ),
-                    title: Text(ssid),
-                    subtitle: Text('Signal: $rssi dBm'),
-                    trailing: Radio<String>(
-                      value: ssid,
-                      groupValue: _selectedHomeWifi,
-                      onChanged: (value) {
-                        setState(() => _selectedHomeWifi = value);
-                      },
-                    ),
-                    onTap: () {
-                      setState(() => _selectedHomeWifi = ssid);
-                    },
-                  ),
-                );
-              }).toList(),
-              if (_selectedHomeWifi != null) ...[
-                const SizedBox(height: 16),
-                TextField(
-                  controller: passwordController,
-                  obscureText: true,
-                  decoration: const InputDecoration(
-                    labelText: 'Mot de passe WiFi',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.lock),
-                    helperText: 'Entrez le mot de passe de votre réseau WiFi',
-                  ),
-                ),
-              ],
-              const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: (_selectedHomeWifi == null ||
-                          _isSendingCredentials)
-                      ? null
-                      : () =>
-                          _sendWifiCredentialsToESP32(passwordController.text),
-                  icon: _isSendingCredentials
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.send),
-                  label: Text(_isSendingCredentials
-                      ? 'Envoi en cours...'
-                      : 'Configurer l\'AdhanBox'),
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                  ),
-                ),
-              ),
-            ],
-          ),
-      ],
-    );
-  }
-
-  /// Étape 4: Recherche sur le réseau maison
-  Widget _buildStep4_FindOnHomeNetwork() {
-    // Écran d'attente: demander à l'utilisateur de se reconnecter au WiFi maison
+  Widget _buildStep4({Key? key}) {
     if (!_step4ReadyToSearch) {
       return Column(
+        key: key,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            '⚠️ Reconnexion WiFi',
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          _StepTitle(
+            icon: Icons.swap_horiz_rounded,
+            title: 'Reconnexion WiFi',
+            subtitle: 'Retournez sur votre réseau domestique',
           ),
-          const SizedBox(height: 24),
-          Card(
-            color: Colors.orange.shade50,
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                children: [
-                  const Icon(Icons.wifi_off, size: 48, color: Colors.orange),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'Reconnectez-vous à votre WiFi maison',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  OutlinedButton.icon(
-                    onPressed: _openWiFiSettings,
-                    icon: const Icon(Icons.settings, size: 20),
-                    label: const Text('Ouvrir les paramètres WiFi'),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 12,
-                      ),
-                      side: const BorderSide(color: Colors.orange, width: 2),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      border: Border.all(color: Colors.orange),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          '1. Cliquez sur "Ouvrir paramètres WiFi"',
-                          style: TextStyle(fontSize: 14),
-                        ),
-                        SizedBox(height: 4),
-                        Text(
-                          '2. Sélectionnez votre WiFi maison',
-                          style: TextStyle(fontSize: 14),
-                        ),
-                        SizedBox(height: 4),
-                        Text(
-                          '3. Revenez ici',
-                          style: TextStyle(fontSize: 14),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  ElevatedButton.icon(
-                    onPressed: () {
-                      setState(() => _step4ReadyToSearch = true);
-                      _findESP32OnHomeNetwork();
-                    },
-                    icon: const Icon(Icons.search),
-                    label: const Text('Chercher l\'AdhanBox'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.orange,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 32,
-                        vertical: 14,
-                      ),
-                      textStyle: const TextStyle(fontSize: 16),
-                    ),
-                  ),
-                ],
-              ),
+          const SizedBox(height: 20),
+          _InstructionCard(
+            icon: Icons.wifi_rounded,
+            iconColor: AppTheme.gold,
+            title: 'Reconnectez votre téléphone',
+            steps: [
+              'L\'AdhanBox se connecte à votre WiFi domestique',
+              'Reconnectez votre téléphone au même réseau',
+              'Appuyez sur "Rechercher" quand vous êtes prêt',
+            ],
+            action: OutlinedButton.icon(
+              onPressed: _openWiFiSettings,
+              icon: const Icon(Icons.settings_rounded, size: 18),
+              label: const Text('Ouvrir paramètres WiFi'),
+            ),
+          ),
+          const SizedBox(height: 20),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: () {
+                setState(() => _step4ReadyToSearch = true);
+                _findESP32OnHomeNetwork();
+              },
+              icon: const Icon(Icons.search_rounded, size: 20),
+              label: const Text('Rechercher l\'AdhanBox'),
+              style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16)),
             ),
           ),
         ],
       );
     }
 
-    // Écran de recherche principal
     return Column(
+      key: key,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          '🔍 Recherche sur réseau maison',
-          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+        _StepTitle(
+          icon: Icons.devices_rounded,
+          title: 'Recherche sur le réseau',
+          subtitle: 'Localisation de l\'AdhanBox...',
         ),
-        const SizedBox(height: 8),
-        const Text(
-          'L\'AdhanBox se connecte à votre WiFi...',
-          style: TextStyle(color: Colors.grey),
-        ),
-        const SizedBox(height: 24),
-        Center(
-          child: _isSearchingOnHomeNetwork
-              ? Column(
-                  children: [
-                    const CircularProgressIndicator(),
-                    const SizedBox(height: 16),
-                    const Text('Recherche en cours...'),
-                    if (_networkScanProgress.isNotEmpty) ...[
-                      const SizedBox(height: 8),
-                      Text(
-                        _networkScanProgress,
-                        style:
-                            const TextStyle(fontSize: 12, color: Colors.blue),
-                        textAlign: TextAlign.center,
-                      ),
+        const SizedBox(height: 20),
+
+        if (_isSearchingOnHomeNetwork) ...[
+          _LoadingCard(
+            icon: Icons.devices_rounded,
+            title: 'Recherche en cours...',
+            subtitle: _networkScanProgress.isNotEmpty ? _networkScanProgress : 'Scan du réseau local',
+            pulseController: _pulseController,
+          ),
+        ] else ...[
+          // Manual IP entry
+          _ThemedCard(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.edit_rounded, color: AppTheme.fajrColor, size: 18),
+                      const SizedBox(width: 8),
+                      Text('Saisie manuelle', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
                     ],
-                    const SizedBox(height: 8),
-                    const Text(
-                      'Cela peut prendre jusqu\'à 1 minute',
-                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Si la détection automatique échoue, entrez l\'adresse IP affichée sur le moniteur série.',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _manualIpController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      hintText: '192.168.1.100',
+                      prefixIcon: Icon(Icons.router_rounded),
                     ),
-                  ],
-                )
-              : _deviceIp != null
-                  ? Column(
-                      children: [
-                        const Icon(Icons.check_circle,
-                            size: 64, color: Colors.green),
-                        const SizedBox(height: 16),
-                        const Text(
-                          'AdhanBox trouvée !',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Adresse IP: $_deviceIp',
-                          style: const TextStyle(color: Colors.grey),
-                        ),
-                        const SizedBox(height: 24),
-                        ElevatedButton.icon(
-                          onPressed: () {
-                            setState(() => _step = 5);
-                          },
-                          icon: const Icon(Icons.arrow_forward),
-                          label: const Text('Continuer'),
-                        ),
-                      ],
-                    )
-                  : Column(
-                      children: [
-                        Card(
-                          color: Colors.blue.shade50,
-                          child: const Padding(
-                            padding: EdgeInsets.all(16),
-                            child: Column(
-                              children: [
-                                Icon(Icons.info_outline,
-                                    size: 48, color: Colors.blue),
-                                SizedBox(height: 16),
-                                Text(
-                                  'L\'AdhanBox doit maintenant se connecter à votre WiFi.',
-                                  textAlign: TextAlign.center,
-                                ),
-                                SizedBox(height: 8),
-                                Text(
-                                  'Reconnectez votre téléphone à votre WiFi habituel,',
-                                  style: TextStyle(fontSize: 12),
-                                  textAlign: TextAlign.center,
-                                ),
-                                Text(
-                                  'puis appuyez sur "Rechercher"',
-                                  style: TextStyle(fontSize: 12),
-                                  textAlign: TextAlign.center,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        ElevatedButton.icon(
-                          onPressed: _findESP32OnHomeNetwork,
-                          icon: const Icon(Icons.search),
-                          label: const Text('Rechercher l\'AdhanBox'),
-                          style: ElevatedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 24,
-                              vertical: 12,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 24),
-                        const Divider(),
-                        const SizedBox(height: 16),
-                        const Text(
-                          'L\'AdhanBox n\'est pas trouvée automatiquement ?',
-                          style: TextStyle(fontWeight: FontWeight.bold),
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 8),
-                        const Text(
-                          'Vous pouvez entrer son adresse IP manuellement:',
-                          style: TextStyle(fontSize: 12, color: Colors.grey),
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 16),
-                        Container(
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: Colors.grey.shade50,
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.grey.shade300),
-                          ),
-                          child: Column(
-                            children: [
-                              TextField(
-                                controller: _manualIpController,
-                                keyboardType: TextInputType.number,
-                                decoration: const InputDecoration(
-                                  labelText: 'Adresse IP',
-                                  hintText: '192.168.1.100',
-                                  border: OutlineInputBorder(),
-                                  prefixIcon: Icon(Icons.language),
-                                  helperText:
-                                      'Ex: 192.168.1.100 ou 192.168.0.50',
-                                ),
-                              ),
-                              const SizedBox(height: 12),
-                              ElevatedButton.icon(
-                                onPressed: () {
-                                  final ip = _manualIpController.text.trim();
-                                  if (ip.isNotEmpty) {
-                                    _testManualIp(ip);
-                                  }
-                                },
-                                icon: const Icon(Icons.check),
-                                label: const Text('Tester cette adresse'),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.orange,
-                                  foregroundColor: Colors.white,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        final ip = _manualIpController.text.trim();
+                        if (ip.isNotEmpty) _testManualIp(ip);
+                      },
+                      icon: const Icon(Icons.check_rounded, size: 18),
+                      label: const Text('Tester cette adresse'),
                     ),
-        ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: _findESP32OnHomeNetwork,
+              icon: const Icon(Icons.search_rounded, size: 18),
+              label: const Text('Relancer la recherche'),
+              style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16)),
+            ),
+          ),
+        ],
       ],
     );
   }
 
-  /// Étape 5: Configuration finale
-  Widget _buildStep5_FinalConfig() {
+  // ─────────────────── STEP 5: COMPLETE ───────────────────
+
+  Widget _buildStep5({Key? key}) {
+    return Column(
+      key: key,
+      children: [
+        const SizedBox(height: 20),
+        Container(
+          width: 96,
+          height: 96,
+          decoration: BoxDecoration(
+            color: AppTheme.emerald.withOpacity(0.12),
+            shape: BoxShape.circle,
+          ),
+          child: const Icon(Icons.check_circle_rounded, color: AppTheme.emerald, size: 54),
+        ).animate().scale(duration: 500.ms, curve: Curves.elasticOut),
+        const SizedBox(height: 24),
+        Text(
+          'Configuration réussie !',
+          style: Theme.of(context).textTheme.headlineMedium,
+          textAlign: TextAlign.center,
+        ).animate().fadeIn(delay: 200.ms),
+        const SizedBox(height: 8),
+        Text(
+          'AdhanBox connectée sur $_deviceIp',
+          style: Theme.of(context).textTheme.bodyMedium,
+          textAlign: TextAlign.center,
+        ).animate().fadeIn(delay: 300.ms),
+        const SizedBox(height: 32),
+
+        // Next steps card
+        _ThemedCard(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.auto_awesome_rounded, color: AppTheme.gold, size: 20),
+                    const SizedBox(width: 10),
+                    Text('Prochaines étapes', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                _NextStepItem(icon: Icons.mosque_rounded, color: AppTheme.emerald, label: 'Configurer votre mosquée Mawaqit'),
+                const SizedBox(height: 10),
+                _NextStepItem(icon: Icons.calculate_rounded, color: AppTheme.fajrColor, label: 'Choisir la méthode de calcul'),
+                const SizedBox(height: 10),
+                _NextStepItem(icon: Icons.volume_up_rounded, color: AppTheme.asrColor, label: 'Ajuster le volume de l\'adhan'),
+                const SizedBox(height: 10),
+                _NextStepItem(icon: Icons.light_rounded, color: AppTheme.gold, label: 'Personnaliser l\'éclairage LED'),
+              ],
+            ),
+          ),
+        ).animate().fadeIn(delay: 400.ms).slideY(begin: 0.08),
+
+        const SizedBox(height: 24),
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton.icon(
+            onPressed: () {
+              Navigator.of(context).pushReplacement(
+                MaterialPageRoute(builder: (_) => const CalculationSetupScreen()),
+              );
+            },
+            icon: const Icon(Icons.tune_rounded, size: 18),
+            label: const Text('Configurer les horaires'),
+            style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16)),
+          ),
+        ).animate().fadeIn(delay: 500.ms),
+        const SizedBox(height: 10),
+        SizedBox(
+          width: double.infinity,
+          child: TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Revenir à l\'accueil'),
+          ),
+        ).animate().fadeIn(delay: 550.ms),
+      ],
+    );
+  }
+
+  int _signalPercent(int rssi) {
+    if (rssi >= -50) return 100;
+    if (rssi <= -100) return 0;
+    return ((rssi + 100) * 2).clamp(0, 100);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  REUSABLE THEMED WIDGETS
+// ═══════════════════════════════════════════════════════════════
+
+class _StepMeta {
+  final IconData icon;
+  final String label;
+  const _StepMeta({required this.icon, required this.label});
+}
+
+// ─────────────────── HEADER ───────────────────
+
+class _SetupHeader extends StatelessWidget {
+  final int step;
+  const _SetupHeader({required this.step});
+
+  static const _titles = [
+    'Détection', 'Connexion', 'Configuration WiFi', 'Recherche', 'Terminé'
+  ];
+  static const _subtitles = [
+    'Recherche des appareils',
+    'Liaison avec l\'AdhanBox',
+    'Réseau domestique',
+    'Localisation sur le réseau',
+    'Tout est prêt !',
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final idx = (step - 1).clamp(0, 4);
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF064E3B), Color(0xFF065F46), Color(0xFF059669)],
+        ),
+      ),
+      child: Stack(
+        children: [
+          Positioned.fill(child: CustomPaint(painter: _GeomPainter())),
+          Positioned(
+            bottom: 24,
+            left: 20,
+            right: 20,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Étape $step sur 5',
+                  style: GoogleFonts.inter(color: Colors.white70, fontSize: 13),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  _titles[idx],
+                  style: GoogleFonts.poppins(
+                    color: Colors.white,
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  _subtitles[idx],
+                  style: GoogleFonts.inter(color: Colors.white70, fontSize: 14),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────── STEP INDICATOR ───────────────────
+
+class _ModernStepIndicator extends StatelessWidget {
+  final int current;
+  final List<_StepMeta> steps;
+  const _ModernStepIndicator({required this.current, required this.steps});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Row(
+      children: List.generate(steps.length * 2 - 1, (i) {
+        if (i.isOdd) {
+          final stepBefore = (i ~/ 2) + 1;
+          final done = current > stepBefore;
+          return Expanded(
+            child: Container(
+              height: 2,
+              margin: const EdgeInsets.symmetric(horizontal: 2),
+              decoration: BoxDecoration(
+                color: done ? AppTheme.emerald : (isDark ? AppTheme.darkBorder : AppTheme.lightBorder),
+                borderRadius: BorderRadius.circular(1),
+              ),
+            ),
+          );
+        }
+        final stepIdx = i ~/ 2;
+        final stepNum = stepIdx + 1;
+        final isActive = current >= stepNum;
+        final isCurrent = current == stepNum;
+        final meta = steps[stepIdx];
+
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 300),
+              width: isCurrent ? 40 : 32,
+              height: isCurrent ? 40 : 32,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: isActive
+                    ? (isCurrent ? AppTheme.emerald : AppTheme.emerald.withOpacity(0.15))
+                    : (isDark ? AppTheme.darkSurface : AppTheme.lightBg),
+                border: Border.all(
+                  color: isActive ? AppTheme.emerald : (isDark ? AppTheme.darkBorder : AppTheme.lightBorder),
+                  width: isCurrent ? 2 : 1,
+                ),
+              ),
+              child: Icon(
+                isActive && !isCurrent ? Icons.check_rounded : meta.icon,
+                color: isActive ? (isCurrent ? Colors.white : AppTheme.emerald) : (isDark ? AppTheme.darkTextMuted : AppTheme.lightTextMuted),
+                size: isCurrent ? 20 : 16,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              meta.label,
+              style: GoogleFonts.inter(
+                fontSize: 9,
+                fontWeight: isCurrent ? FontWeight.w700 : FontWeight.w500,
+                color: isActive
+                    ? (isCurrent ? AppTheme.emerald : (isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary))
+                    : (isDark ? AppTheme.darkTextMuted : AppTheme.lightTextMuted),
+              ),
+            ),
+          ],
+        );
+      }),
+    );
+  }
+}
+
+// ─────────────────── STEP TITLE ───────────────────
+
+class _StepTitle extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  const _StepTitle({required this.icon, required this.title, required this.subtitle});
+
+  @override
+  Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          '✅ Configuration terminée !',
-          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+        Row(
+          children: [
+            Icon(icon, color: AppTheme.emerald, size: 22),
+            const SizedBox(width: 10),
+            Expanded(child: Text(title, style: Theme.of(context).textTheme.headlineSmall)),
+          ],
         ),
-        const SizedBox(height: 8),
-        const Text(
-          'Votre AdhanBox est maintenant connectée à Internet',
-          style: TextStyle(color: Colors.grey),
-        ),
-        const SizedBox(height: 24),
-        Center(
-          child: Column(
-            children: [
-              const Icon(Icons.celebration, size: 64, color: Colors.green),
-              const SizedBox(height: 16),
-              Text(
-                'Appareil configuré: $_deviceIp',
-                style: const TextStyle(fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 24),
-              const Card(
-                child: Padding(
-                  padding: EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '🕌 Prochaines étapes:',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      SizedBox(height: 8),
-                      Text('• Configurer Mawaqit pour votre mosquée'),
-                      Text('• Régler le fuseau horaire'),
-                      Text('• Ajuster le volume et la luminosité'),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: () {
-                    Navigator.of(context).pushReplacement(
-                      MaterialPageRoute(
-                        builder: (_) => const CalculationSetupScreen(),
-                      ),
-                    );
-                  },
-                  icon: const Icon(Icons.tune),
-                  label: const Text('Configurer les horaires'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF1B5E20),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 8),
-              TextButton(
-                onPressed: () {
-                  Navigator.of(context).pop();
-                },
-                child: const Text('Terminer et revenir à l\'accueil'),
-              ),
-            ],
-          ),
+        const SizedBox(height: 4),
+        Padding(
+          padding: const EdgeInsets.only(left: 32),
+          child: Text(subtitle, style: Theme.of(context).textTheme.bodySmall),
         ),
       ],
     );
   }
+}
+
+// ─────────────────── THEMED CARD ───────────────────
+
+class _ThemedCard extends StatelessWidget {
+  final Widget child;
+  const _ThemedCard({required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      decoration: BoxDecoration(
+        color: isDark ? AppTheme.darkCard : AppTheme.lightCard,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: isDark ? AppTheme.darkBorder : AppTheme.lightBorder),
+      ),
+      child: ClipRRect(borderRadius: BorderRadius.circular(16), child: child),
+    );
+  }
+}
+
+// ─────────────────── LOADING CARD ───────────────────
+
+class _LoadingCard extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final AnimationController pulseController;
+  const _LoadingCard({required this.icon, required this.title, required this.subtitle, required this.pulseController});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return _ThemedCard(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 24),
+        child: Column(
+          children: [
+            AnimatedBuilder(
+              animation: pulseController,
+              builder: (_, child) => Opacity(
+                opacity: 0.5 + 0.5 * pulseController.value,
+                child: child,
+              ),
+              child: Container(
+                width: 72,
+                height: 72,
+                decoration: BoxDecoration(
+                  color: AppTheme.emerald.withOpacity(0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icon, color: AppTheme.emerald, size: 36),
+              ),
+            ),
+            const SizedBox(height: 20),
+            Text(title, style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 6),
+            Text(subtitle, style: Theme.of(context).textTheme.bodySmall, textAlign: TextAlign.center),
+            const SizedBox(height: 20),
+            SizedBox(
+              width: 120,
+              child: LinearProgressIndicator(
+                backgroundColor: isDark ? AppTheme.darkBorder : AppTheme.lightBorder,
+                color: AppTheme.emerald,
+                borderRadius: BorderRadius.circular(4),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────── EMPTY STATE CARD ───────────────────
+
+class _EmptyStateCard extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final List<Widget> actions;
+  const _EmptyStateCard({required this.icon, required this.title, required this.subtitle, this.actions = const []});
+
+  @override
+  Widget build(BuildContext context) {
+    return _ThemedCard(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 36, horizontal: 24),
+        child: Column(
+          children: [
+            Container(
+              width: 72,
+              height: 72,
+              decoration: BoxDecoration(
+                color: AppTheme.gold.withOpacity(0.12),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: AppTheme.gold, size: 36),
+            ),
+            const SizedBox(height: 20),
+            Text(title, style: Theme.of(context).textTheme.titleLarge, textAlign: TextAlign.center),
+            const SizedBox(height: 6),
+            Text(subtitle, style: Theme.of(context).textTheme.bodySmall, textAlign: TextAlign.center),
+            if (actions.isNotEmpty) ...[
+              const SizedBox(height: 24),
+              ...actions,
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────── INSTRUCTION CARD ───────────────────
+
+class _InstructionCard extends StatelessWidget {
+  final IconData icon;
+  final Color iconColor;
+  final String title;
+  final List<String> steps;
+  final Widget? action;
+  const _InstructionCard({required this.icon, required this.iconColor, required this.title, required this.steps, this.action});
+
+  @override
+  Widget build(BuildContext context) {
+    return _ThemedCard(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: iconColor.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(11),
+                  ),
+                  child: Icon(icon, color: iconColor, size: 20),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(title, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            ...steps.asMap().entries.map((e) {
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: 24,
+                      height: 24,
+                      decoration: BoxDecoration(
+                        color: AppTheme.emerald.withOpacity(0.1),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Center(
+                        child: Text(
+                          '${e.key + 1}',
+                          style: GoogleFonts.inter(color: AppTheme.emerald, fontSize: 12, fontWeight: FontWeight.w700),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Text(e.value, style: Theme.of(context).textTheme.bodyMedium),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }),
+            if (action != null) ...[
+              const SizedBox(height: 8),
+              SizedBox(width: double.infinity, child: action),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────── WIFI TILE ───────────────────
+
+class _WifiNetworkTile extends StatelessWidget {
+  final String ssid;
+  final int rssi;
+  final bool isSelected;
+  final bool isAdhanbox;
+  final VoidCallback onTap;
+  const _WifiNetworkTile({required this.ssid, required this.rssi, required this.isSelected, this.isAdhanbox = false, required this.onTap});
+
+  int get _signalPercent {
+    if (rssi >= -50) return 100;
+    if (rssi <= -100) return 0;
+    return ((rssi + 100) * 2).clamp(0, 100);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? AppTheme.emerald.withOpacity(isDark ? 0.12 : 0.06)
+              : (isDark ? AppTheme.darkCard : AppTheme.lightCard),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isSelected ? AppTheme.emerald.withOpacity(0.5) : (isDark ? AppTheme.darkBorder : AppTheme.lightBorder),
+            width: isSelected ? 1.5 : 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: (isAdhanbox ? AppTheme.emerald : AppTheme.fajrColor).withOpacity(0.12),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: isAdhanbox
+                  ? const Icon(Icons.mosque_rounded, color: AppTheme.emerald, size: 22)
+                  : _SignalIcon(strength: _signalPercent, size: 22),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(ssid, style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                    color: isSelected ? AppTheme.emerald : null,
+                  )),
+                  Text('$rssi dBm · $_signalPercent%', style: Theme.of(context).textTheme.bodySmall),
+                ],
+              ),
+            ),
+            isSelected
+                ? const Icon(Icons.check_circle_rounded, color: AppTheme.emerald, size: 24)
+                : Icon(Icons.circle_outlined, color: isDark ? AppTheme.darkBorder : AppTheme.lightBorder, size: 24),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────── SIGNAL ICON ───────────────────
+
+class _SignalIcon extends StatelessWidget {
+  final int strength;
+  final double size;
+  const _SignalIcon({required this.strength, this.size = 20});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = strength >= 75 ? AppTheme.emerald : (strength >= 40 ? AppTheme.gold : Colors.red);
+    final icon = strength >= 75
+        ? Icons.signal_wifi_4_bar_rounded
+        : (strength >= 40 ? Icons.network_wifi_3_bar_rounded : Icons.signal_wifi_0_bar_rounded);
+    return Icon(icon, color: color, size: size);
+  }
+}
+
+// ─────────────────── ERROR BANNER ───────────────────
+
+class _ErrorBanner extends StatelessWidget {
+  final String message;
+  final VoidCallback? onDismiss;
+  const _ErrorBanner({required this.message, this.onDismiss});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.red.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.red.withOpacity(0.25)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.error_outline_rounded, color: Colors.red, size: 18),
+          const SizedBox(width: 10),
+          Expanded(child: Text(message, style: const TextStyle(color: Colors.red, fontSize: 13))),
+          if (onDismiss != null)
+            GestureDetector(
+              onTap: onDismiss,
+              child: const Icon(Icons.close_rounded, color: Colors.red, size: 16),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────── ACTION BUTTON ───────────────────
+
+class _ActionBtn extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final VoidCallback onPressed;
+  final bool isPrimary;
+  const _ActionBtn({required this.label, required this.icon, required this.onPressed, this.isPrimary = true});
+
+  @override
+  Widget build(BuildContext context) {
+    if (isPrimary) {
+      return ElevatedButton.icon(onPressed: onPressed, icon: Icon(icon, size: 18), label: Text(label));
+    }
+    return OutlinedButton.icon(onPressed: onPressed, icon: Icon(icon, size: 18), label: Text(label));
+  }
+}
+
+// ─────────────────── NEXT STEP ITEM ───────────────────
+
+class _NextStepItem extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final String label;
+  const _NextStepItem({required this.icon, required this.color, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Container(
+          width: 32,
+          height: 32,
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.12),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(icon, color: color, size: 16),
+        ),
+        const SizedBox(width: 12),
+        Expanded(child: Text(label, style: Theme.of(context).textTheme.bodyMedium)),
+      ],
+    );
+  }
+}
+
+// ─────────────────── GEOMETRIC PATTERN ───────────────────
+
+class _GeomPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.white.withOpacity(0.04)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1;
+    const step = 50.0;
+    for (double x = 0; x < size.width + step; x += step) {
+      for (double y = 0; y < size.height + step; y += step) {
+        canvas.drawCircle(Offset(x, y), 18, paint);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

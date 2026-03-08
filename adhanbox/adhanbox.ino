@@ -89,6 +89,7 @@ bool forcePlayTrack1 = false;
 int ledBrightness = 50;
 // Track sequence: after adhan finishes, play duaa (track 3)
 bool shouldPlayDuaaNext = false;
+int expectedAdhanTrackForDuaa = 0;
 
 // LED / button state
 // Scene mapping:
@@ -136,6 +137,7 @@ void stopConfigAP();
 void getCalculationAngles(double &fajrAngle, double &ishaAngle, String &methodName);
 void scanI2CBusAndReport();
 void probeIP5306();
+bool getPrayerPlaybackForIndex(int prayerIndex, int &trackToPlay, bool &playDuaaAfter);
 
 // LED timing and bit-bang functions removed - using Adafruit_NeoPixel instead
 
@@ -2132,6 +2134,58 @@ bool computePrayerTimesForDate(const DateTime &date, double outTimes[6], int &tz
   double Hasr_deg; bool okAsr = hourAngleForZenith(asrZenith, latRad, decl, Hasr_deg);
   double asr = okAsr ? (solarNoon + 4.0 * Hasr_deg) : NAN;
   outTimes[0]=fajr; outTimes[1]=sunrise; outTimes[2]=dhuhr; outTimes[3]=asr; outTimes[4]=sunset; outTimes[5]=isha;
+
+  // Apply user fine-tuning offsets (minutes) on calculated times too.
+  prefs.begin("adhancfg", true);
+  int offsets[6] = {
+    prefs.getInt("mq_off_fajr", 0),
+    prefs.getInt("mq_off_sunrise", 0),
+    prefs.getInt("mq_off_dhuhr", 0),
+    prefs.getInt("mq_off_asr", 0),
+    prefs.getInt("mq_off_maghrib", 0),
+    prefs.getInt("mq_off_isha", 0)
+  };
+  prefs.end();
+
+  for(int i=0;i<6;i++){
+    if(!isnan(outTimes[i])) outTimes[i] += offsets[i];
+  }
+  return true;
+}
+
+// Determine adhan playback parameters for a prayer index.
+// prayerIndex mapping in this firmware: 1=fajr,2=sunrise,3=dhuhr,4=asr,5=maghrib,6=isha
+// Returns false for non-adhan entries (e.g., sunrise).
+bool getPrayerPlaybackForIndex(int prayerIndex, int &trackToPlay, bool &playDuaaAfter){
+  // Sunrise is not an adhan.
+  if(prayerIndex == 2) return false;
+
+  // Defaults for backward compatibility.
+  trackToPlay = (prayerIndex == 1) ? 2 : 1;
+  playDuaaAfter = true;
+
+  prefs.begin("adhancfg", true);
+  bool forceTrack1 = prefs.getBool("force_t1", forcePlayTrack1);
+
+  if(forceTrack1){
+    trackToPlay = 1;
+  }else{
+    if(prayerIndex == 1) trackToPlay = prefs.getInt("adhan_fajr_track", 2);
+    else if(prayerIndex == 3) trackToPlay = prefs.getInt("adhan_dhuhr_track", 1);
+    else if(prayerIndex == 4) trackToPlay = prefs.getInt("adhan_asr_track", 1);
+    else if(prayerIndex == 5) trackToPlay = prefs.getInt("adhan_maghrib_track", 1);
+    else if(prayerIndex == 6) trackToPlay = prefs.getInt("adhan_isha_track", 1);
+  }
+
+  if(prayerIndex == 1) playDuaaAfter = prefs.getBool("adhan_fajr_duaa", true);
+  else if(prayerIndex == 3) playDuaaAfter = prefs.getBool("adhan_dhuhr_duaa", true);
+  else if(prayerIndex == 4) playDuaaAfter = prefs.getBool("adhan_asr_duaa", true);
+  else if(prayerIndex == 5) playDuaaAfter = prefs.getBool("adhan_maghrib_duaa", true);
+  else if(prayerIndex == 6) playDuaaAfter = prefs.getBool("adhan_isha_duaa", true);
+
+  prefs.end();
+
+  trackToPlay = constrain(trackToPlay, 1, 11);
   return true;
 }
 
@@ -2346,70 +2400,63 @@ void IRAM_ATTR ds3231_isr(){
 // Compute the next prayer time (DateTime) and index (1..6) from now
 // Returns true if found and fills nextDt and idx
 bool computeNextPrayer(const DateTime &now, DateTime &nextDt, int &idx){
+  // 1) Prefer fresh stored Mawaqit times when available (already offset-adjusted at sync time).
+  prefs.begin("adhancfg", true);
+  String mq[6] = {
+    prefs.getString("mq_fajr", ""),
+    prefs.getString("mq_sunrise", ""),
+    prefs.getString("mq_dhuhr", ""),
+    prefs.getString("mq_asr", ""),
+    prefs.getString("mq_maghrib", ""),
+    prefs.getString("mq_isha", "")
+  };
+  unsigned long mq_sync_ts = prefs.getULong("mq_sync_ts", 0);
+  prefs.end();
+
+  unsigned long now_epoch = now.unixtime();
+  unsigned long age_sec = (mq_sync_ts > 0 && now_epoch >= mq_sync_ts) ? (now_epoch - mq_sync_ts) : 999999UL;
+  bool mqValid = (mq[0].length() >= 5) && (mq[5].length() >= 5) && (age_sec < 25UL * 3600UL);
+
+  auto parseHHMM = [&](const String &t, int &h, int &m)->bool {
+    if(t.length() < 5) return false;
+    h = t.substring(0,2).toInt();
+    m = t.substring(3,5).toInt();
+    return (h >= 0 && h < 24 && m >= 0 && m < 60);
+  };
+
+  if(mqValid){
+    for(int i = 0; i < 6; i++){
+      int h = 0, m = 0;
+      if(!parseHHMM(mq[i], h, m)) continue;
+      DateTime cand(now.year(), now.month(), now.day(), h, m, 0);
+      if(cand.unixtime() > now.unixtime() + 5){
+        nextDt = cand;
+        idx = i + 1;
+        return true;
+      }
+    }
+    // if all today's times are past, use tomorrow's first valid Mawaqit time
+    for(int i = 0; i < 6; i++){
+      int h = 0, m = 0;
+      if(!parseHHMM(mq[i], h, m)) continue;
+      DateTime tomorrow = now + TimeSpan(1,0,0,0);
+      nextDt = DateTime(tomorrow.year(), tomorrow.month(), tomorrow.day(), h, m, 0);
+      idx = i + 1;
+      return true;
+    }
+  }
+
+  // 2) Fallback to calculated times (with fine-tuning offsets applied).
   double timesToday[6];
   double timesTomorrow[6];
-  // helper to compute minutes since midnight into DateTime
-  auto minutesToDateTime = [&](const DateTime &d, double mins)->DateTime{
-    int m = (int)round(mins);
-    m = (m + 24*60) % (24*60);
-    int h = m/60; int mm = m%60;
-    return DateTime(d.year(), d.month(), d.day(), h, mm, 0);
-  };
-  // Compute today
-  {
-    double lat, lon, acc;
-    if(!loadStoredLocation(lat, lon, acc)) return false;
-    int doy = dayOfYear(now);
-    double decl, eqt;
-    solarDeclinationAndEqtime(doy, decl, eqt);
-    prefs.begin("adhancfg", true);
-    int tzOffsetMin = prefs.getInt("tz_offset_min", 0x7fffffff);
-    prefs.end();
-    int tzMin = (tzOffsetMin != 0x7fffffff) ? tzOffsetMin : (int)round(lon/15.0)*60;
-    double solarNoon = 720.0 - 4.0 * lon - eqt + tzMin;
-    double Hsun_deg; bool okSun = hourAngleForZenith(90.833, deg2rad(lat), decl, Hsun_deg);
-    double sunrise = okSun ? solarNoon - 4.0 * Hsun_deg : NAN;
-    double sunset  = okSun ? solarNoon + 4.0 * Hsun_deg : NAN;
-    double Hfajr, Hisha; bool okF = hourAngleForZenith(108.0, deg2rad(lat), decl, Hfajr); // 90+18
-    bool okI = hourAngleForZenith(107.0, deg2rad(lat), decl, Hisha); // 90+17
-    double fajr = okF ? (solarNoon - 4.0 * Hfajr) : NAN;
-    double isha = okI ? (solarNoon + 4.0 * Hisha) : NAN;
-    double dhuhr = solarNoon;
-    double latRad = deg2rad(lat);
-    double angle = atan(1.0 / (1.0 + fabs(tan(latRad - decl))));
-    double asrZenith = 90.0 - rad2deg(angle);
-    double Hasr_deg; bool okAsr = hourAngleForZenith(asrZenith, latRad, decl, Hasr_deg);
-    double asr = okAsr ? (solarNoon + 4.0 * Hasr_deg) : NAN;
-    timesToday[0]=fajr; timesToday[1]=sunrise; timesToday[2]=dhuhr; timesToday[3]=asr; timesToday[4]=sunset; timesToday[5]=isha;
-  }
-  // Compute tomorrow by adding one day
+  int tzDummy = 0;
+  String tzSrc;
+
+  if(!computePrayerTimesForDate(now, timesToday, tzDummy, tzSrc)) return false;
+
   DateTime tomorrow = now + TimeSpan(1,0,0,0);
-  {
-    double lat, lon, acc;
-    loadStoredLocation(lat, lon, acc);
-    int doy = dayOfYear(tomorrow);
-    double decl, eqt;
-    solarDeclinationAndEqtime(doy, decl, eqt);
-    prefs.begin("adhancfg", true);
-    int tzOffsetMin = prefs.getInt("tz_offset_min", 0x7fffffff);
-    prefs.end();
-    int tzMin = (tzOffsetMin != 0x7fffffff) ? tzOffsetMin : (int)round(lon/15.0)*60;
-    double solarNoon = 720.0 - 4.0 * lon - eqt + tzMin;
-    double Hsun_deg; bool okSun = hourAngleForZenith(90.833, deg2rad(lat), decl, Hsun_deg);
-    double sunrise = okSun ? solarNoon - 4.0 * Hsun_deg : NAN;
-    double sunset  = okSun ? solarNoon + 4.0 * Hsun_deg : NAN;
-    double Hfajr, Hisha; bool okF = hourAngleForZenith(108.0, deg2rad(lat), decl, Hfajr);
-    bool okI = hourAngleForZenith(107.0, deg2rad(lat), decl, Hisha);
-    double fajr = okF ? (solarNoon - 4.0 * Hfajr) : NAN;
-    double isha = okI ? (solarNoon + 4.0 * Hisha) : NAN;
-    double dhuhr = solarNoon;
-    double latRad = deg2rad(lat);
-    double angle = atan(1.0 / (1.0 + fabs(tan(latRad - decl))));
-    double asrZenith = 90.0 - rad2deg(angle);
-    double Hasr_deg; bool okAsr = hourAngleForZenith(asrZenith, latRad, decl, Hasr_deg);
-    double asr = okAsr ? (solarNoon + 4.0 * Hasr_deg) : NAN;
-    timesTomorrow[0]=fajr; timesTomorrow[1]=sunrise; timesTomorrow[2]=dhuhr; timesTomorrow[3]=asr; timesTomorrow[4]=sunset; timesTomorrow[5]=isha;
-  }
+  if(!computePrayerTimesForDate(tomorrow, timesTomorrow, tzDummy, tzSrc)) return false;
+
   // Compare today then tomorrow to find the next > now
   for(int i=0;i<6;i++){
     double tmin = timesToday[i];
@@ -2572,9 +2619,10 @@ void printDetail(uint8_t type, int value){
       Serial.println(F(" Play Finished!"));
         isPlaying = false;
         dfLastError = DFERR_NONE;
-        // After adhan finishes, play duaa (track 3)
-        if(shouldPlayDuaaNext){
+        // Play duaa only when the finished track is the expected adhan track.
+        if(shouldPlayDuaaNext && expectedAdhanTrackForDuaa > 0 && value == expectedAdhanTrackForDuaa){
           shouldPlayDuaaNext = false;
+          expectedAdhanTrackForDuaa = 0;
           Serial.println("Adhan finished, playing duaa (track 3)...");
           delay(500); // short pause before duaa
           playTrack(3);
@@ -3034,11 +3082,16 @@ void loop(){
     Serial.println("Software fallback alarm triggered (millis)");
     softwareAlarmAt = 0;
     ds3231ClearAlarmFlags();
-    // Play correct track: Fajr=2, others=1
     if(scheduledPrayerIndex > 0){
-      int trackToPlay = (scheduledPrayerIndex == 1) ? 2 : 1;
-      shouldPlayDuaaNext = true;
-      playTrack(trackToPlay);
+      int trackToPlay = 1;
+      bool playDuaaAfter = true;
+      if(getPrayerPlaybackForIndex(scheduledPrayerIndex, trackToPlay, playDuaaAfter)){
+        shouldPlayDuaaNext = playDuaaAfter && trackToPlay != 3;
+        expectedAdhanTrackForDuaa = shouldPlayDuaaNext ? trackToPlay : 0;
+        playTrack(trackToPlay);
+      }else{
+        Serial.printf("Skipping non-adhan event for index %d\n", scheduledPrayerIndex);
+      }
     }
     scheduleNextPrayerAlarm();
   }
@@ -3050,10 +3103,15 @@ void loop(){
       lastPrayerTriggeredUnix = nowUnix;
       // clear DS3231 alarm flags if present
       ds3231ClearAlarmFlags();
-      // Play correct track: Fajr=2, others=1
-      int trackToPlay = (scheduledPrayerIndex == 1) ? 2 : 1;
-      shouldPlayDuaaNext = true;
-      playTrack(trackToPlay);
+      int trackToPlay = 1;
+      bool playDuaaAfter = true;
+      if(getPrayerPlaybackForIndex(scheduledPrayerIndex, trackToPlay, playDuaaAfter)){
+        shouldPlayDuaaNext = playDuaaAfter && trackToPlay != 3;
+        expectedAdhanTrackForDuaa = shouldPlayDuaaNext ? trackToPlay : 0;
+        playTrack(trackToPlay);
+      }else{
+        Serial.printf("Skipping non-adhan event for index %d\n", scheduledPrayerIndex);
+      }
       // Re-schedule next prayer
       scheduleNextPrayerAlarm();
     }
@@ -3064,18 +3122,16 @@ void loop(){
     // Clear alarm flags on chip
     ds3231ClearAlarmFlags();
     Serial.println("DS3231 alarm triggered.");
-    // Play scheduled prayer: Fajr (index 1) plays track 2, all others play track 1
     int trackToPlay = 1;
-    if(scheduledPrayerIndex == 1){
-      trackToPlay = 2; // Fajr plays track 2
-      Serial.println("Prayer: Fajr (playing track 2)");
-    } else if(scheduledPrayerIndex > 0){
-      trackToPlay = 1; // All other prayers play track 1
-      Serial.printf("Prayer index %d (playing track 1)\n", scheduledPrayerIndex);
+    bool playDuaaAfter = true;
+    if(getPrayerPlaybackForIndex(scheduledPrayerIndex, trackToPlay, playDuaaAfter)){
+      Serial.printf("Prayer index %d (playing track %d)\n", scheduledPrayerIndex, trackToPlay);
+      shouldPlayDuaaNext = playDuaaAfter && trackToPlay != 3;
+      expectedAdhanTrackForDuaa = shouldPlayDuaaNext ? trackToPlay : 0;
+      playTrack(trackToPlay);
+    }else{
+      Serial.printf("Skipping non-adhan event for index %d\n", scheduledPrayerIndex);
     }
-    // Set flag to play duaa (track 3) after adhan finishes
-    shouldPlayDuaaNext = true;
-    playTrack(trackToPlay);
     // Re-schedule next prayer
     scheduleNextPrayerAlarm();
   }

@@ -1,104 +1,101 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'screens/home_screen.dart';
 import 'screens/prayer_times_screen.dart';
 import 'screens/led_control_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/about_screen.dart';
+import 'theme/app_theme.dart';
+
+final themeModeProvider = StateProvider<ThemeMode>((ref) => ThemeMode.dark);
 
 void main() {
-  runApp(
-    const ProviderScope(
-      child: AdhanBoxApp(),
-    ),
-  );
+  WidgetsFlutterBinding.ensureInitialized();
+  SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
+    statusBarColor: Colors.transparent,
+    statusBarIconBrightness: Brightness.light,
+  ));
+  runApp(const ProviderScope(child: AdhanBoxApp()));
 }
 
-class AdhanBoxApp extends StatelessWidget {
+class AdhanBoxApp extends ConsumerWidget {
   const AdhanBoxApp({Key? key}) : super(key: key);
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final themeMode = ref.watch(themeModeProvider);
     return MaterialApp(
       title: 'AdhanBox',
-      theme: ThemeData(
-        primarySwatch: Colors.green,
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: Colors.green,
-          brightness: Brightness.light,
-        ),
-        appBarTheme: AppBarTheme(
-          elevation: 2,
-          centerTitle: true,
-          backgroundColor: Colors.green[700],
-          foregroundColor: Colors.white,
-        ),
-      ),
-      darkTheme: ThemeData(
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: Colors.green,
-          brightness: Brightness.dark,
-        ),
-      ),
+      theme: AppTheme.light,
+      darkTheme: AppTheme.dark,
+      themeMode: themeMode,
       home: const MainNavigationScreen(),
       debugShowCheckedModeBanner: false,
     );
   }
 }
 
-class MainNavigationScreen extends StatefulWidget {
+class MainNavigationScreen extends ConsumerStatefulWidget {
   const MainNavigationScreen({Key? key}) : super(key: key);
 
   @override
-  State<MainNavigationScreen> createState() => _MainNavigationScreenState();
+  ConsumerState<MainNavigationScreen> createState() => _MainNavigationScreenState();
 }
 
-class _MainNavigationScreenState extends State<MainNavigationScreen> {
+class _MainNavigationScreenState extends ConsumerState<MainNavigationScreen> {
   int _selectedIndex = 0;
 
-  final List<Widget> _pages = [
-    const HomeScreen(),
-    const PrayerTimesScreen(),
-    const LedControlScreen(),
-    const SettingsScreen(),
-    const AboutScreen(),
+  static const List<Widget> _pages = [
+    HomeScreen(),
+    PrayerTimesScreen(),
+    LedControlScreen(),
+    SettingsScreen(),
+    AboutScreen(),
+  ];
+
+  static const _navItems = [
+    _NavItem(icon: Icons.home_rounded, label: 'Accueil'),
+    _NavItem(icon: Icons.access_time_rounded, label: 'Prières'),
+    _NavItem(icon: Icons.light_rounded, label: 'Lumière'),
+    _NavItem(icon: Icons.tune_rounded, label: 'Réglages'),
+    _NavItem(icon: Icons.info_outline_rounded, label: 'À propos'),
   ];
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
-      body: _pages[_selectedIndex],
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _selectedIndex,
-        onTap: (index) {
-          setState(() => _selectedIndex = index);
-        },
-        type: BottomNavigationBarType.fixed,
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.home),
-            label: 'Accueil',
+      body: IndexedStack(index: _selectedIndex, children: _pages),
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          border: Border(
+            top: BorderSide(
+              color: isDark ? AppTheme.darkBorder : AppTheme.lightBorder,
+              width: 1,
+            ),
           ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.schedule),
-            label: 'Prières',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.lightbulb),
-            label: 'LED',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.settings),
-            label: 'Paramètres',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.info),
-            label: 'À propos',
-          ),
-        ],
+        ),
+        child: NavigationBar(
+          selectedIndex: _selectedIndex,
+          onDestinationSelected: (i) => setState(() => _selectedIndex = i),
+          backgroundColor: isDark ? AppTheme.darkSurface : AppTheme.lightSurface,
+          height: 64,
+          labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+          destinations: _navItems.map((item) => NavigationDestination(
+            icon: Icon(item.icon),
+            label: item.label,
+          )).toList(),
+        ),
       ),
     );
   }
+}
+
+class _NavItem {
+  final IconData icon;
+  final String label;
+  const _NavItem({required this.icon, required this.label});
 }
