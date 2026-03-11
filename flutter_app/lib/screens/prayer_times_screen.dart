@@ -332,11 +332,11 @@ class _StatusBadge extends StatelessWidget {
 }
 
 // ─────────────────────────── CONFIG SECTION ───────────────────────────
-class _ConfigSection extends StatelessWidget {
+class _ConfigSection extends ConsumerWidget {
   const _ConfigSection();
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -347,9 +347,13 @@ class _ConfigSection extends StatelessWidget {
           color: AppTheme.emerald,
           title: 'Méthode de calcul',
           subtitle: 'Ajustez la méthode et les angles',
-          onTap: (ctx) => Navigator.of(ctx).push(
-            MaterialPageRoute(builder: (_) => const CalculationSetupScreen()),
-          ),
+          onTap: (ctx) async {
+            await Navigator.of(ctx).push(
+              MaterialPageRoute(builder: (_) => const CalculationSetupScreen()),
+            );
+            ref.invalidate(prayerTimesProvider);
+            ref.invalidate(prayerOffsetsProvider);
+          },
         ),
         const SizedBox(height: 10),
         _ConfigCard(

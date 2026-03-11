@@ -184,9 +184,17 @@ class _CalculationSetupScreenState extends ConsumerState<CalculationSetupScreen>
       } catch (_) {}
 
       await _loadPreview();
+      // Reset offsets to 0 after save to prevent phantom double-offset
+      setState(() {
+        for (final k in _offsets.keys) _offsets[k] = 0;
+        _previewTimes = Map.from(_basePreviewTimes);
+      });
+
+      // Invalidate base providers — adjustedPrayerTimesProvider auto-invalidates via dependencies
       ref.invalidate(prayerTimesProvider);
       ref.invalidate(prayerOffsetsProvider);
-      ref.invalidate(adjustedPrayerTimesProvider);
+      // Wait for fresh adjusted times so all watchers (HomeScreen, etc.) have new data
+      try { await ref.read(adjustedPrayerTimesProvider.future); } catch (_) {}
       setState(() => _isSaving = false);
 
       if (mounted) {

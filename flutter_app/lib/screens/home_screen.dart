@@ -326,7 +326,16 @@ class _MainHomeScreen extends ConsumerWidget {
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
               sliver: prayerTimesAsync.when(
-                data: (times) => _PrayerSliver(times: times),
+                data: (times) => _PrayerSliver(
+                  times: times,
+                  onOpenSetup: () async {
+                    await Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const CalculationSetupScreen()),
+                    );
+                    ref.invalidate(prayerTimesProvider);
+                    ref.invalidate(prayerOffsetsProvider);
+                  },
+                ),
                 loading: () => const SliverToBoxAdapter(child: _SkeletonList()),
                 error: (e, _) => SliverToBoxAdapter(child: _InlineError(message: e.toString())),
               ),
@@ -474,7 +483,8 @@ class _Pill extends StatelessWidget {
 // ─────────────────────────── PRAYER SLIVER ───────────────────────────
 class _PrayerSliver extends StatelessWidget {
   final PrayerTimes times;
-  const _PrayerSliver({required this.times});
+  final VoidCallback? onOpenSetup;
+  const _PrayerSliver({required this.times, this.onOpenSetup});
 
   int _findNextIndex() {
     final nowMins = DateTime.now().hour * 60 + DateTime.now().minute;
@@ -503,7 +513,7 @@ class _PrayerSliver extends StatelessWidget {
                 children: [
                   Text("Aujourd'hui", style: Theme.of(ctx).textTheme.headlineMedium),
                   TextButton.icon(
-                    onPressed: () => Navigator.of(ctx).push(
+                    onPressed: onOpenSetup ?? () => Navigator.of(ctx).push(
                       MaterialPageRoute(builder: (_) => const CalculationSetupScreen()),
                     ),
                     icon: const Icon(Icons.tune_rounded, size: 15),

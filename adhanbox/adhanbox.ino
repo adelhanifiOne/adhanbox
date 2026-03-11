@@ -87,9 +87,9 @@ unsigned long softwareAlarmAt = 0;
 bool forcePlayTrack1 = false;
 // Global LED brightness (0-100, default 50%)
 int ledBrightness = 50;
-// Track sequence: after adhan finishes, play duaa (track 3)
-bool shouldPlayDuaaNext = false;
-int expectedAdhanTrackForDuaa = 0;
+// Track sequence: duaa (track 3) plays first, then adhan track after duaa finishes
+bool shouldPlayAdhanAfterDuaa = false;
+int adhanTrackAfterDuaa = 0;
 
 // LED / button state
 // Scene mapping:
@@ -1238,6 +1238,24 @@ void handleMawaqitSetOffsets(){
   maghribOff = constrain(maghribOff, -30, 30);
   ishaOff = constrain(ishaOff, -30, 30);
   
+  // Read old offsets and stored mawaqit times to re-adjust if needed
+  prefs.begin("adhancfg", true);
+  int oldOffsets[6] = {
+    prefs.getInt("mq_off_fajr", 0),
+    prefs.getInt("mq_off_sunrise", 0),
+    prefs.getInt("mq_off_dhuhr", 0),
+    prefs.getInt("mq_off_asr", 0),
+    prefs.getInt("mq_off_maghrib", 0),
+    prefs.getInt("mq_off_isha", 0)
+  };
+  const char* mqKeys[6] = {"mq_fajr","mq_sunrise","mq_dhuhr","mq_asr","mq_maghrib","mq_isha"};
+  String mqTimes[6];
+  for(int i=0;i<6;i++) mqTimes[i] = prefs.getString(mqKeys[i], "");
+  prefs.end();
+
+  int newOffsets[6] = {fajrOff, sunriseOff, dhuhrOff, asrOff, maghribOff, ishaOff};
+
+  // Save new offsets
   prefs.begin("adhancfg", false);
   prefs.putInt("mq_off_fajr", fajrOff);
   prefs.putInt("mq_off_sunrise", sunriseOff);
@@ -1245,11 +1263,24 @@ void handleMawaqitSetOffsets(){
   prefs.putInt("mq_off_asr", asrOff);
   prefs.putInt("mq_off_maghrib", maghribOff);
   prefs.putInt("mq_off_isha", ishaOff);
+
+  // Re-adjust stored Mawaqit times: reverse old offsets, apply new ones
+  for(int i=0;i<6;i++){
+    if(mqTimes[i].length() >= 5 && (oldOffsets[i] != newOffsets[i])){
+      String raw = addMinutesToTime(mqTimes[i], -oldOffsets[i]); // undo old
+      String adjusted = addMinutesToTime(raw, newOffsets[i]);    // apply new
+      prefs.putString(mqKeys[i], adjusted);
+      Serial.printf("  Re-adjusted %s: %s -> %s (old=%+d, new=%+d)\n", mqKeys[i], mqTimes[i].c_str(), adjusted.c_str(), oldOffsets[i], newOffsets[i]);
+    }
+  }
   prefs.end();
   
   Serial.printf("Offsets saved: Fajr=%d Sunrise=%d Dhuhr=%d Asr=%d Maghrib=%d Isha=%d\n",
                 fajrOff, sunriseOff, dhuhrOff, asrOff, maghribOff, ishaOff);
   
+  // Reschedule alarm with new offsets
+  if(rtc.begin()) scheduleNextPrayerAlarm();
+
   server.send(200, "application/json", "{\"ok\":true}");
 }
 
@@ -2619,13 +2650,14 @@ void printDetail(uint8_t type, int value){
       Serial.println(F(" Play Finished!"));
         isPlaying = false;
         dfLastError = DFERR_NONE;
-        // Play duaa only when the finished track is the expected adhan track.
-        if(shouldPlayDuaaNext && expectedAdhanTrackForDuaa > 0 && value == expectedAdhanTrackForDuaa){
-          shouldPlayDuaaNext = false;
-          expectedAdhanTrackForDuaa = 0;
-          Serial.println("Adhan finished, playing duaa (track 3)...");
-          delay(500); // short pause before duaa
-          playTrack(3);
+        // Play adhan after duaa (track 3) finishes.
+        if(shouldPlayAdhanAfterDuaa && adhanTrackAfterDuaa > 0 && value == 3){
+          int trackToPlayNow = adhanTrackAfterDuaa;
+          shouldPlayAdhanAfterDuaa = false;
+          adhanTrackAfterDuaa = 0;
+          Serial.printf("Duaa finished, playing adhan (track %d)...\n", trackToPlayNow);
+          delay(500); // short pause before adhan
+          playTrack(trackToPlayNow);
         }
       break;
     case DFPlayerError:
@@ -2898,6 +2930,7 @@ void loop(){
         DateTime fallback(F(__DATE__), F(__TIME__));
         computeAndPrintPrayerTimes(fallback);
       }
+
     }else if(cmd.equalsIgnoreCase("setalarmtest")){
       // set an alarm for the next minute (test)
       if(rtc.begin()){
@@ -3084,11 +3117,18 @@ void loop(){
     ds3231ClearAlarmFlags();
     if(scheduledPrayerIndex > 0){
       int trackToPlay = 1;
-      bool playDuaaAfter = true;
-      if(getPrayerPlaybackForIndex(scheduledPrayerIndex, trackToPlay, playDuaaAfter)){
-        shouldPlayDuaaNext = playDuaaAfter && trackToPlay != 3;
-        expectedAdhanTrackForDuaa = shouldPlayDuaaNext ? trackToPlay : 0;
-        playTrack(trackToPlay);
+      bool playDuaaBefore = true;
+      if(getPrayerPlaybackForIndex(scheduledPrayerIndex, trackToPlay, playDuaaBefore)){
+        if(playDuaaBefore){
+          // Play duaa first, then adhan after duaa finishes
+          shouldPlayAdhanAfterDuaa = true;
+          adhanTrackAfterDuaa = trackToPlay;
+          playTrack(3);
+        }else{
+          shouldPlayAdhanAfterDuaa = false;
+          adhanTrackAfterDuaa = 0;
+          playTrack(trackToPlay);
+        }
       }else{
         Serial.printf("Skipping non-adhan event for index %d\n", scheduledPrayerIndex);
       }
@@ -3104,11 +3144,17 @@ void loop(){
       // clear DS3231 alarm flags if present
       ds3231ClearAlarmFlags();
       int trackToPlay = 1;
-      bool playDuaaAfter = true;
-      if(getPrayerPlaybackForIndex(scheduledPrayerIndex, trackToPlay, playDuaaAfter)){
-        shouldPlayDuaaNext = playDuaaAfter && trackToPlay != 3;
-        expectedAdhanTrackForDuaa = shouldPlayDuaaNext ? trackToPlay : 0;
-        playTrack(trackToPlay);
+      bool playDuaaBefore = true;
+      if(getPrayerPlaybackForIndex(scheduledPrayerIndex, trackToPlay, playDuaaBefore)){
+        if(playDuaaBefore){
+          shouldPlayAdhanAfterDuaa = true;
+          adhanTrackAfterDuaa = trackToPlay;
+          playTrack(3);
+        }else{
+          shouldPlayAdhanAfterDuaa = false;
+          adhanTrackAfterDuaa = 0;
+          playTrack(trackToPlay);
+        }
       }else{
         Serial.printf("Skipping non-adhan event for index %d\n", scheduledPrayerIndex);
       }
@@ -3123,12 +3169,20 @@ void loop(){
     ds3231ClearAlarmFlags();
     Serial.println("DS3231 alarm triggered.");
     int trackToPlay = 1;
-    bool playDuaaAfter = true;
-    if(getPrayerPlaybackForIndex(scheduledPrayerIndex, trackToPlay, playDuaaAfter)){
-      Serial.printf("Prayer index %d (playing track %d)\n", scheduledPrayerIndex, trackToPlay);
-      shouldPlayDuaaNext = playDuaaAfter && trackToPlay != 3;
-      expectedAdhanTrackForDuaa = shouldPlayDuaaNext ? trackToPlay : 0;
-      playTrack(trackToPlay);
+    bool playDuaaBefore = true;
+    if(getPrayerPlaybackForIndex(scheduledPrayerIndex, trackToPlay, playDuaaBefore)){
+      Serial.printf("Prayer index %d\n", scheduledPrayerIndex);
+      if(playDuaaBefore){
+        shouldPlayAdhanAfterDuaa = true;
+        adhanTrackAfterDuaa = trackToPlay;
+        Serial.printf("Playing duaa first, then adhan (track %d)\n", trackToPlay);
+        playTrack(3);
+      }else{
+        shouldPlayAdhanAfterDuaa = false;
+        adhanTrackAfterDuaa = 0;
+        Serial.printf("Playing adhan directly (track %d)\n", trackToPlay);
+        playTrack(trackToPlay);
+      }
     }else{
       Serial.printf("Skipping non-adhan event for index %d\n", scheduledPrayerIndex);
     }

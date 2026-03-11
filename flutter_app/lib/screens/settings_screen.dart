@@ -171,10 +171,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         min: 0,
                         max: 30,
                         divisions: 30,
-                        onChanged: (v) async {
-                          setState(() => _volume = v);
+                        onChanged: (v) => setState(() => _volume = v),
+                        onChangeEnd: (v) async {
                           final api = ref.read(adhanboxApiProvider);
-                          if (api != null) await api.setAudioVolume(v.toInt());
+                          if (api != null) {
+                            try { await api.setAudioVolume(v.toInt()); } catch (_) {}
+                          }
                         },
                       ),
                     ),
@@ -208,9 +210,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       iconColor: AppTheme.ishaColor,
                       title: 'Méthode de calcul',
                       subtitle: 'MWL, UOIF, ISNA et autres',
-                      onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute(builder: (_) => const CalculationSetupScreen()),
-                      ),
+                      onTap: () async {
+                        await Navigator.of(context).push(
+                          MaterialPageRoute(builder: (_) => const CalculationSetupScreen()),
+                        );
+                        ref.invalidate(prayerTimesProvider);
+                        ref.invalidate(prayerOffsetsProvider);
+                      },
                     ),
                   ]).animate().fadeIn(delay: 200.ms).slideY(begin: 0.06),
 
