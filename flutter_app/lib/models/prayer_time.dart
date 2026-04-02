@@ -116,39 +116,7 @@ class PrayerTimes {
     );
   }
 
-  /// Applique les offsets de fine-tuning aux horaires
-  PrayerTimes applyOffsets(Map<String, int> offsets) {
-    final adjustedTimes = times.map((prayer) {
-      String prayerKey = prayer.name.toLowerCase();
-      if (prayerKey == 'fajr') prayerKey = 'fajr';
-      if (prayerKey == 'dhuhr') prayerKey = 'dhuhr';
-      if (prayerKey == 'asr') prayerKey = 'asr';
-      if (prayerKey == 'maghreb') prayerKey = 'maghrib';
-      if (prayerKey == 'isha') prayerKey = 'isha';
 
-      final offset = offsets[prayerKey] ?? 0;
-      if (offset == 0) return prayer;
-
-      final adjustedTime = _addMinutesToTime(prayer.calculatedTime, offset);
-      return PrayerTime(
-        index: prayer.index,
-        name: prayer.name,
-        calculatedTime: adjustedTime,
-        mawaqitTime: prayer.mawaqitTime,
-        enabled: prayer.enabled,
-        trackIndex: prayer.trackIndex,
-        duaaAfter: prayer.duaaAfter,
-      );
-    }).toList();
-
-    return PrayerTimes(
-      times: adjustedTimes,
-      date: date,
-      source: source,
-      nextPrayerIndex: nextPrayerIndex,
-      minutesUntilNextPrayer: minutesUntilNextPrayer,
-    );
-  }
 
   /// Ajoute X minutes à une heure (ex: "13:13" + 20 = "13:33")
   static String _addMinutesToTime(String time, int minutesToAdd) {

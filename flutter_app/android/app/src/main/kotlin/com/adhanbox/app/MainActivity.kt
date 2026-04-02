@@ -1,4 +1,4 @@
-package com.mycompany.adhanbox
+package com.adhanbox.app
 
 import io.flutter.embedding.android.FlutterActivity
 

@@ -1,5 +1,5 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.mycompany.adhanbox"
+    package="com.adhanbox.app"
     xmlns:tools="http://schemas.android.com/tools">
     
     <!-- Internet & Network -->
@@ -25,7 +25,7 @@
     <application
         android:label="Adhanbox"
         tools:replace="android:label"
-        android:icon="@mipmap/ic_launcher"
+        android:icon="@mipmap/launcher_icon"
         android:requestLegacyExternalStorage="true">
 
         <activity

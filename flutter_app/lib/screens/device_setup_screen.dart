@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -50,6 +51,9 @@ class _DeviceSetupScreenState extends ConsumerState<DeviceSetupScreen>
   bool _step4ReadyToSearch = false;
   final TextEditingController _manualIpController = TextEditingController();
 
+  // Step 5
+  final TextEditingController _nameController = TextEditingController(text: 'AdhanBox');
+
   late AnimationController _pulseController;
 
   static const _steps = [
@@ -75,6 +79,7 @@ class _DeviceSetupScreenState extends ConsumerState<DeviceSetupScreen>
     _pulseController.dispose();
     _passwordController.dispose();
     _manualIpController.dispose();
+    _nameController.dispose();
     super.dispose();
   }
 
@@ -251,32 +256,46 @@ class _DeviceSetupScreenState extends ConsumerState<DeviceSetupScreen>
         try {
           setState(() => _networkScanProgress = 'Tentative $attempt/3...');
           final discovery = ESP32DiscoveryService();
-          final device = await discovery.findAdhanBox(timeout: const Duration(seconds: 5))
-              .timeout(const Duration(seconds: 6), onTimeout: () => null);
-          if (device != null) {
-            final api = AdhanBoxAPI(baseUrl: 'http://${device.host}', timeout: const Duration(seconds: 5));
-            final status = await api.getStatus();
-            if (status.containsKey('wifi') && status.containsKey('rtc_ok')) {
-              final prefs = await SharedPreferences.getInstance();
-              await prefs.setString('deviceIp', device.host);
-              ref.read(currentDeviceIpProvider.notifier).state = device.host;
-              ref.invalidate(deviceIpProvider);
+          final devices = await discovery.discoverDevices(timeout: const Duration(seconds: 5));
+          
+          final prefs = await SharedPreferences.getInstance();
+          final savedList = prefs.getString('savedDevices');
+          List<String> knownIps = [];
+          if (savedList != null) {
               try {
-                final pos = await Geolocator.getCurrentPosition(
-                    desiredAccuracy: LocationAccuracy.high,
-                    timeLimit: const Duration(seconds: 10));
-                await api.setLocation(pos.latitude, pos.longitude, pos.accuracy);
-              } catch (_) {}
-              try { await api.setRtcTime(DateTime.now()); } catch (_) {}
-              setState(() {
-                _deviceIp = device.host;
-                _step = 5;
-                _isSearchingOnHomeNetwork = false;
-                _networkScanProgress = '';
-              });
-              return;
-            }
+                final List decoded = jsonDecode(savedList);
+                knownIps = decoded.map((e) => e['ip'] as String).toList();
+              } catch(_) {}
           }
+          
+          bool deviceFound = false;
+          for (final device in devices) {
+            if (knownIps.contains(device.host)) continue;
+
+            final api = AdhanBoxAPI(baseUrl: 'http://${device.host}', timeout: const Duration(seconds: 4));
+            try {
+              final status = await api.getStatus();
+              if (status.containsKey('wifi') && status.containsKey('rtc_ok')) {
+                await saveDeviceIp(ref, device.host, name: 'Nouvel Appareil');
+                try {
+                  final pos = await Geolocator.getCurrentPosition(
+                      desiredAccuracy: LocationAccuracy.high,
+                      timeLimit: const Duration(seconds: 10));
+                  await api.setLocation(pos.latitude, pos.longitude, pos.accuracy);
+                } catch (_) {}
+                try { await api.setRtcTime(DateTime.now()); } catch (_) {}
+                setState(() {
+                  _deviceIp = device.host;
+                  _step = 5;
+                  _isSearchingOnHomeNetwork = false;
+                  _networkScanProgress = '';
+                });
+                deviceFound = true;
+                break;
+              }
+            } catch(_) {}
+          }
+          if (deviceFound) return;
         } catch (e) {
           if (attempt < 3) await Future.delayed(const Duration(seconds: 2));
         }
@@ -301,10 +320,7 @@ class _DeviceSetupScreenState extends ConsumerState<DeviceSetupScreen>
       final api = AdhanBoxAPI(baseUrl: 'http://$ip', timeout: const Duration(seconds: 5));
       final status = await api.getStatus();
       if (status.containsKey('wifi') && status.containsKey('rtc_ok')) {
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('deviceIp', ip);
-        ref.read(currentDeviceIpProvider.notifier).state = ip;
-        ref.invalidate(deviceIpProvider);
+        await saveDeviceIp(ref, ip, name: 'Nouvel Appareil');
         try {
           final pos = await Geolocator.getCurrentPosition(
               desiredAccuracy: LocationAccuracy.high,
@@ -849,11 +865,39 @@ class _DeviceSetupScreenState extends ConsumerState<DeviceSetupScreen>
         ).animate().fadeIn(delay: 200.ms),
         const SizedBox(height: 8),
         Text(
-          'AdhanBox connectée sur $_deviceIp',
+          'Connectée sur $_deviceIp',
           style: Theme.of(context).textTheme.bodyMedium,
           textAlign: TextAlign.center,
         ).animate().fadeIn(delay: 300.ms),
-        const SizedBox(height: 32),
+        const SizedBox(height: 24),
+        
+        // Device name field
+        _ThemedCard(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.edit_rounded, color: AppTheme.emerald, size: 20),
+                    const SizedBox(width: 10),
+                    Text('Nom de l\'appareil', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _nameController,
+                  decoration: const InputDecoration(
+                    hintText: 'ex: AdhanBox Salon',
+                    prefixIcon: Icon(Icons.label_rounded),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ).animate().fadeIn(delay: 350.ms).slideY(begin: 0.08),
+        const SizedBox(height: 24),
 
         // Next steps card
         _ThemedCard(
@@ -886,7 +930,11 @@ class _DeviceSetupScreenState extends ConsumerState<DeviceSetupScreen>
         SizedBox(
           width: double.infinity,
           child: ElevatedButton.icon(
-            onPressed: () {
+            onPressed: () async {
+              if (_deviceIp != null) {
+                final name = _nameController.text.trim().isEmpty ? 'AdhanBox' : _nameController.text.trim();
+                await saveDeviceIp(ref, _deviceIp!, name: name);
+              }
               Navigator.of(context).pushReplacement(
                 MaterialPageRoute(builder: (_) => const CalculationSetupScreen()),
               );
@@ -900,7 +948,13 @@ class _DeviceSetupScreenState extends ConsumerState<DeviceSetupScreen>
         SizedBox(
           width: double.infinity,
           child: TextButton(
-            onPressed: () => Navigator.of(context).pop(),
+            onPressed: () async {
+              if (_deviceIp != null) {
+                final name = _nameController.text.trim().isEmpty ? 'AdhanBox' : _nameController.text.trim();
+                await saveDeviceIp(ref, _deviceIp!, name: name);
+              }
+              Navigator.of(context).pop();
+            },
             child: const Text('Revenir à l\'accueil'),
           ),
         ).animate().fadeIn(delay: 550.ms),

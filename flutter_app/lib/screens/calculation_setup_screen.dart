@@ -58,7 +58,7 @@ class _CalculationSetupScreenState extends ConsumerState<CalculationSetupScreen>
 
   Future<void> _loadIpAndConfig() async {
     try {
-      final ip = await ref.read(deviceIpProvider.future);
+      final ip = ref.read(currentDeviceIpProvider);
       if (ip == null) {
         setState(() { _errorMessage = 'Aucun appareil configuré'; _isLoading = false; });
         return;
@@ -113,7 +113,7 @@ class _CalculationSetupScreenState extends ConsumerState<CalculationSetupScreen>
     if (r.statusCode == 200) {
       final d = jsonDecode(r.body);
       final base = {
-        for (final k in _offsets.keys) k: (d[k] ?? '--:--').toString(),
+        for (final k in _offsets.keys) k: _addMins((d[k] ?? '--:--').toString(), -(_offsets[k] ?? 0)),
       };
       setState(() {
         _basePreviewTimes = base;
@@ -183,14 +183,10 @@ class _CalculationSetupScreenState extends ConsumerState<CalculationSetupScreen>
         ).timeout(const Duration(seconds: 8));
       } catch (_) {}
 
+      // Prepare fresh preview times from updated base
       await _loadPreview();
-      // Reset offsets to 0 after save to prevent phantom double-offset
-      setState(() {
-        for (final k in _offsets.keys) _offsets[k] = 0;
-        _previewTimes = Map.from(_basePreviewTimes);
-      });
 
-      // Invalidate base providers — adjustedPrayerTimesProvider auto-invalidates via dependencies
+      // Refresh providers
       ref.invalidate(prayerTimesProvider);
       ref.invalidate(prayerOffsetsProvider);
       // Wait for fresh adjusted times so all watchers (HomeScreen, etc.) have new data

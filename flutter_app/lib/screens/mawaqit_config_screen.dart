@@ -7,7 +7,6 @@ import 'package:http/http.dart' as http;
 import 'package:geolocator/geolocator.dart';
 import '../providers/adhanbox_provider.dart';
 import 'device_setup_screen.dart';
-import 'mawaqit_offsets_screen.dart';
 
 class MosqueData {
   final String uuid;
@@ -914,52 +913,6 @@ out center tags;
           await ref.refresh(prayerTimesProvider.future);
         } catch (_) {}
 
-        if (mounted) {
-          // Proposer l'ajustement des horaires
-          final shouldAdjust = await showDialog<bool>(
-            context: context,
-            barrierDismissible: false,
-            builder: (BuildContext dialogContext) {
-              return AlertDialog(
-                title: const Row(
-                  children: [
-                    Icon(Icons.tune, color: Color(0xFF2E7D32)),
-                    SizedBox(width: 12),
-                    Text('Ajuster les horaires?'),
-                  ],
-                ),
-                content: const Text(
-                  'Voulez-vous ajuster finement les horaires pour qu\'ils correspondent exactement aux horaires de votre mosquée locale?\n\n'
-                  'Vous pourrez modifier chaque prière de ±30 minutes.',
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.of(dialogContext).pop(false),
-                    child: const Text('Plus tard'),
-                  ),
-                  ElevatedButton.icon(
-                    onPressed: () => Navigator.of(dialogContext).pop(true),
-                    icon: const Icon(Icons.tune),
-                    label: const Text('Ajuster maintenant'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF2E7D32),
-                      foregroundColor: Colors.white,
-                    ),
-                  ),
-                ],
-              );
-            },
-          );
-
-          if (shouldAdjust == true && mounted) {
-            Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (context) => const MawaqitOffsetsScreen(),
-              ),
-            );
-          } else {
-            Navigator.of(context).pop();
-          }
         }
       } else {
         String message = 'Erreur de configuration (HTTP ${response.statusCode})';

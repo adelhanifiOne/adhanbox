@@ -1,5 +1,6 @@
 // lib/providers/adhanbox_provider.dart
 
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -11,6 +12,38 @@ import '../models/prayer_time.dart';
 final adhanboxApiProvider = Provider<AdhanBoxAPI?>((ref) {
   final deviceIp = ref.watch(currentDeviceIpProvider);
   return deviceIp != null ? AdhanBoxAPI(baseUrl: 'http://$deviceIp') : null;
+});
+
+class SavedDevice {
+  final String name;
+  final String ip;
+  SavedDevice({required this.name, required this.ip});
+  
+  Map<String, dynamic> toJson() => {'name': name, 'ip': ip};
+  factory SavedDevice.fromJson(Map<String, dynamic> json) => SavedDevice(
+        name: json['name'] as String, 
+        ip: json['ip'] as String
+      );
+}
+
+final savedDevicesProvider = FutureProvider<List<SavedDevice>>((ref) async {
+  final prefs = await SharedPreferences.getInstance();
+  final listString = prefs.getString('savedDevices');
+  if (listString != null) {
+    try {
+      final List decoded = jsonDecode(listString);
+      return decoded.map((e) => SavedDevice.fromJson(e as Map<String, dynamic>)).toList();
+    } catch (_) {}
+  }
+  
+  // Migration backcompatibility
+  final oldIp = prefs.getString('deviceIp');
+  if (oldIp != null && oldIp.isNotEmpty) {
+      final device = SavedDevice(name: 'AdhanBox', ip: oldIp);
+      await prefs.setString('savedDevices', jsonEncode([device.toJson()]));
+      return [device];
+  }
+  return [];
 });
 
 // Provider pour l'IP du device (persisté dans SharedPreferences)
@@ -42,23 +75,9 @@ final autoReconnectProvider = FutureProvider<String?>((ref) async {
     }
   }
   
-  // 1. Essayer d'abord adhanbox.local (mDNS)
-  print('DEBUG: Tentative de connexion via mDNS (adhanbox.local)...');
-  try {
-    final api = AdhanBoxAPI(baseUrl: 'http://adhanbox.local', timeout: const Duration(seconds: 3));
-    await api.getStatus().timeout(const Duration(seconds: 3));
-    print('DEBUG: ✓ ESP32 accessible via adhanbox.local');
-    await prefs.setString('deviceIp', 'adhanbox.local');
-    ref.read(currentDeviceIpProvider.notifier).state = 'adhanbox.local';
-    await syncRtcTime('adhanbox.local');
-    return 'adhanbox.local';
-  } catch (e) {
-    print('DEBUG: ✗ mDNS échoué: $e');
-  }
-
-  // 2. Essayer l'IP sauvegardée
-  if (savedIp != null && savedIp != 'adhanbox.local') {
-    print('DEBUG: Tentative de connexion à IP sauvegardée: $savedIp');
+  // 1. Essayer l'IP sauvegardée D'ABORD (Sinon on casse le mode multi-appareil)
+  if (savedIp != null && savedIp.isNotEmpty) {
+    print('DEBUG: Tentative de connexion à IP sélectionnée: $savedIp');
     try {
       final api = AdhanBoxAPI(baseUrl: 'http://$savedIp', timeout: const Duration(seconds: 3));
       await api.getStatus().timeout(const Duration(seconds: 3));
@@ -67,12 +86,36 @@ final autoReconnectProvider = FutureProvider<String?>((ref) async {
       await syncRtcTime(savedIp);
       return savedIp;
     } catch (e) {
-      print('DEBUG: ✗ IP sauvegardée échouée: $e');
+      print('DEBUG: ✗ IP $savedIp indisponible: $e');
+      // On conserve l'état sur l'IP pour éviter de rediriger vers l'écran d'accueil
+      ref.read(currentDeviceIpProvider.notifier).state = savedIp;
+      throw Exception('Appareil hors ligne');
     }
   }
 
-  // 3. Scanner le réseau local
-  print('DEBUG: Lancement de la découverte réseau...');
+  // 2. Si aucune IP n'est sélectionnée, tenter adhanbox.local par défaut
+  print('DEBUG: Tentative de connexion via mDNS (adhanbox.local)...');
+  try {
+    final api = AdhanBoxAPI(baseUrl: 'http://adhanbox.local', timeout: const Duration(seconds: 3));
+    await api.getStatus().timeout(const Duration(seconds: 3));
+    print('DEBUG: ✓ ESP32 accessible via adhanbox.local');
+    await prefs.setString('deviceIp', 'adhanbox.local');
+    
+    final currList = prefs.getString('savedDevices');
+    if (currList == null) {
+       final newDev = SavedDevice(name: 'AdhanBox', ip: 'adhanbox.local');
+       await prefs.setString('savedDevices', jsonEncode([newDev.toJson()]));
+    }
+    
+    ref.read(currentDeviceIpProvider.notifier).state = 'adhanbox.local';
+    await syncRtcTime('adhanbox.local');
+    return 'adhanbox.local';
+  } catch (e) {
+    print('DEBUG: ✗ mDNS échoué: $e');
+  }
+
+  // 3. Essayer scan réseau en dernier recours
+  print('DEBUG: Recherche sur le réseau local...');
   try {
     final discovery = ESP32DiscoveryService();
     final device = await discovery.findAdhanBox(timeout: const Duration(seconds: 10)).timeout(
@@ -83,6 +126,13 @@ final autoReconnectProvider = FutureProvider<String?>((ref) async {
     if (device != null) {
       print('DEBUG: ✓ ESP32 trouvé à ${device.host}');
       await prefs.setString('deviceIp', device.host);
+      
+      final listStr = prefs.getString('savedDevices');
+      if (listStr == null) {
+          final d = SavedDevice(name: 'AdhanBox', ip: device.host);
+          await prefs.setString('savedDevices', jsonEncode([d.toJson()]));
+      }
+      
       ref.read(currentDeviceIpProvider.notifier).state = device.host;
       await syncRtcTime(device.host);
       return device.host;
@@ -91,25 +141,68 @@ final autoReconnectProvider = FutureProvider<String?>((ref) async {
     print('DEBUG: ✗ Découverte réseau échouée: $e');
   }
 
-  // 4. Échec - aucune connexion possible
-  print('DEBUG: ✗ Impossible de trouver l\'ESP32 automatiquement');
-  // Si un appareil a déjà été configuré, conserver l'IP sauvegardée
-  // pour éviter de revenir à l'écran "Aucun appareil configuré".
-  if (savedIp != null && savedIp.isNotEmpty) {
-    print('DEBUG: ↺ Appareil déjà configuré, fallback sur IP sauvegardée: $savedIp');
-    ref.read(currentDeviceIpProvider.notifier).state = savedIp;
-    return savedIp;
-  }
   return null;
 });
 
 // Provider pour sauvegarder l'IP du device
-Future<void> saveDeviceIp(WidgetRef ref, String ip) async {
+Future<void> saveDeviceIp(WidgetRef ref, String ip, {String name = 'AdhanBox'}) async {
   final prefs = await SharedPreferences.getInstance();
+  
+  List<SavedDevice> devices = [];
+  final listString = prefs.getString('savedDevices');
+  if (listString != null) {
+    try {
+      final List decoded = jsonDecode(listString);
+      devices = decoded.map((e) => SavedDevice.fromJson(e as Map<String, dynamic>)).toList();
+    } catch (_) {}
+  } else {
+    // Migration: si c'est la toute première sauvegarde et qu'on avait une IP, on la garde.
+    final oldIp = prefs.getString('deviceIp');
+    if (oldIp != null && oldIp.isNotEmpty) {
+      devices.add(SavedDevice(name: 'AdhanBox (Ancien)', ip: oldIp));
+    }
+  }
+  
+  final existingIndex = devices.indexWhere((d) => d.ip == ip);
+  if (existingIndex >= 0) {
+    devices[existingIndex] = SavedDevice(name: name, ip: ip);
+  } else {
+    devices.add(SavedDevice(name: name, ip: ip));
+  }
+  await prefs.setString('savedDevices', jsonEncode(devices.map((e) => e.toJson()).toList()));
   await prefs.setString('deviceIp', ip);
+  
   ref.read(currentDeviceIpProvider.notifier).state = ip;
   ref.invalidate(deviceIpProvider);
+  ref.invalidate(savedDevicesProvider);
   ref.invalidate(autoReconnectProvider);
+}
+
+Future<void> removeSavedDevice(WidgetRef ref, String ip) async {
+  final prefs = await SharedPreferences.getInstance();
+  final listString = prefs.getString('savedDevices');
+  if (listString != null) {
+    try {
+      final List decoded = jsonDecode(listString);
+      List<SavedDevice> devices = decoded.map((e) => SavedDevice.fromJson(e as Map<String, dynamic>)).toList();
+      devices.removeWhere((d) => d.ip == ip);
+      await prefs.setString('savedDevices', jsonEncode(devices.map((e) => e.toJson()).toList()));
+      
+      final currentIp = prefs.getString('deviceIp');
+      if (currentIp == ip) {
+          if (devices.isNotEmpty) {
+             final newIp = devices.first.ip;
+             await prefs.setString('deviceIp', newIp);
+             ref.read(currentDeviceIpProvider.notifier).state = newIp;
+          } else {
+             await prefs.remove('deviceIp');
+             ref.read(currentDeviceIpProvider.notifier).state = null;
+          }
+      }
+      ref.invalidate(savedDevicesProvider);
+      ref.invalidate(autoReconnectProvider);
+    } catch (_) {}
+  }
 }
 
 // Provider pour le statut du device
@@ -153,13 +246,9 @@ final prayerOffsetsProvider = FutureProvider<Map<String, int>>((ref) async {
   }
 });
 
-// Provider pour les horaires avec offsets appliqués
+// Provider pour les horaires (les offsets sont déjà appliqués par le firmware)
 final adjustedPrayerTimesProvider = FutureProvider<PrayerTimes>((ref) async {
-  final prayerTimes = await ref.watch(prayerTimesProvider.future);
-  final offsets = await ref.watch(prayerOffsetsProvider.future);
-  
-  // Appliquer les offsets
-  return prayerTimes.applyOffsets(offsets);
+  return await ref.watch(prayerTimesProvider.future);
 });
 
 // Provider pour les horaires Mawaqit

@@ -6,7 +6,6 @@ import '../models/prayer_time.dart';
 import '../providers/adhanbox_provider.dart';
 import '../theme/app_theme.dart';
 import 'calculation_setup_screen.dart';
-import 'mawaqit_offsets_screen.dart';
 
 class PrayerTimesScreen extends ConsumerWidget {
   const PrayerTimesScreen({Key? key}) : super(key: key);
@@ -354,16 +353,6 @@ class _ConfigSection extends ConsumerWidget {
             ref.invalidate(prayerTimesProvider);
             ref.invalidate(prayerOffsetsProvider);
           },
-        ),
-        const SizedBox(height: 10),
-        _ConfigCard(
-          icon: Icons.tune_rounded,
-          color: AppTheme.fajrColor,
-          title: 'Ajustements fins',
-          subtitle: 'Décalages minute par minute',
-          onTap: (ctx) => Navigator.of(ctx).push(
-            MaterialPageRoute(builder: (_) => const MawaqitOffsetsScreen()),
-          ),
         ),
       ],
     );

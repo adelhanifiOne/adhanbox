@@ -19,11 +19,11 @@ class _AdhanConfigScreenState extends ConsumerState<AdhanConfigScreen> {
 
   // Configuration des adhans par prière
   final Map<String, int> _selectedTracks = {
-    'fajr': 1,
-    'dhuhr': 1,
-    'asr': 1,
-    'maghrib': 1,
-    'isha': 1,
+    'fajr': 2,
+    'dhuhr': 2,
+    'asr': 2,
+    'maghrib': 2,
+    'isha': 2,
   };
 
   // Configuration du duaa
@@ -43,6 +43,13 @@ class _AdhanConfigScreenState extends ConsumerState<AdhanConfigScreen> {
     'isha': 'Isha',
   };
 
+  String _getTrackLabel(int trackNumber) {
+    if (trackNumber == 2 || trackNumber == 3) {
+      return 'Adhan Sobh';
+    }
+    return 'Adhan';
+  }
+
   @override
   void initState() {
     super.initState();
@@ -53,7 +60,7 @@ class _AdhanConfigScreenState extends ConsumerState<AdhanConfigScreen> {
 
   Future<void> _loadConfiguration() async {
     try {
-      final deviceIpAsync = await ref.read(deviceIpProvider.future);
+      final deviceIpAsync = ref.read(currentDeviceIpProvider);
       if (deviceIpAsync == null) {
         setState(() {
           _errorMessage = 'Aucun appareil configuré';
@@ -74,11 +81,11 @@ class _AdhanConfigScreenState extends ConsumerState<AdhanConfigScreen> {
         if (response.statusCode == 200) {
           final data = jsonDecode(response.body);
           setState(() {
-            _selectedTracks['fajr'] = data['fajr_track'] ?? 1;
-            _selectedTracks['dhuhr'] = data['dhuhr_track'] ?? 1;
-            _selectedTracks['asr'] = data['asr_track'] ?? 1;
-            _selectedTracks['maghrib'] = data['maghrib_track'] ?? 1;
-            _selectedTracks['isha'] = data['isha_track'] ?? 1;
+            _selectedTracks['fajr'] = (data['fajr_track'] == 1) ? 2 : (data['fajr_track'] ?? 2);
+            _selectedTracks['dhuhr'] = (data['dhuhr_track'] == 1) ? 2 : (data['dhuhr_track'] ?? 2);
+            _selectedTracks['asr'] = (data['asr_track'] == 1) ? 2 : (data['asr_track'] ?? 2);
+            _selectedTracks['maghrib'] = (data['maghrib_track'] == 1) ? 2 : (data['maghrib_track'] ?? 2);
+            _selectedTracks['isha'] = (data['isha_track'] == 1) ? 2 : (data['isha_track'] ?? 2);
 
             _playDuaa['fajr'] = data['fajr_duaa'] ?? true;
             _playDuaa['dhuhr'] = data['dhuhr_duaa'] ?? true;
@@ -259,13 +266,16 @@ class _AdhanConfigScreenState extends ConsumerState<AdhanConfigScreen> {
                                             isExpanded: true,
                                             value: selectedTrack,
                                             items: List.generate(
-                                              11,
-                                              (index) => DropdownMenuItem(
-                                                value: index + 1,
+                                              10, // Max track 11 -> so 10 items starting at 2
+                                              (index) {
+                                                final trackNum = index + 2;
+                                                return DropdownMenuItem(
+                                                value: trackNum, // Starts at track 2
                                                 child: Text(
-                                                  'Track ${(index + 1).toString().padLeft(4, '0')}.mp3',
+                                                  'Track ${trackNum.toString().padLeft(4, '0')}.mp3 (${_getTrackLabel(trackNum)})',
                                                 ),
-                                              ),
+                                              );
+                                              },
                                             ),
                                             onChanged: (value) {
                                               if (value != null) {

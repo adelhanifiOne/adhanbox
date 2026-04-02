@@ -1,5 +1,5 @@
 name: adhanbox
-description: A new Flutter project.
+description: Application compagnon pour l'appareil AdhanBox (ESP32) — horaires de prière, LED, adhan audio.
 
 # The following line prevents the package from being accidentally published to
 # pub.dev using `pub publish`. This is preferred for private packages.
@@ -86,6 +86,7 @@ dependency_overrides:
   uuid: ^4.0.0
 
 dev_dependencies:
+  flutter_launcher_icons: "^0.13.1"
   flutter_lints: 4.0.0
   lints: 4.0.0
   flutter_test:
@@ -141,3 +142,8 @@ flutter:
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/custom-fonts/#from-packages
 
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: true
+  image_path: "assets/images/app_logo.png"
+  min_sdk_android: 21

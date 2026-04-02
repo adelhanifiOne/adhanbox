@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/prayer_time.dart';
 import '../services/connection_service.dart';
 import '../services/adhanbox_api.dart';
@@ -263,6 +264,14 @@ class _MainHomeScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final prayerTimesAsync = ref.watch(adjustedPrayerTimesProvider);
     final connectionState = ref.watch(connectionStateProvider);
+    final deviceIp = ref.watch(currentDeviceIpProvider);
+    final savedDevices = ref.watch(savedDevicesProvider).valueOrNull ?? [];
+    
+    final currentDeviceName = savedDevices.firstWhere(
+      (d) => d.ip == deviceIp, 
+      orElse: () => SavedDevice(name: 'AdhanBox', ip: deviceIp ?? ''),
+    ).name;
+
     final isDisconnected = connectionState.status == ConnectionStatus.disconnected ||
         connectionState.status == ConnectionStatus.error;
 
@@ -288,19 +297,38 @@ class _MainHomeScreen extends ConsumerWidget {
                   prayerTimesAsync: prayerTimesAsync,
                 ),
               ),
-              title: Row(
-                children: [
-                  const _MosqueIcon(size: 26, color: Colors.white),
-                  const SizedBox(width: 10),
-                  Text(
-                    'AdhanBox',
-                    style: GoogleFonts.poppins(
-                      color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.w600,
+              title: GestureDetector(
+                onTap: () => _showDeviceSwitcher(context, ref, savedDevices, deviceIp),
+                child: Row(
+                  children: [
+                    const _MosqueIcon(size: 26, color: Colors.white),
+                    const SizedBox(width: 10),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          currentDeviceName,
+                          style: GoogleFonts.poppins(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        if (savedDevices.length > 1)
+                          Row(
+                            children: [
+                              Text(
+                                'Changer d\'appareil',
+                                style: GoogleFonts.inter(color: Colors.white70, fontSize: 11),
+                              ),
+                              const Icon(Icons.arrow_drop_down_rounded, color: Colors.white70, size: 14),
+                            ],
+                          ),
+                      ],
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
               actions: [
                 _ConnectionChip(state: connectionState),
@@ -343,6 +371,59 @@ class _MainHomeScreen extends ConsumerWidget {
           ],
         ),
       ),
+    );
+  }
+
+  void _showDeviceSwitcher(BuildContext context, WidgetRef ref, List<SavedDevice> devices, String? currentIp) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 8),
+              Container(width: 36, height: 4, decoration: BoxDecoration(color: AppTheme.darkBorder, borderRadius: BorderRadius.circular(2))),
+              const SizedBox(height: 16),
+              Text('Mes Appareils', style: Theme.of(context).textTheme.titleLarge),
+              const SizedBox(height: 16),
+              ...devices.map((device) {
+                final isSelected = device.ip == currentIp;
+                return ListTile(
+                  leading: const Icon(Icons.router_rounded, color: AppTheme.emerald),
+                  title: Text(device.name, style: TextStyle(fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
+                  subtitle: Text(device.ip),
+                  trailing: isSelected ? const Icon(Icons.check_circle_rounded, color: AppTheme.emerald) : null,
+                  onTap: () async {
+                    Navigator.pop(ctx);
+                    if (!isSelected) {
+                      final prefs = await SharedPreferences.getInstance();
+                      await prefs.setString('deviceIp', device.ip);
+                      ref.read(currentDeviceIpProvider.notifier).state = device.ip;
+                      ref.invalidate(autoReconnectProvider);
+                      ref.invalidate(prayerTimesProvider);
+                      ref.invalidate(prayerOffsetsProvider);
+                      ref.invalidate(adjustedPrayerTimesProvider);
+                      ref.invalidate(connectionStateProvider);
+                    }
+                  },
+                );
+              }).toList(),
+              const Divider(),
+              ListTile(
+                leading: const Icon(Icons.add_rounded),
+                title: const Text('Ajouter un nouvel appareil'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  Navigator.of(context).push(MaterialPageRoute(builder: (_) => const DeviceSetupScreen()));
+                },
+              ),
+              const SizedBox(height: 16),
+            ],
+          ),
+        );
+      },
     );
   }
 }

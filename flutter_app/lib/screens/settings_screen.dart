@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../providers/adhanbox_provider.dart';
 import '../services/location_service.dart';
 import '../services/wifi_service.dart';
@@ -10,6 +11,8 @@ import '../theme/app_theme.dart';
 import '../main.dart';
 import 'adhan_config_screen.dart';
 import 'calculation_setup_screen.dart';
+import 'device_setup_screen.dart';
+import '../services/connection_service.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({Key? key}) : super(key: key);
@@ -95,50 +98,49 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
                   const SizedBox(height: 24),
 
-                  // ── Connexion ──
-                  _SectionHeader(label: 'Connexion'),
+                  // ── Mes Appareils ──
+                  _SectionHeader(label: 'Mes Appareils'),
                   _SettingsCard(children: [
-                    _ActionTile(
-                      icon: Icons.search_rounded,
-                      iconColor: AppTheme.emerald,
-                      title: 'Détecter automatiquement',
-                      subtitle: 'Rechercher l\'AdhanBox sur le réseau',
-                      onTap: _discoverDevice,
-                    ),
-                    const _CardDivider(),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-                      child: Row(
+                    ...((ref.watch(savedDevicesProvider).valueOrNull ?? []).asMap().entries.map((entry) {
+                      final i = entry.key;
+                      final d = entry.value;
+                      final isSelected = d.ip == deviceIp;
+                      return Column(
                         children: [
-                          Expanded(
-                            child: TextField(
-                              controller: _ipController,
-                              decoration: const InputDecoration(
-                                labelText: 'Adresse IP',
-                                hintText: '192.168.1.x',
-                                prefixIcon: Icon(Icons.router_rounded),
-                              ),
-                              keyboardType: TextInputType.number,
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          ElevatedButton(
-                            onPressed: () async {
-                              ref.read(currentDeviceIpProvider.notifier).state = _ipController.text;
-                              await saveDeviceIp(ref, _ipController.text);
-                              if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('IP sauvegardée'), backgroundColor: AppTheme.emerald),
-                                );
+                          if (i > 0) const _CardDivider(),
+                          ListTile(
+                            leading: Icon(Icons.router_rounded, color: isSelected ? AppTheme.emerald : (isDark ? AppTheme.darkTextMuted : AppTheme.lightTextMuted)),
+                            title: Text(d.name, style: TextStyle(fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
+                            subtitle: Text(d.ip),
+                            trailing: isSelected 
+                                ? const Icon(Icons.check_circle_rounded, color: AppTheme.emerald) 
+                                : IconButton(
+                                    icon: const Icon(Icons.delete_outline_rounded, color: Colors.red),
+                                    onPressed: () => removeSavedDevice(ref, d.ip),
+                                  ),
+                            onTap: () async {
+                              if (!isSelected) {
+                                final prefs = await SharedPreferences.getInstance();
+                                await prefs.setString('deviceIp', d.ip);
+                                ref.read(currentDeviceIpProvider.notifier).state = d.ip;
+                                ref.invalidate(autoReconnectProvider);
+                                ref.invalidate(prayerTimesProvider);
+                                ref.invalidate(prayerOffsetsProvider);
+                                ref.invalidate(adjustedPrayerTimesProvider);
+                                ref.invalidate(connectionStateProvider);
                               }
                             },
-                            style: ElevatedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                            ),
-                            child: const Icon(Icons.check_rounded),
                           ),
                         ],
-                      ),
+                      );
+                    }).toList()),
+                    if ((ref.watch(savedDevicesProvider).valueOrNull ?? []).isNotEmpty) const _CardDivider(),
+                    _ActionTile(
+                      icon: Icons.add_rounded,
+                      iconColor: AppTheme.emerald,
+                      title: 'Ajouter un appareil',
+                      subtitle: 'Détecter ou ajouter manuellement',
+                      onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const DeviceSetupScreen())),
                     ),
                   ]).animate().fadeIn(delay: 100.ms).slideY(begin: 0.06),
 

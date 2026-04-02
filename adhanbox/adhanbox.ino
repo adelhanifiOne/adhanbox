@@ -25,8 +25,31 @@
 
 #include <soc/gpio_struct.h>
 #include <HTTPClient.h>
+#include <PubSubClient.h>
 #include <time.h>
 #include <math.h>
+
+// ── MQTT ─────────────────────────────────────────────────────────────────────
+WiFiClient   mqttWifiClient;
+PubSubClient mqtt(mqttWifiClient);
+
+#define MQTT_PORT          1883
+#define MQTT_CLIENT_ID     "adhanbox"
+#define MQTT_RECONNECT_MS  5000UL
+
+// Subscribe topics
+#define TOPIC_ADHAN_TRIGGER  "adhanbox/adhan/trigger"
+#define TOPIC_AUDIO_PLAY     "adhanbox/audio/play"
+#define TOPIC_AUDIO_STOP     "adhanbox/audio/stop"
+#define TOPIC_AUDIO_VOLUME   "adhanbox/audio/volume"
+#define TOPIC_LED_SCENARIO   "adhanbox/led/scenario"
+#define TOPIC_LED_BRIGHTNESS "adhanbox/led/brightness"
+
+// Publish topics
+#define TOPIC_STATUS         "adhanbox/status"
+#define TOPIC_AUDIO_STATUS   "adhanbox/audio/status"
+#define TOPIC_PRAYER_FIRED   "adhanbox/prayer/fired"
+// ─────────────────────────────────────────────────────────────────────────────
 
 // Addressable LED configuration
 #ifndef LED_NUM
@@ -87,9 +110,9 @@ unsigned long softwareAlarmAt = 0;
 bool forcePlayTrack1 = false;
 // Global LED brightness (0-100, default 50%)
 int ledBrightness = 50;
-// Track sequence: duaa (track 3) plays first, then adhan track after duaa finishes
-bool shouldPlayAdhanAfterDuaa = false;
-int adhanTrackAfterDuaa = 0;
+// Track sequence: adhan plays first, then duaa (track 1) plays after adhan finishes
+bool shouldPlayDuaaAfterAdhan = false;
+int adhanTrackBeforeDuaa = 0;
 
 // LED / button state
 // Scene mapping:
@@ -132,7 +155,12 @@ void handleDumpStatus();
 void scheduleNextPrayerAlarm();
 bool computeNextPrayer(const DateTime &now, DateTime &nextDt, int &idx);
 void handleLedTest();
+void handleMqttConfig();
 void setupServerRoutes();
+void mqttCallback(char* topic, byte* payload, unsigned int len);
+void reconnectMQTT();
+void mqttPublishStatus();
+void mqttPublishPrayerFired(int prayerIndex);
 void stopConfigAP();
 void getCalculationAngles(double &fajrAngle, double &ishaAngle, String &methodName);
 void scanI2CBusAndReport();
@@ -218,7 +246,10 @@ static const uint8_t NUM_STATIC_COLORS = sizeof(STATIC_COLORS)/sizeof(STATIC_COL
 const int BLINK_INDEX = 7;
 const int DYN_HUE_INDEX = 8;
 const int DYN_FADE_INDEX = 9;
-const int TOTAL_SCENES = 10;
+const int SCENE_PRAYER = 10;
+const int SCENE_BREATH = 11;
+const int SCENE_PARTY = 12;
+const int TOTAL_SCENES = 13;
 
 // DFPlayer pin mapping requested: DFPlayer on GPIO1 and GPIO2
 // DFPlayer TX -> ESP RX (GPIO1)  // <-- WARNING: GPIO1 is also UART0 TX (console)
@@ -334,9 +365,9 @@ const char index_html[] PROGMEM = R"HTML(
           </div>
           <div style="margin-top:12px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
             <label class="small">Tester pistes:</label>
-            <button class="ghost" id="testTrack1Btn">Adhan standard (piste 1)</button>
-            <button class="ghost" id="testTrack2Btn">Adhan Fajr (piste 2)</button>
-            <button class="ghost" id="testTrack3Btn">Duaa (piste 3)</button>
+            <button class="ghost" id="testTrack1Btn">Duaa (piste 1)</button>
+            <button class="ghost" id="testTrack2Btn">Adhan (piste 2)</button>
+            <button class="ghost" id="testTrack3Btn">Adhan alt (piste 3)</button>
             <button class="btn" id="stopTestBtn" style="background:#EF4444;">Arrêter</button>
           </div>
           <div style="margin-top:12px; display:flex; gap:8px; align-items:center;">
@@ -1956,6 +1987,8 @@ void setupServerRoutes(){
   server.on("/api/led/brightness", HTTP_POST, handleSetBrightness);
   server.on("/api/led/brightness", HTTP_GET, handleGetBrightness);
   server.on("/api/led/scenario", HTTP_POST, handleSetLedScenario);
+  server.on("/api/mqtt/config", HTTP_GET,  handleMqttConfig);
+  server.on("/api/mqtt/config", HTTP_POST, handleMqttConfig);
 }
 
 void stopConfigAP(){
@@ -2192,20 +2225,20 @@ bool getPrayerPlaybackForIndex(int prayerIndex, int &trackToPlay, bool &playDuaa
   if(prayerIndex == 2) return false;
 
   // Defaults for backward compatibility.
-  trackToPlay = (prayerIndex == 1) ? 2 : 1;
+  trackToPlay = (prayerIndex == 1) ? 3 : 2;
   playDuaaAfter = true;
 
   prefs.begin("adhancfg", true);
   bool forceTrack1 = prefs.getBool("force_t1", forcePlayTrack1);
 
   if(forceTrack1){
-    trackToPlay = 1;
+    trackToPlay = 2;
   }else{
-    if(prayerIndex == 1) trackToPlay = prefs.getInt("adhan_fajr_track", 2);
-    else if(prayerIndex == 3) trackToPlay = prefs.getInt("adhan_dhuhr_track", 1);
-    else if(prayerIndex == 4) trackToPlay = prefs.getInt("adhan_asr_track", 1);
-    else if(prayerIndex == 5) trackToPlay = prefs.getInt("adhan_maghrib_track", 1);
-    else if(prayerIndex == 6) trackToPlay = prefs.getInt("adhan_isha_track", 1);
+    if(prayerIndex == 1) trackToPlay = prefs.getInt("adhan_fajr_track", 3);
+    else if(prayerIndex == 3) trackToPlay = prefs.getInt("adhan_dhuhr_track", 2);
+    else if(prayerIndex == 4) trackToPlay = prefs.getInt("adhan_asr_track", 2);
+    else if(prayerIndex == 5) trackToPlay = prefs.getInt("adhan_maghrib_track", 2);
+    else if(prayerIndex == 6) trackToPlay = prefs.getInt("adhan_isha_track", 2);
   }
 
   if(prayerIndex == 1) playDuaaAfter = prefs.getBool("adhan_fajr_duaa", true);
@@ -2571,7 +2604,7 @@ bool tryRecoverDFPlayer(int retries=2){
 }
 
 // Play a track number on DFPlayer (1-based)
-// For prayer adhan: Fajr plays track 2, others play track 1, then track 3 (duaa) plays after
+// For prayer adhan: Fajr plays track 3, others play track 2, then track 1 (duaa) plays after
 void playTrack(int track){
   // Always attempt to ensure DFPlayer available
   if(!dfAvailable){
@@ -2650,14 +2683,14 @@ void printDetail(uint8_t type, int value){
       Serial.println(F(" Play Finished!"));
         isPlaying = false;
         dfLastError = DFERR_NONE;
-        // Play adhan after duaa (track 3) finishes.
-        if(shouldPlayAdhanAfterDuaa && adhanTrackAfterDuaa > 0 && value == 3){
-          int trackToPlayNow = adhanTrackAfterDuaa;
-          shouldPlayAdhanAfterDuaa = false;
-          adhanTrackAfterDuaa = 0;
-          Serial.printf("Duaa finished, playing adhan (track %d)...\n", trackToPlayNow);
-          delay(500); // short pause before adhan
-          playTrack(trackToPlayNow);
+        // Play duaa (track 1) after adhan finishes.
+        if(shouldPlayDuaaAfterAdhan && adhanTrackBeforeDuaa > 0 && value == adhanTrackBeforeDuaa){
+          shouldPlayDuaaAfterAdhan = false;
+          int playedAdhanTrack = adhanTrackBeforeDuaa;
+          adhanTrackBeforeDuaa = 0;
+          Serial.printf("Adhan (track %d) finished, playing duaa (track 1)...\n", playedAdhanTrack);
+          delay(500); // short pause before duaa
+          playTrack(1);
         }
       break;
     case DFPlayerError:
@@ -2694,6 +2727,128 @@ void printDetail(uint8_t type, int value){
       break;
     default:
       break;
+  }
+}
+
+// ── MQTT callback ─────────────────────────────────────────────────────────────
+void mqttCallback(char* topic, byte* payload, unsigned int len) {
+  char msg[len + 1];
+  memcpy(msg, payload, len);
+  msg[len] = '\0';
+  Serial.printf("[MQTT] %s → %s\n", topic, msg);
+
+  if (strcmp(topic, TOPIC_ADHAN_TRIGGER) == 0) {
+    int track = (len > 0) ? atoi(msg) : 2;
+    if (track < 2) track = 2; // jamais track 1 (duaa) comme adhan
+    shouldPlayDuaaAfterAdhan = true;
+    adhanTrackBeforeDuaa = track;
+    playTrack(track);
+    mqtt.publish(TOPIC_AUDIO_STATUS, "playing");
+
+  } else if (strcmp(topic, TOPIC_AUDIO_PLAY) == 0) {
+    int track = atoi(msg);
+    if (track > 0) {
+      playTrack(track);
+      mqtt.publish(TOPIC_AUDIO_STATUS, "playing");
+    }
+
+  } else if (strcmp(topic, TOPIC_AUDIO_STOP) == 0) {
+    stopPlay();
+    mqtt.publish(TOPIC_AUDIO_STATUS, "stopped");
+
+  } else if (strcmp(topic, TOPIC_AUDIO_VOLUME) == 0) {
+    int vol = constrain(atoi(msg), 0, 30);
+    if (dfAvailable) dfplayer.volume(vol);
+    prefs.begin("adhancfg", false);
+    prefs.putInt("volume", vol);
+    prefs.end();
+
+  } else if (strcmp(topic, TOPIC_LED_SCENARIO) == 0) {
+    int sc = atoi(msg);
+    if (sc >= 0 && sc < TOTAL_SCENES) {
+      ledScenario = sc;
+      prefs.begin("adhancfg", false);
+      prefs.putInt("led_scenario", sc);
+      prefs.end();
+    }
+
+  } else if (strcmp(topic, TOPIC_LED_BRIGHTNESS) == 0) {
+    int br = constrain(atoi(msg), 0, 100);
+    ledBrightness = br;
+    prefs.begin("adhancfg", false);
+    prefs.putInt("brightness", br);
+    prefs.end();
+  }
+}
+
+// ── MQTT reconnect ─────────────────────────────────────────────────────────────
+void reconnectMQTT() {
+  static unsigned long lastAttempt = 0;
+  if (millis() - lastAttempt < MQTT_RECONNECT_MS) return;
+  lastAttempt = millis();
+
+  prefs.begin("adhancfg", true);
+  String broker = prefs.getString("mqtt_broker", "");
+  prefs.end();
+  if (broker.length() == 0) return; // broker pas encore configuré
+
+  mqtt.setServer(broker.c_str(), MQTT_PORT);
+  mqtt.setCallback(mqttCallback);
+
+  Serial.printf("[MQTT] Connecting to %s…\n", broker.c_str());
+  if (mqtt.connect(MQTT_CLIENT_ID)) {
+    Serial.println("[MQTT] Connected");
+    mqtt.subscribe(TOPIC_ADHAN_TRIGGER);
+    mqtt.subscribe(TOPIC_AUDIO_PLAY);
+    mqtt.subscribe(TOPIC_AUDIO_STOP);
+    mqtt.subscribe(TOPIC_AUDIO_VOLUME);
+    mqtt.subscribe(TOPIC_LED_SCENARIO);
+    mqtt.subscribe(TOPIC_LED_BRIGHTNESS);
+    mqttPublishStatus();
+  } else {
+    Serial.printf("[MQTT] Failed rc=%d — retry in %lus\n", mqtt.state(), MQTT_RECONNECT_MS / 1000);
+  }
+}
+
+// ── MQTT publish helpers ────────────────────────────────────────────────────────
+void mqttPublishStatus() {
+  if (!mqtt.connected()) return;
+  char buf[128];
+  snprintf(buf, sizeof(buf),
+    "{\"ip\":\"%s\",\"rssi\":%d,\"playing\":%s,\"led\":%d,\"brightness\":%d}",
+    WiFi.localIP().toString().c_str(),
+    WiFi.RSSI(),
+    isPlaying ? "true" : "false",
+    ledScenario,
+    ledBrightness
+  );
+  mqtt.publish(TOPIC_STATUS, buf, /*retain=*/true);
+}
+
+void mqttPublishPrayerFired(int prayerIndex) {
+  if (!mqtt.connected()) return;
+  char buf[32];
+  snprintf(buf, sizeof(buf), "{\"prayer\":%d}", prayerIndex);
+  mqtt.publish(TOPIC_PRAYER_FIRED, buf);
+}
+
+// ── HTTP handler : config broker MQTT ─────────────────────────────────────────
+void handleMqttConfig() {
+  if (server.method() == HTTP_POST) {
+    String broker = server.arg("broker");
+    broker.trim();
+    prefs.begin("adhancfg", false);
+    prefs.putString("mqtt_broker", broker);
+    prefs.end();
+    mqtt.setServer(broker.c_str(), MQTT_PORT);
+    mqtt.setCallback(mqttCallback);
+    server.send(200, "application/json", "{\"ok\":true}");
+  } else {
+    prefs.begin("adhancfg", true);
+    String broker = prefs.getString("mqtt_broker", "");
+    prefs.end();
+    String json = "{\"broker\":\"" + broker + "\",\"connected\":" + (mqtt.connected() ? "true" : "false") + "}";
+    server.send(200, "application/json", json);
   }
 }
 
@@ -2868,6 +3023,17 @@ void setup(){
     Serial.println("Web server started on normal WiFi connection");
     Serial.println("API available at http://" + WiFi.localIP().toString());
     Serial.println("To reconfigure WiFi, connect to AP and use: /stop_ap");
+    // Init MQTT si un broker est configuré
+    prefs.begin("adhancfg", true);
+    String mqttBroker = prefs.getString("mqtt_broker", "");
+    prefs.end();
+    if (mqttBroker.length() > 0) {
+      mqtt.setServer(mqttBroker.c_str(), MQTT_PORT);
+      mqtt.setCallback(mqttCallback);
+      Serial.printf("MQTT broker configured: %s\n", mqttBroker.c_str());
+    } else {
+      Serial.println("MQTT broker not configured yet. Use POST /api/mqtt/config {broker:IP}");
+    }
   }
   
   Serial.println("You can also control WiFi via serial commands: startap, stopap, showloc");
@@ -2904,6 +3070,7 @@ void loop(){
         Serial.println("RTC not initialized or not present.");
       }
     }else if(cmd.equalsIgnoreCase("setrtc")){
+
       // set RTC to compile time
       if(rtc.begin()){
         rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
@@ -3066,6 +3233,23 @@ void loop(){
           uint8_t g = (uint8_t)((1.0f - ft) * STATIC_COLORS[idx][1] + ft * STATIC_COLORS[next][1]);
           uint8_t b = (uint8_t)((1.0f - ft) * STATIC_COLORS[idx][2] + ft * STATIC_COLORS[next][2]);
           stripSetAll(r, g, b);
+        } else if(ledScenario == SCENE_PRAYER){
+          float breath = 0.5f + 0.5f * sinf((float)now * (2.0f * 3.14159265f / 4000.0f));
+          stripSetAll(0, (uint8_t)(150 * breath), (uint8_t)(105 * breath));
+        } else if(ledScenario == SCENE_BREATH){
+          float breath = 0.5f + 0.5f * sinf((float)now * (2.0f * 3.14159265f / 4000.0f));
+          stripSetAll(0, (uint8_t)(180 * breath), (uint8_t)(212 * breath));
+        } else if(ledScenario == SCENE_PARTY){
+          uint8_t offset = (now/5) & 0xFF;
+          leds.clear();
+          for(uint16_t i=0;i<LED_NUM;i++){
+            uint8_t hue = (offset + (i * 40)) & 0xFF;
+            uint8_t r,g,b; hsv2rgb(hue, 255, 255, r,g,b);
+            if( ((now + i*97) % 100) > 60 ) {
+               leds.setPixelColor(i, leds.Color((r*ledBrightness)/100, (g*ledBrightness)/100, (b*ledBrightness)/100));
+            }
+          }
+          leds.show();
         } else {
           stripSetAll(0,0,0);
         }
@@ -3102,97 +3286,93 @@ void loop(){
         uint16_t bright = ((uint16_t)r + (uint16_t)g + (uint16_t)b) / 3;
         bright = (bright * ledBrightness) / 100;
         setLedDuty(bright);
+      } else if(ledScenario == SCENE_PRAYER || ledScenario == SCENE_BREATH){
+        float breath = 0.5f + 0.5f * sinf((float)now * (2.0f * 3.14159265f / 4000.0f));
+        uint8_t v = (uint8_t)(150 * breath);
+        v = (v * ledBrightness) / 100;
+        setLedDuty(v);
+      } else if(ledScenario == SCENE_PARTY){
+        float pulse = 0.5f + 0.5f * sinf((float)now * (2.0f * 3.14159265f / 500.0f));
+        uint8_t v = (uint8_t)(200 * pulse);
+        v = (v * ledBrightness) / 100;
+        setLedDuty(v);
       } else {
         setLedDuty(0);
       }
     }
   }
-  // Handle DS3231 alarm event (flag set in ISR)
-  // Fallback: if INT/SQW isn't wired we still trigger the prayer when RTC reaches the scheduled time.
+  // Handle alarm triggers
   static uint32_t lastPrayerTriggeredUnix = 0;
-  // software alarm fallback based on millis()
-  if(softwareAlarmAt != 0 && millis() >= softwareAlarmAt){
-    Serial.println("Software fallback alarm triggered (millis)");
-    softwareAlarmAt = 0;
-    ds3231ClearAlarmFlags();
-    if(scheduledPrayerIndex > 0){
-      int trackToPlay = 1;
-      bool playDuaaBefore = true;
-      if(getPrayerPlaybackForIndex(scheduledPrayerIndex, trackToPlay, playDuaaBefore)){
-        if(playDuaaBefore){
-          // Play duaa first, then adhan after duaa finishes
-          shouldPlayAdhanAfterDuaa = true;
-          adhanTrackAfterDuaa = trackToPlay;
-          playTrack(3);
-        }else{
-          shouldPlayAdhanAfterDuaa = false;
-          adhanTrackAfterDuaa = 0;
-          playTrack(trackToPlay);
-        }
-      }else{
-        Serial.printf("Skipping non-adhan event for index %d\n", scheduledPrayerIndex);
-      }
-    }
-    scheduleNextPrayerAlarm();
+  uint32_t nowUnix = 0;
+  if(rtc.begin()) nowUnix = rtc.now().unixtime();
+  
+  bool shouldTrigger = false;
+  
+  if (softwareAlarmAt != 0 && millis() >= softwareAlarmAt) {
+      Serial.println("Software fallback alarm triggered (millis)");
+      shouldTrigger = true;
   }
-  if(rtc.begin() && scheduledPrayerIndex > 0){
-    DateTime nowRtc = rtc.now();
-    uint32_t nowUnix = nowRtc.unixtime();
-    if(nowUnix >= scheduledPrayerTime.unixtime() && nowUnix != lastPrayerTriggeredUnix){
-      Serial.println("RTC reached scheduled prayer time (fallback polling), triggering prayer.");
-      lastPrayerTriggeredUnix = nowUnix;
-      // clear DS3231 alarm flags if present
+  if (nowUnix > 0 && scheduledPrayerIndex > 0 && nowUnix >= scheduledPrayerTime.unixtime()) {
+      Serial.println("RTC reached scheduled prayer time (fallback polling)");
+      shouldTrigger = true;
+  }
+  if (ds3231AlarmFlag) {
+      Serial.println("DS3231 alarm triggered.");
+      shouldTrigger = true;
+  }
+  
+  if (shouldTrigger) {
+      softwareAlarmAt = 0;
+      ds3231AlarmFlag = false;
       ds3231ClearAlarmFlags();
-      int trackToPlay = 1;
-      bool playDuaaBefore = true;
-      if(getPrayerPlaybackForIndex(scheduledPrayerIndex, trackToPlay, playDuaaBefore)){
-        if(playDuaaBefore){
-          shouldPlayAdhanAfterDuaa = true;
-          adhanTrackAfterDuaa = trackToPlay;
-          playTrack(3);
-        }else{
-          shouldPlayAdhanAfterDuaa = false;
-          adhanTrackAfterDuaa = 0;
-          playTrack(trackToPlay);
-        }
-      }else{
-        Serial.printf("Skipping non-adhan event for index %d\n", scheduledPrayerIndex);
+      
+      if (nowUnix == 0 || (nowUnix - lastPrayerTriggeredUnix) > 60) {
+          lastPrayerTriggeredUnix = nowUnix;
+          if (scheduledPrayerIndex > 0) {
+              int trackToPlay = 2; // Default to 2
+              bool playDuaaAfter = true;
+              if (getPrayerPlaybackForIndex(scheduledPrayerIndex, trackToPlay, playDuaaAfter)) {
+                  Serial.printf("Prayer index %d\n", scheduledPrayerIndex);
+                  // Protect against playing duaa as adhan
+                  if(trackToPlay == 1) trackToPlay = 2;
+                  
+                  if (playDuaaAfter) {
+                      shouldPlayDuaaAfterAdhan = true;
+                      adhanTrackBeforeDuaa = trackToPlay;
+                      Serial.printf("Playing adhan first (track %d), then duaa (track 1)\n", trackToPlay);
+                      playTrack(trackToPlay);
+                  } else {
+                      shouldPlayDuaaAfterAdhan = false;
+                      adhanTrackBeforeDuaa = 0;
+                      Serial.printf("Playing adhan directly (track %d) without duaa\n", trackToPlay);
+                      playTrack(trackToPlay);
+                  }
+                  mqttPublishPrayerFired(scheduledPrayerIndex);
+              } else {
+                  Serial.printf("Skipping non-adhan event for index %d\n", scheduledPrayerIndex);
+              }
+          }
+      } else {
+          Serial.println("Skipped duplicate alarm trigger within 60s");
       }
-      // Re-schedule next prayer
       scheduleNextPrayerAlarm();
-    }
-  }
-
-  if(ds3231AlarmFlag){
-    ds3231AlarmFlag = false;
-    // Clear alarm flags on chip
-    ds3231ClearAlarmFlags();
-    Serial.println("DS3231 alarm triggered.");
-    int trackToPlay = 1;
-    bool playDuaaBefore = true;
-    if(getPrayerPlaybackForIndex(scheduledPrayerIndex, trackToPlay, playDuaaBefore)){
-      Serial.printf("Prayer index %d\n", scheduledPrayerIndex);
-      if(playDuaaBefore){
-        shouldPlayAdhanAfterDuaa = true;
-        adhanTrackAfterDuaa = trackToPlay;
-        Serial.printf("Playing duaa first, then adhan (track %d)\n", trackToPlay);
-        playTrack(3);
-      }else{
-        shouldPlayAdhanAfterDuaa = false;
-        adhanTrackAfterDuaa = 0;
-        Serial.printf("Playing adhan directly (track %d)\n", trackToPlay);
-        playTrack(trackToPlay);
-      }
-    }else{
-      Serial.printf("Skipping non-adhan event for index %d\n", scheduledPrayerIndex);
-    }
-    // Re-schedule next prayer
-    scheduleNextPrayerAlarm();
   }
   
   // Handle HTTP server requests (always, whether in AP mode or normal WiFi)
   server.handleClient();
-  
+
+  // MQTT : maintenir la connexion et traiter les messages entrants
+  if (WiFi.status() == WL_CONNECTED) {
+    if (!mqtt.connected()) reconnectMQTT();
+    else mqtt.loop();
+  }
+  // MQTT : heartbeat status toutes les 30s
+  static unsigned long lastMqttStatus = 0;
+  if (mqtt.connected() && millis() - lastMqttStatus > 30000) {
+    lastMqttStatus = millis();
+    mqttPublishStatus();
+  }
+
   if(apRunning){
     // process captive DNS requests so clients are redirected to our AP IP
     dnsServer.processNextRequest();
