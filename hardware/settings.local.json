@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(flutter analyze lib/theme/app_theme.dart lib/main.dart lib/screens/home_screen.dart lib/screens/prayer_times_screen.dart lib/screens/led_control_screen.dart lib/screens/settings_screen.dart lib/screens/about_screen.dart)",
+      "Bash(flutter build apk --debug)",
+      "Bash(flutter analyze lib/screens/calculation_setup_screen.dart)"
+    ]
+  }
+}
