@@ -1,0 +1,1060 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Adel Hanifi — Portfolio</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700;800&family=Inter:wght@300;400;500;600&family=Amiri:wght@400;700&display=swap');
+
+    :root {
+      --emerald: #10B981;
+      --emerald-dark: #059669;
+      --emerald-dim: rgba(16,185,129,0.12);
+      --gold: #F59E0B;
+      --gold-light: #FCD34D;
+      --gold-dim: rgba(245,158,11,0.12);
+      --bg-darkest: #020617;
+      --bg: #0F172A;
+      --card: #1A2535;
+      --card-hover: #1f2e42;
+      --border: #2D3F55;
+      --text: #F1F5F9;
+      --text-muted: #94A3B8;
+      --text-dim: #4B5563;
+    }
+
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', system-ui, sans-serif;
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+
+    /* ─── NAV ─────────────────────────────────── */
+    nav {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      z-index: 100;
+      padding: 1rem 2.5rem;
+      background: rgba(15,23,42,0.85);
+      backdrop-filter: blur(20px);
+      border-bottom: 1px solid rgba(16,185,129,0.08);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .nav-logo {
+      font-family: 'Poppins', sans-serif;
+      font-weight: 800;
+      font-size: 1rem;
+      letter-spacing: 0.08em;
+      background: linear-gradient(135deg, var(--emerald), var(--gold));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .nav-links { display: flex; gap: 2rem; list-style: none; }
+    .nav-links a {
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: 0.85rem;
+      font-weight: 500;
+      transition: color 0.2s;
+    }
+    .nav-links a:hover { color: var(--emerald); }
+
+    /* ─── HERO ────────────────────────────────── */
+    .hero {
+      position: relative;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      padding: 7rem 2rem 4rem;
+    }
+
+    .hero-bg {
+      position: absolute; inset: 0;
+      background:
+        radial-gradient(ellipse 90% 60% at 15% 50%, rgba(16,185,129,0.14) 0%, transparent 55%),
+        radial-gradient(ellipse 60% 50% at 85% 25%, rgba(245,158,11,0.08) 0%, transparent 50%),
+        linear-gradient(175deg, #020617 0%, #0F172A 45%, #071a0e 100%);
+    }
+
+    .geo-pattern {
+      position: absolute; inset: 0;
+      opacity: 0.05;
+      pointer-events: none;
+    }
+
+    .orb {
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(90px);
+      animation: floatOrb 9s ease-in-out infinite;
+    }
+    .orb-1 { width: 500px; height: 500px; background: rgba(16,185,129,0.13); top: 5%; left: -8%; animation-delay: 0s; }
+    .orb-2 { width: 350px; height: 350px; background: rgba(245,158,11,0.08); bottom: 10%; right: 0%; animation-delay: 4s; }
+    .orb-3 { width: 200px; height: 200px; background: rgba(16,185,129,0.07); top: 55%; right: 30%; animation-delay: 7s; }
+
+    @keyframes floatOrb {
+      0%, 100% { transform: translateY(0) scale(1); }
+      50% { transform: translateY(-35px) scale(1.06); }
+    }
+
+    .hero-content {
+      position: relative;
+      text-align: center;
+      max-width: 780px;
+    }
+
+    .bismillah {
+      font-family: 'Amiri', serif;
+      font-size: 1.6rem;
+      color: var(--gold);
+      margin-bottom: 1.75rem;
+      opacity: 0.85;
+      letter-spacing: 0.04em;
+    }
+
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: var(--emerald-dim);
+      border: 1px solid rgba(16,185,129,0.25);
+      color: var(--emerald);
+      padding: 0.4rem 1.1rem;
+      border-radius: 9999px;
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      margin-bottom: 1.5rem;
+    }
+
+    .hero-title {
+      font-family: 'Poppins', sans-serif;
+      font-size: clamp(2.6rem, 6vw, 5rem);
+      font-weight: 800;
+      line-height: 1.08;
+      margin-bottom: 1.5rem;
+    }
+
+    .hero-title .gradient-text {
+      background: linear-gradient(135deg, var(--emerald) 0%, var(--gold) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .hero-subtitle {
+      font-size: 1.05rem;
+      color: var(--text-muted);
+      max-width: 480px;
+      margin: 0 auto 2.5rem;
+      line-height: 1.85;
+    }
+
+    .hero-cta { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; }
+
+    .btn { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1.75rem; border-radius: 9999px; font-size: 0.875rem; font-weight: 600; text-decoration: none; transition: all 0.22s; cursor: pointer; border: none; }
+    .btn-primary { background: var(--emerald); color: #000; }
+    .btn-primary:hover { background: var(--emerald-dark); transform: translateY(-2px); box-shadow: 0 12px 30px rgba(16,185,129,0.28); }
+    .btn-ghost { background: transparent; color: var(--text-muted); border: 1px solid var(--border); }
+    .btn-ghost:hover { border-color: var(--emerald); color: var(--emerald); }
+
+    /* ─── STATS ───────────────────────────────── */
+    .stats-bar {
+      display: flex;
+      justify-content: center;
+      gap: 0;
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      background: rgba(15,23,42,0.6);
+    }
+
+    .stat-item {
+      flex: 1;
+      max-width: 220px;
+      padding: 2.5rem 1rem;
+      text-align: center;
+      position: relative;
+    }
+    .stat-item + .stat-item::before {
+      content: '';
+      position: absolute;
+      left: 0; top: 25%; height: 50%;
+      width: 1px;
+      background: var(--border);
+    }
+
+    .stat-number {
+      font-family: 'Poppins', sans-serif;
+      font-size: 2.8rem;
+      font-weight: 800;
+      line-height: 1;
+      background: linear-gradient(135deg, var(--emerald), var(--gold));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 0.4rem;
+    }
+    .stat-label {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      font-weight: 500;
+    }
+
+    /* ─── SECTION WRAPPER ─────────────────────── */
+    .section { padding: 5rem 2rem; }
+    .section-inner { max-width: 1200px; margin: 0 auto; }
+
+    .section-header {
+      text-align: center;
+      margin-bottom: 4rem;
+    }
+    .section-eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: var(--gold-dim);
+      border: 1px solid rgba(245,158,11,0.25);
+      color: var(--gold);
+      padding: 0.35rem 1rem;
+      border-radius: 9999px;
+      font-size: 0.7rem;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      margin-bottom: 1rem;
+    }
+    .section-title {
+      font-family: 'Poppins', sans-serif;
+      font-size: clamp(1.9rem, 4vw, 3rem);
+      font-weight: 700;
+      margin-bottom: 0.75rem;
+    }
+    .section-desc { color: var(--text-muted); font-size: 0.95rem; max-width: 480px; margin: 0 auto; }
+
+    /* ─── PROJECT GRID ────────────────────────── */
+    .projects-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 1.75rem;
+    }
+    @media (max-width: 860px) { .projects-grid { grid-template-columns: 1fr; } }
+
+    .project-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 1.5rem;
+      overflow: hidden;
+      transition: transform 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+      opacity: 0;
+      transform: translateY(28px);
+    }
+    .project-card.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    .project-card:hover {
+      transform: translateY(-5px);
+      border-color: rgba(16,185,129,0.35);
+      box-shadow: 0 24px 60px rgba(0,0,0,0.35), 0 0 0 1px rgba(16,185,129,0.08);
+    }
+
+    /* Mockup area */
+    .project-mockup {
+      width: 100%;
+      height: 230px;
+      background: var(--bg-darkest);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      position: relative;
+    }
+    .project-mockup svg { display: block; }
+
+    /* Info area */
+    .project-info { padding: 1.75rem; }
+
+    .project-header {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+    .project-icon {
+      width: 52px;
+      height: 52px;
+      border-radius: 14px;
+      overflow: hidden;
+      flex-shrink: 0;
+      border: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .project-icon img { width: 100%; height: 100%; object-fit: cover; }
+
+    .project-category { font-size: 0.7rem; font-weight: 600; color: var(--emerald); letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 0.2rem; }
+    .project-title { font-family: 'Poppins', sans-serif; font-size: 1.15rem; font-weight: 700; }
+
+    .project-desc { color: var(--text-muted); font-size: 0.875rem; line-height: 1.75; margin-bottom: 1.25rem; }
+
+    .tech-stack { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 1.5rem; }
+    .badge {
+      padding: 0.22rem 0.65rem;
+      border-radius: 9999px;
+      font-size: 0.72rem;
+      font-weight: 500;
+    }
+    .badge-default { background: rgba(255,255,255,0.04); border: 1px solid var(--border); color: var(--text-muted); }
+    .badge-emerald { background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.25); color: var(--emerald); }
+    .badge-gold { background: rgba(245,158,11,0.1); border: 1px solid rgba(245,158,11,0.25); color: var(--gold); }
+
+    .project-links { display: flex; gap: 0.65rem; flex-wrap: wrap; }
+    .link-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.45rem 1rem;
+      border-radius: 9999px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      text-decoration: none;
+      transition: all 0.2s;
+    }
+    .link-gh { background: rgba(255,255,255,0.04); border: 1px solid var(--border); color: var(--text-muted); }
+    .link-gh:hover { border-color: var(--emerald); color: var(--emerald); }
+    .link-dl { background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.25); color: var(--emerald); }
+    .link-dl:hover { background: var(--emerald); color: #000; }
+
+    /* ─── ABOUT ───────────────────────────────── */
+    .about-section {
+      background: var(--bg-darkest);
+      border-top: 1px solid var(--border);
+      padding: 5rem 2rem;
+    }
+    .about-inner {
+      max-width: 960px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4rem;
+      align-items: center;
+    }
+    @media (max-width: 768px) { .about-inner { grid-template-columns: 1fr; } }
+
+    .about-text h2 {
+      font-family: 'Poppins', sans-serif;
+      font-size: clamp(1.6rem, 3vw, 2.2rem);
+      font-weight: 700;
+      margin-bottom: 1rem;
+    }
+    .about-text p { color: var(--text-muted); line-height: 1.85; margin-bottom: 1rem; font-size: 0.925rem; }
+
+    .skills-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    .skill-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 1rem;
+      padding: 1.25rem;
+      text-align: center;
+      transition: all 0.2s;
+    }
+    .skill-card:hover { border-color: rgba(16,185,129,0.3); transform: translateY(-2px); }
+    .skill-icon { font-size: 1.6rem; margin-bottom: 0.4rem; }
+    .skill-name { font-size: 0.78rem; font-weight: 600; color: var(--text-muted); }
+
+    /* ─── FOOTER ──────────────────────────────── */
+    footer {
+      background: var(--bg-darkest);
+      border-top: 1px solid var(--border);
+      padding: 2.5rem 2rem;
+      text-align: center;
+    }
+    .footer-arabic {
+      font-family: 'Amiri', serif;
+      font-size: 1.3rem;
+      color: var(--gold);
+      opacity: 0.7;
+      margin-bottom: 0.75rem;
+    }
+    footer p { color: var(--text-dim); font-size: 0.8rem; line-height: 1.8; }
+    footer a { color: var(--emerald); text-decoration: none; }
+    footer a:hover { text-decoration: underline; }
+
+    /* ─── ICONS (inline SVG helpers) ─────────── */
+    .icon-gh { fill: currentColor; }
+  </style>
+</head>
+<body>
+
+<!-- ═══ NAV ════════════════════════════════════ -->
+<nav>
+  <div class="nav-logo">AH · Portfolio</div>
+  <ul class="nav-links">
+    <li><a href="#projects">Projets</a></li>
+    <li><a href="#about">À propos</a></li>
+    <li><a href="https://github.com/AdelHANIFI" target="_blank" rel="noopener">GitHub ↗</a></li>
+  </ul>
+</nav>
+
+<!-- ═══ HERO ════════════════════════════════════ -->
+<section class="hero">
+  <div class="hero-bg"></div>
+
+  <!-- Islamic geometric tiling -->
+  <svg class="geo-pattern" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <pattern id="geo" x="0" y="0" width="90" height="90" patternUnits="userSpaceOnUse">
+        <!-- 8-pointed star -->
+        <polygon points="45,6 52,26 70,26 56,38 61,58 45,46 29,58 34,38 20,26 38,26"
+                 fill="none" stroke="#10B981" stroke-width="0.6"/>
+        <!-- Inner diamond -->
+        <rect x="34" y="34" width="22" height="22" transform="rotate(45 45 45)"
+              fill="none" stroke="#F59E0B" stroke-width="0.35"/>
+        <!-- Corner connectors -->
+        <line x1="0" y1="45" x2="20" y2="45" stroke="#10B981" stroke-width="0.3"/>
+        <line x1="70" y1="45" x2="90" y2="45" stroke="#10B981" stroke-width="0.3"/>
+        <line x1="45" y1="0" x2="45" y2="20" stroke="#10B981" stroke-width="0.3"/>
+        <line x1="45" y1="70" x2="45" y2="90" stroke="#10B981" stroke-width="0.3"/>
+      </pattern>
+    </defs>
+    <rect width="100%" height="100%" fill="url(#geo)"/>
+  </svg>
+
+  <div class="orb orb-1"></div>
+  <div class="orb orb-2"></div>
+  <div class="orb orb-3"></div>
+
+  <div class="hero-content">
+    <div class="bismillah">بِسْمِ ٱللَّٰهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ</div>
+    <div class="hero-badge">
+      <svg width="6" height="6" viewBox="0 0 6 6"><circle cx="3" cy="3" r="3" fill="currentColor"/></svg>
+      Développeur · Maker · Muslim Tech
+    </div>
+    <h1 class="hero-title">
+      Adel Hanifi<br>
+      <span class="gradient-text">Mes Projets</span>
+    </h1>
+    <p class="hero-subtitle">
+      Applications et systèmes dédiés à la communauté musulmane — de l'embarqué IoT au mobile en passant par le desktop.
+    </p>
+    <div class="hero-cta">
+      <a href="#projects" class="btn btn-primary">
+        Voir les projets
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M7 17L17 7M7 7h10v10"/></svg>
+      </a>
+      <a href="https://github.com/AdelHANIFI" target="_blank" rel="noopener" class="btn btn-ghost">
+        <svg width="15" height="15" viewBox="0 0 24 24" class="icon-gh"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+        GitHub
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ STATS ════════════════════════════════════ -->
+<div class="stats-bar">
+  <div class="stat-item">
+    <div class="stat-number">4</div>
+    <div class="stat-label">Projets</div>
+  </div>
+  <div class="stat-item">
+    <div class="stat-number">3</div>
+    <div class="stat-label">Plateformes</div>
+  </div>
+  <div class="stat-item">
+    <div class="stat-number">∞</div>
+    <div class="stat-label">Prières facilitées</div>
+  </div>
+  <div class="stat-item">
+    <div class="stat-number">1</div>
+    <div class="stat-label">Motivation</div>
+  </div>
+</div>
+
+<!-- ═══ PROJECTS ═════════════════════════════════ -->
+<section id="projects" class="section">
+  <div class="section-inner">
+    <div class="section-header">
+      <div class="section-eyebrow">
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12,2 15,9 22,9 17,14 19,21 12,17 5,21 7,14 2,9 9,9"/></svg>
+        Réalisations
+      </div>
+      <h2 class="section-title">Mes Projets</h2>
+      <p class="section-desc">Des solutions technologiques au service de la pratique religieuse quotidienne.</p>
+    </div>
+
+    <div class="projects-grid">
+
+      <!-- ── CARD 1 : AdhanBox ESP32 ─────────── -->
+      <div class="project-card">
+        <div class="project-mockup">
+          <svg width="420" height="230" viewBox="0 0 420 230" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <radialGradient id="g1" cx="50%" cy="65%" r="55%">
+                <stop offset="0%" stop-color="#10B981" stop-opacity="0.18"/>
+                <stop offset="100%" stop-color="#10B981" stop-opacity="0"/>
+              </radialGradient>
+              <filter id="ledGlow"><feGaussianBlur stdDeviation="2.5" result="b"/><feComposite in="SourceGraphic" in2="b" operator="over"/></filter>
+              <filter id="softGlow"><feGaussianBlur stdDeviation="5"/></filter>
+            </defs>
+            <rect width="420" height="230" fill="#030e1a"/>
+            <rect width="420" height="230" fill="url(#g1)"/>
+
+            <!-- circuit trace decorations -->
+            <g stroke="#10B981" stroke-width="0.4" opacity="0.15" fill="none">
+              <polyline points="0,200 30,200 30,170 60,170"/>
+              <polyline points="420,200 390,200 390,170 360,170"/>
+              <polyline points="0,30 30,30 30,60 60,60"/>
+              <circle cx="60" cy="60" r="3" fill="none" stroke-width="0.6"/>
+              <circle cx="60" cy="170" r="3" fill="none" stroke-width="0.6"/>
+              <circle cx="360" cy="170" r="3" fill="none" stroke-width="0.6"/>
+            </g>
+
+            <!-- Mosque silhouette above box -->
+            <g transform="translate(170, 8)" opacity="0.85">
+              <line x1="30" y1="68" x2="70" y2="68" stroke="#F59E0B" stroke-width="1.2"/>
+              <rect x="45" y="42" width="10" height="28" fill="none" stroke="#F59E0B" stroke-width="1"/>
+              <path d="M35 42 Q50 24 65 42 Z" fill="none" stroke="#F59E0B" stroke-width="1.2"/>
+              <ellipse cx="50" cy="42" rx="4" ry="4" fill="none" stroke="#F59E0B" stroke-width="1"/>
+              <circle cx="50" cy="20" r="2.5" fill="#F59E0B"/>
+              <path d="M65 26 Q72 31 65 37 Q68 31 65 26" fill="#F59E0B"/>
+              <line x1="50" y1="17" x2="50" y2="22" stroke="#F59E0B" stroke-width="1"/>
+            </g>
+
+            <!-- LED glow strip -->
+            <rect x="100" y="83" width="220" height="5" rx="2.5" fill="#10B981" filter="url(#softGlow)" opacity="0.6"/>
+
+            <!-- LED dots row -->
+            <g fill="#10B981" filter="url(#ledGlow)">
+              <circle cx="110" cy="86" r="3.5"/>
+              <circle cx="126" cy="86" r="3.5" fill="#34D399"/>
+              <circle cx="142" cy="86" r="3.5"/>
+              <circle cx="158" cy="86" r="3.5" fill="#F59E0B"/>
+              <circle cx="174" cy="86" r="3.5"/>
+              <circle cx="190" cy="86" r="3.5" fill="#34D399"/>
+              <circle cx="206" cy="86" r="3.5"/>
+              <circle cx="222" cy="86" r="3.5" fill="#F59E0B"/>
+              <circle cx="238" cy="86" r="3.5"/>
+              <circle cx="254" cy="86" r="3.5" fill="#34D399"/>
+              <circle cx="270" cy="86" r="3.5"/>
+              <circle cx="286" cy="86" r="3.5"/>
+              <circle cx="302" cy="86" r="3.5" fill="#F59E0B"/>
+              <circle cx="318" cy="86" r="3.5"/>
+            </g>
+
+            <!-- Box body -->
+            <rect x="100" y="90" width="220" height="100" rx="10" fill="#111e2e" stroke="#2D3F55" stroke-width="1.5"/>
+            <!-- 3D top edge -->
+            <polygon points="100,90 115,76 335,76 320,90" fill="#1a2c40" stroke="#2D3F55" stroke-width="1"/>
+            <!-- 3D right edge -->
+            <polygon points="320,90 335,76 335,166 320,180" fill="#0a1420" stroke="#2D3F55" stroke-width="1"/>
+
+            <!-- Speaker grille -->
+            <rect x="116" y="105" width="78" height="70" rx="6" fill="#0a1624" stroke="#2D3F55" stroke-width="1"/>
+            <g stroke="#3A4F66" stroke-width="0.8" fill="none">
+              <line x1="126" y1="108" x2="126" y2="172"/>
+              <line x1="136" y1="108" x2="136" y2="172"/>
+              <line x1="146" y1="108" x2="146" y2="172"/>
+              <line x1="156" y1="108" x2="156" y2="172"/>
+              <line x1="166" y1="108" x2="166" y2="172"/>
+              <line x1="176" y1="108" x2="176" y2="172"/>
+              <line x1="186" y1="108" x2="186" y2="172"/>
+            </g>
+
+            <!-- ESP32 chip area -->
+            <rect x="207" y="102" width="100" height="68" rx="5" fill="#0a1624" stroke="#10B981" stroke-width="1" stroke-dasharray="3,2"/>
+            <rect x="215" y="110" width="84" height="50" rx="3" fill="#0d1f30"/>
+            <text x="257" y="128" text-anchor="middle" fill="#10B981" font-family="'Courier New', monospace" font-size="8" font-weight="bold">ESP32-S3</text>
+            <text x="257" y="140" text-anchor="middle" fill="#4B5563" font-family="monospace" font-size="6">240 MHz · WiFi + BT</text>
+            <text x="257" y="151" text-anchor="middle" fill="#4B5563" font-family="monospace" font-size="5.5">MQTT · mDNS · OTA</text>
+
+            <!-- Status pulse dot -->
+            <circle cx="295" cy="108" r="4" fill="#10B981">
+              <animate attributeName="opacity" values="1;0.25;1" dur="1.8s" repeatCount="indefinite"/>
+            </circle>
+
+            <!-- RTC chip small -->
+            <rect x="212" y="162" width="30" height="15" rx="2" fill="#0a1624" stroke="#2D3F55" stroke-width="0.8"/>
+            <text x="227" y="173" text-anchor="middle" fill="#4B5563" font-family="monospace" font-size="5">DS3231</text>
+
+            <!-- Shadow -->
+            <ellipse cx="210" cy="195" rx="118" ry="6" fill="rgba(0,0,0,0.4)"/>
+
+            <!-- AdhanBox label -->
+            <text x="210" y="215" text-anchor="middle" fill="#2D3F55" font-family="'Poppins', sans-serif" font-size="7" font-weight="600" letter-spacing="0.15em">ADHANBOX v1.3</text>
+          </svg>
+        </div>
+
+        <div class="project-info">
+          <div class="project-header">
+            <div class="project-icon" style="background:#020617;">
+              <svg width="40" height="40" viewBox="0 0 40 40">
+                <line x1="7" y1="32" x2="33" y2="32" stroke="#10B981" stroke-width="1.5"/>
+                <rect x="16" y="18" width="8" height="15" fill="#10B981"/>
+                <path d="M10 18 Q20 6 30 18 Z" fill="#10B981"/>
+                <ellipse cx="20" cy="18" rx="5" ry="5" fill="#10B981"/>
+                <circle cx="20" cy="8" r="2.5" fill="#F59E0B"/>
+                <path d="M30 10 Q34 14 30 18 Q32.5 14 30 10" fill="#F59E0B"/>
+              </svg>
+            </div>
+            <div>
+              <div class="project-category">IoT · Embarqué · Arduino</div>
+              <div class="project-title">AdhanBox</div>
+            </div>
+          </div>
+          <p class="project-desc">
+            Système autonome de diffusion de l'adhan basé sur ESP32. Calcule les horaires de prière via géolocalisation WiFi, pilote un strip LED SK6812 de 150 LEDs et un DFPlayer Mini. Interface web de configuration intégrée accessible via point d'accès WiFi.
+          </p>
+          <div class="tech-stack">
+            <span class="badge badge-emerald">ESP32</span>
+            <span class="badge badge-emerald">C++ / Arduino</span>
+            <span class="badge badge-default">WS2812 / SK6812</span>
+            <span class="badge badge-default">DFPlayer Mini</span>
+            <span class="badge badge-default">RTC DS3231</span>
+            <span class="badge badge-default">WiFi / mDNS</span>
+            <span class="badge badge-gold">MQTT</span>
+          </div>
+          <div class="project-links">
+            <a href="https://github.com/AdelHANIFI" class="link-btn link-gh" target="_blank" rel="noopener">
+              <svg width="13" height="13" viewBox="0 0 24 24" class="icon-gh"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+              GitHub
+            </a>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── CARD 2 : Flutter App ────────────── -->
+      <div class="project-card">
+        <div class="project-mockup">
+          <svg width="420" height="230" viewBox="0 0 420 230" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <radialGradient id="g2" cx="50%" cy="50%" r="55%">
+                <stop offset="0%" stop-color="#0a2040" stop-opacity="0.9"/>
+                <stop offset="100%" stop-color="#020617" stop-opacity="0"/>
+              </radialGradient>
+              <linearGradient id="appHeader" x1="0%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" stop-color="#059669"/>
+                <stop offset="100%" stop-color="#0F172A"/>
+              </linearGradient>
+              <clipPath id="screen"><rect x="152" y="22" width="116" height="192" rx="10"/></clipPath>
+            </defs>
+            <rect width="420" height="230" fill="#030e1a"/>
+            <rect width="420" height="230" fill="url(#g2)"/>
+
+            <!-- Decorative phone glow -->
+            <ellipse cx="210" cy="115" rx="80" ry="100" fill="rgba(16,185,129,0.04)"/>
+
+            <!-- Phone body -->
+            <rect x="148" y="10" width="124" height="210" rx="22" fill="#1a2535" stroke="#2D3F55" stroke-width="2"/>
+            <!-- Screen bg -->
+            <rect x="152" y="22" width="116" height="192" rx="10" fill="#0F172A"/>
+            <!-- Punch-hole camera -->
+            <circle cx="210" cy="33" r="5" fill="#0a1428"/>
+            <circle cx="210" cy="33" r="2.5" fill="#131f30"/>
+            <!-- Home bar -->
+            <rect x="192" y="207" width="36" height="3.5" rx="2" fill="#2D3F55"/>
+            <!-- Vol buttons -->
+            <rect x="146" y="62" width="2.5" height="18" rx="1.2" fill="#2D3F55"/>
+            <rect x="146" y="86" width="2.5" height="28" rx="1.2" fill="#2D3F55"/>
+            <!-- Power button -->
+            <rect x="271.5" y="68" width="2.5" height="24" rx="1.2" fill="#2D3F55"/>
+
+            <!-- App UI clipped to screen -->
+            <g clip-path="url(#screen)">
+              <!-- Header -->
+              <rect x="152" y="22" width="116" height="58" fill="url(#appHeader)"/>
+              <text x="210" y="46" text-anchor="middle" fill="rgba(255,255,255,0.6)" font-family="serif" font-size="7.5">بسم الله الرحمن الرحيم</text>
+              <text x="210" y="59" text-anchor="middle" fill="white" font-family="'Poppins', sans-serif" font-size="9" font-weight="bold">Horaires de Prière</text>
+              <text x="210" y="71" text-anchor="middle" fill="rgba(255,255,255,0.6)" font-family="sans-serif" font-size="6.5">📍 Tarbes, France</text>
+
+              <!-- Body bg -->
+              <rect x="152" y="80" width="116" height="134" fill="#0F172A"/>
+
+              <!-- Fajr -->
+              <rect x="158" y="84" width="104" height="19" rx="5" fill="#1A2535"/>
+              <text x="164" y="97" fill="#F59E0B" font-family="sans-serif" font-size="6.5" font-weight="600">Fajr</text>
+              <text x="256" y="97" text-anchor="end" fill="#64748B" font-family="'Courier New', monospace" font-size="7">05:32</text>
+
+              <!-- Dhuhr -->
+              <rect x="158" y="107" width="104" height="19" rx="5" fill="#1A2535"/>
+              <text x="164" y="120" fill="#94A3B8" font-family="sans-serif" font-size="6.5">Dhuhr</text>
+              <text x="256" y="120" text-anchor="end" fill="#64748B" font-family="monospace" font-size="7">13:15</text>
+
+              <!-- Asr (NEXT highlighted) -->
+              <rect x="158" y="130" width="104" height="19" rx="5" fill="rgba(16,185,129,0.15)" stroke="#10B981" stroke-width="0.6" stroke-opacity="0.5"/>
+              <text x="164" y="143" fill="#10B981" font-family="sans-serif" font-size="6.5" font-weight="700">Asr  ◂ maintenant</text>
+              <text x="256" y="143" text-anchor="end" fill="#10B981" font-family="monospace" font-size="7" font-weight="bold">16:48</text>
+
+              <!-- Maghrib -->
+              <rect x="158" y="153" width="104" height="19" rx="5" fill="#1A2535"/>
+              <text x="164" y="166" fill="#94A3B8" font-family="sans-serif" font-size="6.5">Maghrib</text>
+              <text x="256" y="166" text-anchor="end" fill="#64748B" font-family="monospace" font-size="7">19:52</text>
+
+              <!-- Isha -->
+              <rect x="158" y="176" width="104" height="19" rx="5" fill="#1A2535"/>
+              <text x="164" y="189" fill="#94A3B8" font-family="sans-serif" font-size="6.5">Isha</text>
+              <text x="256" y="189" text-anchor="end" fill="#64748B" font-family="monospace" font-size="7">21:23</text>
+
+              <!-- Bottom nav -->
+              <rect x="152" y="198" width="116" height="18" fill="#111e2e"/>
+              <circle cx="178" cy="207" r="5" fill="#10B981"/>
+              <circle cx="210" cy="207" r="5" fill="#2D3F55"/>
+              <circle cx="242" cy="207" r="5" fill="#2D3F55"/>
+            </g>
+          </svg>
+        </div>
+
+        <div class="project-info">
+          <div class="project-header">
+            <div class="project-icon">
+              <img src="../flutter_app/assets/images/app_logo.png" alt="AdhanBox App Logo">
+            </div>
+            <div>
+              <div class="project-category">Mobile · iOS &amp; Android</div>
+              <div class="project-title">AdhanBox App</div>
+            </div>
+          </div>
+          <p class="project-desc">
+            Application Flutter companion de l'AdhanBox. Découverte automatique via mDNS, configuration des horaires, contrôle du strip LED, synchronisation RTC/GPS et support MQTT. Interface élégante avec thème sombre/clair et animations fluides.
+          </p>
+          <div class="tech-stack">
+            <span class="badge badge-emerald">Flutter</span>
+            <span class="badge badge-emerald">Dart</span>
+            <span class="badge badge-default">Riverpod</span>
+            <span class="badge badge-default">MQTT</span>
+            <span class="badge badge-default">mDNS / Bonjour</span>
+            <span class="badge badge-default">REST API</span>
+            <span class="badge badge-gold">Material 3</span>
+          </div>
+          <div class="project-links">
+            <a href="https://github.com/AdelHANIFI" class="link-btn link-gh" target="_blank" rel="noopener">
+              <svg width="13" height="13" viewBox="0 0 24 24" class="icon-gh"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+              GitHub
+            </a>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── CARD 3 : Adhan Overlay ──────────── -->
+      <div class="project-card">
+        <div class="project-mockup">
+          <svg width="420" height="230" viewBox="0 0 420 230" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <radialGradient id="g3" cx="50%" cy="50%" r="55%">
+                <stop offset="0%" stop-color="#0a1428" stop-opacity="1"/>
+                <stop offset="100%" stop-color="#020617" stop-opacity="0.5"/>
+              </radialGradient>
+              <filter id="borderGlow"><feGaussianBlur stdDeviation="4"/></filter>
+            </defs>
+            <rect width="420" height="230" fill="#030e1a"/>
+            <rect width="420" height="230" fill="url(#g3)"/>
+
+            <!-- Monitor frame -->
+            <rect x="25" y="12" width="370" height="190" rx="10" fill="#111e2e" stroke="#2D3F55" stroke-width="2"/>
+            <!-- Screen -->
+            <rect x="32" y="20" width="356" height="175" rx="6" fill="#080f1a"/>
+            <!-- Monitor stand -->
+            <rect x="188" y="202" width="44" height="10" rx="2" fill="#1A2535"/>
+            <rect x="170" y="212" width="80" height="5" rx="2" fill="#2D3F55"/>
+
+            <!-- Desktop "wallpaper" - code editor -->
+            <rect x="38" y="26" width="230" height="163" rx="4" fill="#050c17"/>
+            <!-- Titlebar -->
+            <rect x="38" y="26" width="230" height="14" rx="4" fill="#0d1a26"/>
+            <circle cx="48" cy="33" r="3.5" fill="#EF4444" opacity="0.7"/>
+            <circle cx="60" cy="33" r="3.5" fill="#F59E0B" opacity="0.7"/>
+            <circle cx="72" cy="33" r="3.5" fill="#10B981" opacity="0.7"/>
+            <text x="153" y="36" text-anchor="middle" fill="#4B5563" font-family="monospace" font-size="6">prayer.js — Visual Studio Code</text>
+
+            <!-- Code lines -->
+            <text x="46" y="54" fill="#64748B" font-family="monospace" font-size="6">1  <tspan fill="#60A5FA">const</tspan> <tspan fill="#A5F3FC">adhan</tspan> = <tspan fill="#FCA5A5">require</tspan>(<tspan fill="#86EFAC">'adhan'</tspan>)</text>
+            <text x="46" y="65" fill="#64748B" font-family="monospace" font-size="6">2  <tspan fill="#60A5FA">const</tspan> <tspan fill="#A5F3FC">params</tspan> = <tspan fill="#FCA5A5">CalculationMethod</tspan>.MoonsightingCommittee()</text>
+            <text x="46" y="76" fill="#64748B" font-family="monospace" font-size="6">4  <tspan fill="#60A5FA">const</tspan> <tspan fill="#A5F3FC">prayerTimes</tspan> = <tspan fill="#60A5FA">new</tspan> <tspan fill="#FDE68A">PrayerTimes</tspan>(coords, date, params)</text>
+            <text x="46" y="87" fill="#64748B" font-family="monospace" font-size="6">5</text>
+            <text x="46" y="98" fill="#4B5563" font-family="monospace" font-size="6">6  <tspan fill="#4ADE80">// Overlay border color based on prayer window</tspan></text>
+            <text x="46" y="109" fill="#64748B" font-family="monospace" font-size="6">7  <tspan fill="#60A5FA">if</tspan> (isWithinPrayer) setBorderColor(<tspan fill="#86EFAC">'#10B981'</tspan>) <tspan fill="#4ADE80">// 🟢</tspan></text>
+            <text x="46" y="120" fill="#64748B" font-family="monospace" font-size="6">8  <tspan fill="#60A5FA">if</tspan> (soonToEnd)     setBorderColor(<tspan fill="#FDE68A">'#F59E0B'</tspan>) <tspan fill="#4ADE80">// 🟠</tspan></text>
+            <text x="46" y="131" fill="#64748B" font-family="monospace" font-size="6">9  <tspan fill="#60A5FA">if</tspan> (lastTenMin)    setBorderColor(<tspan fill="#FCA5A5">'#EF4444'</tspan>) <tspan fill="#4ADE80">// 🔴</tspan></text>
+
+            <!-- THE OVERLAY BORDER (green = active prayer) -->
+            <!-- Glow layer -->
+            <rect x="32" y="20" width="356" height="175" rx="6" fill="none" stroke="#10B981" stroke-width="10" opacity="0.12" filter="url(#borderGlow)"/>
+            <!-- Sharp border -->
+            <rect x="32" y="20" width="356" height="175" rx="6" fill="none" stroke="#10B981" stroke-width="2.5" opacity="0.75">
+              <animate attributeName="opacity" values="0.75;0.35;0.75" dur="3.5s" repeatCount="indefinite"/>
+            </rect>
+
+            <!-- Overlay status panel -->
+            <rect x="278" y="27" width="104" height="60" rx="5" fill="rgba(5,30,18,0.92)" stroke="#10B981" stroke-width="0.8"/>
+            <rect x="278" y="27" width="104" height="14" rx="5" fill="#059669" fill-opacity="0.3"/>
+            <text x="330" y="37" text-anchor="middle" fill="#10B981" font-family="sans-serif" font-size="6" font-weight="600">● PRIÈRE EN COURS</text>
+            <text x="330" y="52" text-anchor="middle" fill="#F59E0B" font-family="'Poppins', sans-serif" font-size="12" font-weight="bold">Asr</text>
+            <text x="330" y="63" text-anchor="middle" fill="#64748B" font-family="monospace" font-size="5.5">16:48 → 19:52</text>
+            <text x="330" y="74" text-anchor="middle" fill="#4B5563" font-family="monospace" font-size="5">reste: 3h 04min</text>
+
+            <!-- Taskbar -->
+            <rect x="32" y="182" width="356" height="13" fill="#0d1a26"/>
+            <rect x="38" y="185" width="16" height="7" rx="2" fill="#1A2535"/>
+            <text x="90" y="191" fill="#4B5563" font-family="sans-serif" font-size="5">Mardi 22 Avril 2025</text>
+            <!-- Tray icons -->
+            <text x="370" y="191" text-anchor="end" fill="#4B5563" font-family="monospace" font-size="5">16:48</text>
+            <!-- Tray overlay star icon -->
+            <circle cx="380" cy="188" r="4.5" fill="#10B981" opacity="0.9">
+              <animate attributeName="fill" values="#10B981;#F59E0B;#EF4444;#F59E0B;#10B981" dur="9s" repeatCount="indefinite"/>
+            </circle>
+            <text x="380" y="191" text-anchor="middle" fill="#000" font-size="5" font-weight="bold">✦</text>
+          </svg>
+        </div>
+
+        <div class="project-info">
+          <div class="project-header">
+            <div class="project-icon" style="background:#000;">
+              <img src="../adhan_desktop/src/icon.png" alt="Adhan Overlay Logo">
+            </div>
+            <div>
+              <div class="project-category">Desktop · Windows · Electron</div>
+              <div class="project-title">Adhan Overlay</div>
+            </div>
+          </div>
+          <p class="project-desc">
+            Overlay Windows discret et subliminal pour les horaires de prière. Un cadre coloré s'affiche autour de l'écran sans jamais interrompre votre travail (cliquable à travers). Vert → entrée de prière, Orange → fin proche, Rouge → urgence. Géolocalisation automatique, 4 thèmes visuels.
+          </p>
+          <div class="tech-stack">
+            <span class="badge badge-emerald">Electron</span>
+            <span class="badge badge-emerald">JavaScript</span>
+            <span class="badge badge-default">adhan.js</span>
+            <span class="badge badge-default">Windows</span>
+            <span class="badge badge-default">System Tray</span>
+            <span class="badge badge-default">Auto-updater</span>
+            <span class="badge badge-gold">Transparent overlay</span>
+          </div>
+          <div class="project-links">
+            <a href="https://github.com/AdelHANIFI/Overlay" class="link-btn link-gh" target="_blank" rel="noopener">
+              <svg width="13" height="13" viewBox="0 0 24 24" class="icon-gh"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+              GitHub
+            </a>
+            <a href="https://github.com/AdelHANIFI/Overlay/releases" class="link-btn link-dl" target="_blank" rel="noopener">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              Télécharger .exe
+            </a>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── CARD 4 : Adhan Kiosk ───────────── -->
+      <div class="project-card">
+        <div class="project-mockup">
+          <svg width="420" height="230" viewBox="0 0 420 230" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <radialGradient id="g4" cx="50%" cy="35%" r="60%">
+                <stop offset="0%" stop-color="#0d3020" stop-opacity="0.9"/>
+                <stop offset="100%" stop-color="#020617" stop-opacity="0.5"/>
+              </radialGradient>
+              <linearGradient id="kioskHdr" x1="0%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" stop-color="#064e32"/>
+                <stop offset="100%" stop-color="#0F172A"/>
+              </linearGradient>
+            </defs>
+            <rect width="420" height="230" fill="#030e1a"/>
+            <rect width="420" height="230" fill="url(#g4)"/>
+
+            <!-- Tablet frame (landscape) -->
+            <rect x="20" y="15" width="380" height="188" rx="14" fill="#1a2535" stroke="#2D3F55" stroke-width="2"/>
+            <!-- Screen -->
+            <rect x="28" y="23" width="364" height="172" rx="8" fill="#0a0f1a"/>
+            <!-- Camera dot -->
+            <circle cx="399" cy="108" r="3.5" fill="#2D3F55"/>
+            <!-- Home indicator (portrait tablet feel) -->
+            <rect x="13" y="102" width="5" height="26" rx="2.5" fill="#2D3F55"/>
+
+            <!-- Header gradient -->
+            <rect x="28" y="23" width="364" height="60" fill="url(#kioskHdr)"/>
+            <!-- Bismillah -->
+            <text x="210" y="45" text-anchor="middle" fill="rgba(245,158,11,0.7)" font-family="'Amiri', serif" font-size="9">بِسْمِ ٱللَّٰهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ</text>
+            <!-- Mosque name -->
+            <text x="210" y="62" text-anchor="middle" fill="white" font-family="'Poppins', sans-serif" font-size="11" font-weight="700">Mosquée El-Hijra — Tarbes</text>
+            <!-- Divider line -->
+            <rect x="88" y="70" width="244" height="1" fill="rgba(245,158,11,0.25)" rx="0.5"/>
+
+            <!-- Title area -->
+            <text x="210" y="90" text-anchor="middle" fill="white" font-family="sans-serif" font-size="10" font-weight="700">Montant du don</text>
+            <text x="210" y="101" text-anchor="middle" fill="#F59E0B" font-family="sans-serif" font-size="7">🕌 Don général</text>
+
+            <!-- Donation buttons — row 1 -->
+            <rect x="36" y="108" width="100" height="30" rx="7" fill="#1E3A5F" stroke="#2D4F7A" stroke-width="0.8"/>
+            <text x="86" y="128" text-anchor="middle" fill="white" font-family="sans-serif" font-size="11" font-weight="bold">5 €</text>
+
+            <!-- 10€ selected -->
+            <rect x="145" y="108" width="130" height="30" rx="7" fill="#0F3D2A" stroke="#10B981" stroke-width="1.5"/>
+            <text x="210" y="128" text-anchor="middle" fill="white" font-family="sans-serif" font-size="11" font-weight="bold">10 €</text>
+
+            <rect x="284" y="108" width="100" height="30" rx="7" fill="#1E3A5F" stroke="#2D4F7A" stroke-width="0.8"/>
+            <text x="334" y="128" text-anchor="middle" fill="white" font-family="sans-serif" font-size="11" font-weight="bold">20 €</text>
+
+            <!-- Row 2 -->
+            <rect x="36" y="143" width="100" height="30" rx="7" fill="#1E3A5F" stroke="#2D4F7A" stroke-width="0.8"/>
+            <text x="86" y="163" text-anchor="middle" fill="white" font-family="sans-serif" font-size="11" font-weight="bold">50 €</text>
+
+            <rect x="145" y="143" width="130" height="30" rx="7" fill="#1E3A5F" stroke="#2D4F7A" stroke-width="0.8"/>
+            <text x="210" y="163" text-anchor="middle" fill="white" font-family="sans-serif" font-size="11" font-weight="bold">100 €</text>
+
+            <rect x="284" y="143" width="100" height="30" rx="7" fill="#1E3A5F" stroke="#2D4F7A" stroke-width="0.8"/>
+            <text x="334" y="163" text-anchor="middle" fill="white" font-family="sans-serif" font-size="11" font-weight="bold">200 €</text>
+
+            <!-- Custom amount -->
+            <rect x="36" y="178" width="348" height="13" rx="5" fill="none" stroke="#2D3F55" stroke-dasharray="4,2"/>
+            <text x="210" y="188" text-anchor="middle" fill="#4B5563" font-family="sans-serif" font-size="7">+ Montant personnalisé</text>
+
+            <!-- Stand -->
+            <rect x="192" y="203" width="36" height="9" rx="2" fill="#1A2535"/>
+            <rect x="176" y="212" width="68" height="5" rx="2" fill="#2D3F55"/>
+          </svg>
+        </div>
+
+        <div class="project-info">
+          <div class="project-header">
+            <div class="project-icon" style="background:#0F3D2A; display:flex; align-items:center; justify-content:center;">
+              <svg width="38" height="38" viewBox="0 0 38 38">
+                <rect x="4" y="8" width="30" height="22" rx="4" fill="none" stroke="#10B981" stroke-width="1.5"/>
+                <rect x="7" y="11" width="24" height="16" rx="2" fill="#0F3D2A"/>
+                <rect x="14" y="30" width="10" height="3" rx="1.5" fill="#10B981"/>
+                <text x="19" y="22" text-anchor="middle" fill="#F59E0B" font-family="serif" font-size="9">€</text>
+                <path d="M25 13 Q29 16 25 20 Q27.5 16 25 13" fill="#F59E0B"/>
+                <circle cx="25" cy="13.5" r="1.8" fill="#F59E0B"/>
+              </svg>
+            </div>
+            <div>
+              <div class="project-category">Desktop · Kiosk · Mosquée</div>
+              <div class="project-title">Adhan Kiosk</div>
+            </div>
+          </div>
+          <p class="project-desc">
+            Application borne interactive Electron pour la collecte de dons en mosquée. Interface tactile plein écran, sélection de montant prédéfini ou libre, affichage des horaires de prière, gestion de plusieurs campagnes. Déployée à la Mosquée El-Hijra de Tarbes.
+          </p>
+          <div class="tech-stack">
+            <span class="badge badge-emerald">Electron</span>
+            <span class="badge badge-emerald">JavaScript</span>
+            <span class="badge badge-default">Kiosk Mode</span>
+            <span class="badge badge-default">adhan.js</span>
+            <span class="badge badge-default">electron-store</span>
+            <span class="badge badge-gold">Tactile / Touch</span>
+          </div>
+          <div class="project-links">
+            <a href="https://github.com/AdelHANIFI" class="link-btn link-gh" target="_blank" rel="noopener">
+              <svg width="13" height="13" viewBox="0 0 24 24" class="icon-gh"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+              GitHub
+            </a>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /projects-grid -->
+  </div>
+</section>
+
+<!-- ═══ ABOUT ════════════════════════════════════ -->
+<section id="about" class="about-section">
+  <div style="max-width:960px; margin:0 auto; padding:0 2rem;">
+    <div class="about-inner">
+      <div class="about-text">
+        <div class="section-eyebrow" style="margin-bottom:1.25rem;">
+          <svg width="8" height="8" viewBox="0 0 8 8"><circle cx="4" cy="4" r="4" fill="currentColor"/></svg>
+          À propos
+        </div>
+        <h2>Développeur passionné par la tech islamique</h2>
+        <p>
+          Je conçois des solutions technologiques au service de la communauté musulmane, alliant esthétique soignée et fonctionnalité robuste pour faciliter la pratique religieuse quotidienne.
+        </p>
+        <p>
+          De l'embarqué ESP32 au mobile Flutter en passant par l'Electron desktop, je couvre l'ensemble des plateformes pour offrir des expériences cohérentes — discrètes quand il le faut, immersives quand c'est pertinent.
+        </p>
+        <div style="margin-top:1.75rem; display:flex; gap:0.75rem; flex-wrap:wrap;">
+          <a href="https://github.com/AdelHANIFI" target="_blank" rel="noopener" class="btn btn-primary">
+            <svg width="15" height="15" viewBox="0 0 24 24" class="icon-gh"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+            Voir mon GitHub
+          </a>
+        </div>
+      </div>
+
+      <div class="skills-grid">
+        <div class="skill-card">
+          <div class="skill-icon">⚡</div>
+          <div class="skill-name">ESP32 / Arduino C++</div>
+        </div>
+        <div class="skill-card">
+          <div class="skill-icon">📱</div>
+          <div class="skill-name">Flutter / Dart</div>
+        </div>
+        <div class="skill-card">
+          <div class="skill-icon">🖥️</div>
+          <div class="skill-name">Electron / JS</div>
+        </div>
+        <div class="skill-card">
+          <div class="skill-icon">🕌</div>
+          <div class="skill-name">adhan.js / Calcul</div>
+        </div>
+        <div class="skill-card">
+          <div class="skill-icon">💡</div>
+          <div class="skill-name">LED Strip / WS2812</div>
+        </div>
+        <div class="skill-card">
+          <div class="skill-icon">🌐</div>
+          <div class="skill-name">MQTT / WiFi / mDNS</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ FOOTER ════════════════════════════════════ -->
+<footer>
+  <div class="footer-arabic">بِسْمِ ٱللَّٰهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ</div>
+  <p>
+    <a href="https://github.com/AdelHANIFI" target="_blank" rel="noopener">Adel Hanifi</a>
+    &nbsp;—&nbsp; Développé avec amour pour la communauté musulmane
+  </p>
+  <p style="margin-top:0.35rem; font-size:0.72rem; opacity:0.5;">صدقة جارية · Sadaqa Jariya</p>
+</footer>
+
+<script>
+  // Scroll-reveal for project cards
+  const cards = document.querySelectorAll('.project-card');
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach((entry, i) => {
+      if (entry.isIntersecting) {
+        setTimeout(() => {
+          entry.target.classList.add('visible');
+          entry.target.style.transition = 'opacity 0.55s ease, transform 0.55s ease, border-color 0.3s ease, box-shadow 0.3s ease';
+        }, i * 100);
+        observer.unobserve(entry.target);
+      }
+    });
+  }, { threshold: 0.08 });
+  cards.forEach(c => observer.observe(c));
+
+  // Smooth scroll anchor links
+  document.querySelectorAll('a[href^="#"]').forEach(a => {
+    a.addEventListener('click', e => {
+      const target = document.querySelector(a.getAttribute('href'));
+      if (target) { e.preventDefault(); target.scrollIntoView({ behavior: 'smooth' }); }
+    });
+  });
+</script>
+</body>
+</html>
