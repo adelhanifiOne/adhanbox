@@ -3,56 +3,63 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Adel Hanifi — Portfolio AdhanBox</title>
-  <meta name="description" content="Portfolio technique de Adel Hanifi. Concepteur de l'écosystème AdhanBox: firmware IoT ESP32, application Flutter compagnon, overlay desktop Electron et borne tactile de mosquée.">
-  
-  <!-- Fonts -->
+  <title>AdhanBox — L'appel à la prière connecté et 1000% personnalisable</title>
+  <meta name="description" content="Découvrez AdhanBox, le boîtier intelligent avec PCB sur-mesure et châssis imprimé en 3D. Connecté en temps réel avec l'API Mawaqit pour caler l'adhan sur votre mosquée locale.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=Amiri:wght@400;700&display=swap" rel="stylesheet">
-
+  <link href="https://fonts.googleapis.com/css2?family=Amiri:ital,wght@0,400;0,700;1,400;1,700&family=Outfit:wght@100..900&display=swap" rel="stylesheet">
+  
   <style>
-    /* ─── SYSTEME DE DESIGN ─────────────────────────────────── */
+    /* ─── BASE DESIGN SYSTEM ────────────────────────────────── */
     :root {
       --bg-darkest: #030712;
-      --bg-dark: #070d19;
-      --card-bg: rgba(15, 23, 42, 0.65);
-      --card-border: rgba(255, 255, 255, 0.08);
-      --card-hover-border: rgba(16, 185, 129, 0.3);
+      --bg-darker: #080d1a;
+      --card-bg: rgba(255, 255, 255, 0.03);
+      --card-border: rgba(255, 255, 255, 0.05);
+      --card-hover-border: rgba(16, 185, 129, 0.25);
       
       --emerald: #10B981;
-      --emerald-glow: rgba(16, 185, 129, 0.15);
-      --teal: #14B8A6;
+      --emerald-glow: rgba(16, 185, 129, 0.4);
       --gold: #F59E0B;
-      --gold-glow: rgba(245, 158, 11, 0.15);
+      --gold-glow: rgba(245, 158, 11, 0.4);
       --rose: #F43F5E;
       
-      --text: #F3F4F6;
+      --text-main: #F3F4F6;
       --text-muted: #9CA3AF;
-      --text-dim: #4B5563;
+      --text-dim: #6B7280;
       
       --font-title: 'Outfit', sans-serif;
-      --font-body: 'Plus Jakarta Sans', sans-serif;
+      --font-body: 'Outfit', sans-serif;
     }
 
-    *, *::before, *::after {
+    * {
       margin: 0;
       padding: 0;
       box-sizing: border-box;
     }
-    
+
     html {
       scroll-behavior: smooth;
+      background: var(--bg-darkest);
+      color: var(--text-main);
+      font-family: var(--font-body);
+      font-size: 16px;
+      line-height: 1.5;
     }
 
     body {
-      background: var(--bg-darkest);
-      color: var(--text);
-      font-family: var(--font-body);
-      line-height: 1.6;
       overflow-x: hidden;
+      background: radial-gradient(circle at 50% 0%, var(--bg-darker) 0%, var(--bg-darkest) 100%);
     }
 
+    .container {
+      width: 100%;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 1.5rem;
+    }
+
+    /* ─── SCROLLBAR ─────────────────────────────────────────── */
     ::-webkit-scrollbar {
       width: 8px;
     }
@@ -61,28 +68,82 @@
     }
     ::-webkit-scrollbar-thumb {
       background: #1f2937;
-      border-radius: 99px;
+      border-radius: 4px;
     }
     ::-webkit-scrollbar-thumb:hover {
       background: var(--emerald);
     }
 
-    /* Particle Canvas Background */
-    #bg-canvas {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100vw;
-      height: 100vh;
-      z-index: -1;
-      pointer-events: none;
-      opacity: 0.65;
+    /* ─── TYPOGRAPHIE ───────────────────────────────────────── */
+    h1, h2, h3, h4 {
+      font-family: var(--font-title);
+      font-weight: 800;
+      letter-spacing: -0.025em;
     }
 
+    /* ─── BUTTONS ───────────────────────────────────────────── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      padding: 0.8rem 1.6rem;
+      border-radius: 12px;
+      font-size: 0.95rem;
+      font-weight: 700;
+      text-decoration: none;
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      cursor: pointer;
+    }
+    .btn-primary {
+      background: var(--emerald);
+      color: #022c22;
+      border: 1px solid var(--emerald);
+      box-shadow: 0 4px 20px var(--emerald-glow);
+    }
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 30px rgba(16, 185, 129, 0.6);
+      background: #059669;
+    }
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.03);
+      color: #FFF;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      backdrop-filter: blur(8px);
+    }
+    .btn-secondary:hover {
+      transform: translateY(-2px);
+      background: rgba(255, 255, 255, 0.08);
+      border-color: rgba(255, 255, 255, 0.2);
+    }
+    .btn-gold {
+      background: var(--gold);
+      color: #3b2300;
+      border: 1px solid var(--gold);
+      box-shadow: 0 4px 20px var(--gold-glow);
+    }
+    .btn-gold:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 30px rgba(245, 158, 11, 0.6);
+      background: #d97706;
+    }
+
+    /* ─── BACKGROUND EFFECTS ────────────────────────────────── */
+    #bg-canvas {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100vw; height: 100vh;
+      z-index: 1;
+      pointer-events: none;
+      opacity: 0.6;
+    }
+    
     .bg-glow-orbs {
       position: fixed;
-      top: 0; left: 0; right: 0; bottom: 0;
-      z-index: -2;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      z-index: 0;
       pointer-events: none;
       overflow: hidden;
     }
@@ -90,963 +151,1028 @@
       position: absolute;
       border-radius: 50%;
       filter: blur(140px);
-      mix-blend-mode: screen;
       opacity: 0.12;
-      animation: orbFloat 25s ease-in-out infinite alternate;
     }
     .orb-1 {
-      width: 600px; height: 600px;
+      top: -10%; left: 20%;
+      width: 40vw; height: 40vw;
       background: var(--emerald);
-      top: -15%; left: -10%;
     }
     .orb-2 {
-      width: 500px; height: 500px;
+      top: 30%; right: -10%;
+      width: 50vw; height: 50vw;
       background: var(--gold);
-      bottom: -10%; right: -10%;
-      animation-delay: -5s;
     }
     .orb-3 {
-      width: 400px; height: 400px;
-      background: var(--teal);
-      top: 35%; left: 55%;
-      animation-delay: -10s;
+      bottom: -10%; left: -10%;
+      width: 40vw; height: 40vw;
+      background: #3b82f6;
     }
 
-    @keyframes orbFloat {
-      0% { transform: translate(0, 0) scale(1); }
-      100% { transform: translate(100px, 60px) scale(1.1); }
-    }
-
-    /* ─── HEADER / NAVIGATION ────────────────────────────── */
+    /* ─── HEADER / NAVIGATION ──────────────────────────────── */
     header {
       position: fixed;
-      top: 0; left: 0; right: 0;
+      top: 0; left: 0; width: 100%;
+      height: 70px;
       z-index: 100;
-      padding: 1.25rem 2.5rem;
-      background: rgba(3, 7, 18, 0.8);
+      display: flex;
+      align-items: center;
       backdrop-filter: blur(16px);
       border-bottom: 1px solid var(--card-border);
+      background: rgba(3, 7, 18, 0.7);
+      transition: all 0.3s ease;
+    }
+    header.scrolled {
+      height: 60px;
+      background: rgba(3, 7, 18, 0.9);
+      box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    }
+    .header-container {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      transition: padding 0.3s ease;
-    }
-    header.scrolled {
-      padding: 0.85rem 2.5rem;
-      border-bottom-color: rgba(16, 185, 129, 0.15);
+      width: 100%;
     }
     .logo {
-      font-family: var(--font-title);
-      font-weight: 800;
-      font-size: 1.3rem;
-      letter-spacing: -0.02em;
       display: flex;
       align-items: center;
       gap: 0.6rem;
-      text-decoration: none;
+      font-size: 1.3rem;
+      font-weight: 800;
       color: #FFF;
+      text-decoration: none;
+      font-family: var(--font-title);
     }
     .logo span {
-      background: linear-gradient(135deg, var(--emerald), var(--teal));
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
+      color: var(--emerald);
     }
-    .logo-dot {
-      width: 8px; height: 8px;
-      background: var(--gold);
-      border-radius: 50%;
+    .logo-icon {
+      width: 32px; height: 32px;
+      border-radius: 8px;
+      background: linear-gradient(135deg, var(--emerald), #059669);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 10px var(--emerald-glow);
     }
     nav ul {
       display: flex;
-      gap: 2rem;
       list-style: none;
+      gap: 2rem;
       align-items: center;
     }
     nav a {
       color: var(--text-muted);
       text-decoration: none;
       font-size: 0.9rem;
-      font-weight: 500;
-      transition: color 0.25s ease;
+      font-weight: 600;
+      transition: color 0.2s ease;
     }
     nav a:hover {
       color: var(--emerald);
     }
-    nav li.cta-link a {
-      background: rgba(255, 255, 255, 0.03);
-      border: 1px solid var(--card-border);
-      padding: 0.45rem 1.1rem;
-      border-radius: 99px;
-      transition: all 0.25s ease;
-    }
-    nav li.cta-link a:hover {
-      border-color: var(--emerald);
-      color: #FFF;
-      box-shadow: 0 0 15px var(--emerald-glow);
+    @media (max-width: 768px) {
+      nav { display: none; }
     }
 
-    .container {
-      max-width: 1200px;
-      margin: 0 auto;
-      padding: 0 1.5rem;
-    }
-    section {
-      padding: 6.5rem 0;
-      position: relative;
-    }
-
-    /* ─── BUTTONS ────────────────────────────────────────── */
-    .btn {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 0.6rem;
-      padding: 0.75rem 1.5rem;
-      border-radius: 99px;
-      font-family: var(--font-title);
-      font-weight: 600;
-      font-size: 0.9rem;
-      text-decoration: none;
-      transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
-      cursor: pointer;
-      border: none;
-    }
-    .btn-primary {
-      background: linear-gradient(135deg, var(--emerald), var(--teal));
-      color: #022c22;
-    }
-    .btn-primary:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 8px 24px rgba(16, 185, 129, 0.35);
-    }
-    .btn-secondary {
-      background: rgba(255, 255, 255, 0.05);
-      color: var(--text);
-      border: 1px solid var(--card-border);
-    }
-    .btn-secondary:hover {
-      background: rgba(255, 255, 255, 0.08);
-      border-color: rgba(255, 255, 255, 0.15);
-      transform: translateY(-1px);
-    }
-
-    /* ─── HERO SECTION ───────────────────────────────────── */
+    /* ─── HERO SECTION ──────────────────────────────────────── */
     .hero {
-      min-height: 95vh;
-      display: flex;
-      align-items: center;
-      padding-top: 7.5rem;
-      padding-bottom: 4rem;
+      position: relative;
+      padding-top: 140px;
+      padding-bottom: 80px;
+      z-index: 10;
     }
     .hero-grid {
       display: grid;
-      grid-template-columns: 1.15fr 0.85fr;
-      gap: 3.5rem;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 4rem;
       align-items: center;
     }
-    @media (max-width: 960px) {
+    @media (max-width: 968px) {
       .hero-grid {
         grid-template-columns: 1fr;
         text-align: center;
+        gap: 3rem;
       }
+    }
+    .hero-info {
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+    .hero-bismillah {
+      font-family: 'Amiri', serif;
+      font-size: 1.8rem;
+      color: var(--gold);
+      opacity: 0.9;
     }
     .hero-badge {
       display: inline-flex;
       align-items: center;
       gap: 0.5rem;
+      align-self: flex-start;
       background: rgba(16, 185, 129, 0.08);
-      border: 1px solid rgba(16, 185, 129, 0.2);
-      color: var(--emerald);
-      padding: 0.4rem 1.1rem;
+      border: 1px solid rgba(16, 185, 129, 0.15);
       border-radius: 99px;
+      padding: 0.4rem 1rem;
       font-size: 0.8rem;
-      font-weight: 600;
-      letter-spacing: 0.02em;
-      margin-bottom: 1.5rem;
+      font-weight: 700;
+      color: var(--emerald);
+    }
+    @media (max-width: 968px) {
+      .hero-badge { align-self: center; }
     }
     .hero-badge span {
-      display: inline-block;
       width: 6px; height: 6px;
       background: var(--emerald);
       border-radius: 50%;
-      box-shadow: 0 0 8px var(--emerald);
-    }
-    .bismillah {
-      font-family: 'Amiri', serif;
-      font-size: 1.9rem;
-      color: var(--gold);
-      margin-bottom: 0.75rem;
-      opacity: 0.9;
+      animation: pulse 1.5s infinite;
     }
     .hero-title {
-      font-family: var(--font-title);
-      font-size: clamp(2.4rem, 4.5vw, 4rem);
-      font-weight: 800;
+      font-size: 3rem;
       line-height: 1.15;
-      margin-bottom: 1.5rem;
-      letter-spacing: -0.02em;
+      color: #FFF;
     }
     .hero-title span {
       background: linear-gradient(135deg, var(--emerald) 0%, var(--gold) 100%);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
     }
-    .hero-text {
-      color: var(--text-muted);
-      font-size: 1.05rem;
-      margin-bottom: 2.25rem;
-      max-width: 580px;
-      line-height: 1.75;
+    @media (max-width: 580px) {
+      .hero-title { font-size: 2.2rem; }
     }
-    @media (max-width: 960px) {
-      .hero-text { margin-left: auto; margin-right: auto; }
+    .hero-text {
+      font-size: 1.1rem;
+      color: var(--text-muted);
+      line-height: 1.6;
     }
     .hero-actions {
       display: flex;
       gap: 1rem;
+      margin-top: 0.5rem;
     }
-    @media (max-width: 960px) {
+    @media (max-width: 968px) {
       .hero-actions { justify-content: center; }
     }
+    @media (max-width: 480px) {
+      .hero-actions { flex-direction: column; }
+    }
 
-    /* Hardware Showcase (Visual Preview of AdhanBox Console) */
+    /* Hero Visual representation */
     .hero-visual {
       display: flex;
       justify-content: center;
       align-items: center;
-    }
-    .hardware-showcase {
-      width: 100%;
-      max-width: 440px;
-      background: var(--card-bg);
-      border: 1px solid var(--card-border);
-      border-radius: 2rem;
-      padding: 1.75rem;
-      backdrop-filter: blur(16px);
-      box-shadow: 0 25px 50px -12px rgba(0,0,0,0.6);
-    }
-    .hardware-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 1.25rem;
-      border-bottom: 1px solid rgba(255,255,255,0.05);
-      padding-bottom: 0.65rem;
-    }
-    .hardware-tag {
-      font-size: 0.72rem;
-      text-transform: uppercase;
-      font-weight: 700;
-      letter-spacing: 0.08em;
-      color: var(--text-muted);
-      display: flex;
-      align-items: center;
-      gap: 0.4rem;
-    }
-    .hardware-status-dot {
-      display: inline-block;
-      width: 6px; height: 6px;
-      background: var(--emerald);
-      border-radius: 50%;
-      box-shadow: 0 0 8px var(--emerald);
-    }
-    
-    .hardware-screen {
-      height: 170px;
-      background: #040713;
-      border-radius: 1.25rem;
-      border: 1px solid rgba(255,255,255,0.06);
-      margin-bottom: 1.25rem;
-      overflow: hidden;
       position: relative;
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      align-items: center;
-      padding: 1rem;
+    }
+    .hero-product-display {
+      width: 320px;
+      height: 320px;
+      position: relative;
+      perspective: 1000px;
     }
     
-    /* Interactive Chime Chords Animation */
-    .chime-waves {
-      display: none;
-      position: absolute;
-      inset: 0;
-      align-items: center;
-      justify-content: center;
-      gap: 5px;
-      background: rgba(16, 185, 129, 0.05);
+    /* ─── SECTIONS COMMUNE ───────────────────────────────────── */
+    section {
+      padding: 100px 0;
+      position: relative;
+      z-index: 10;
     }
-    .chime-waves.playing {
-      display: flex;
-    }
-    .chime-wave-bar {
-      width: 4px;
-      height: 15px;
-      background: var(--emerald);
-      border-radius: 99px;
-      animation: chimeBounce 1.2s ease-in-out infinite alternate;
-    }
-    .chime-wave-bar:nth-child(2) { animation-delay: 0.15s; background: var(--teal); }
-    .chime-wave-bar:nth-child(3) { animation-delay: 0.3s; background: var(--gold); }
-    .chime-wave-bar:nth-child(4) { animation-delay: 0.45s; background: var(--teal); }
-    .chime-wave-bar:nth-child(5) { animation-delay: 0.6s; background: var(--emerald); }
-    
-    @keyframes chimeBounce {
-      0% { height: 10px; }
-      100% { height: 60px; }
-    }
-
-    .hardware-leds {
-      display: flex;
-      gap: 6px;
-      margin-bottom: 0.75rem;
-    }
-    .led-dot {
-      width: 8px; height: 8px;
-      border-radius: 50%;
-      background: #1f2937;
-      transition: all 0.3s ease;
-    }
-    .led-mode-rainbow .led-dot {
-      animation: ledRainbow 3s linear infinite;
-    }
-    .led-mode-rainbow .led-dot:nth-child(2) { animation-delay: 0.2s; }
-    .led-mode-rainbow .led-dot:nth-child(3) { animation-delay: 0.4s; }
-    .led-mode-rainbow .led-dot:nth-child(4) { animation-delay: 0.6s; }
-    .led-mode-rainbow .led-dot:nth-child(5) { animation-delay: 0.8s; }
-    .led-mode-rainbow .led-dot:nth-child(6) { animation-delay: 1.0s; }
-    .led-mode-rainbow .led-dot:nth-child(7) { animation-delay: 1.2s; }
-    .led-mode-rainbow .led-dot:nth-child(8) { animation-delay: 1.4s; }
-    
-    .led-mode-pulse .led-dot {
-      background: var(--gold);
-      animation: ledPulse 1.5s ease-in-out infinite alternate;
-    }
-    .led-mode-solid .led-dot {
-      background: var(--emerald);
-      box-shadow: 0 0 6px var(--emerald);
-    }
-    .led-mode-blue .led-dot {
-      background: #3B82F6;
-      box-shadow: 0 0 6px #3B82F6;
-    }
-
-    @keyframes ledRainbow {
-      0% { background: #EF4444; box-shadow: 0 0 6px #EF4444; }
-      20% { background: #3B82F6; box-shadow: 0 0 6px #3B82F6; }
-      40% { background: #10B981; box-shadow: 0 0 6px #10B981; }
-      60% { background: #F59E0B; box-shadow: 0 0 6px #F59E0B; }
-      80% { background: #8B5CF6; box-shadow: 0 0 6px #8B5CF6; }
-      100% { background: #EF4444; box-shadow: 0 0 6px #EF4444; }
-    }
-    @keyframes ledPulse {
-      0% { opacity: 0.2; box-shadow: none; }
-      100% { opacity: 1; box-shadow: 0 0 8px var(--gold); }
-    }
-
-    /* Simulation Control Panel */
-    .controls-grid {
-      display: grid;
-      grid-template-columns: 1.2fr 0.8fr;
-      gap: 0.6rem;
-    }
-    .control-btn {
-      background: rgba(255,255,255,0.03);
-      border: 1px solid rgba(255,255,255,0.06);
-      border-radius: 0.65rem;
-      padding: 0.55rem 0.75rem;
-      color: var(--text-muted);
-      font-size: 0.78rem;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.2s ease;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 0.4rem;
-    }
-    .control-btn:hover {
-      background: rgba(255,255,255,0.07);
-      border-color: rgba(255,255,255,0.15);
-      color: #FFF;
-    }
-    .control-btn.active {
-      background: rgba(16, 185, 129, 0.1);
-      border-color: var(--emerald);
-      color: var(--emerald);
-    }
-    .control-select {
-      background: #0b1220;
-      border: 1px solid rgba(255,255,255,0.08);
-      border-radius: 0.65rem;
-      padding: 0.55rem 0.55rem;
-      color: var(--text-muted);
-      font-size: 0.78rem;
-      width: 100%;
-      cursor: pointer;
-    }
-
-    /* ─── SECTION HEADERS ────────────────────────────────── */
     .section-header {
       text-align: center;
-      margin-bottom: 4.5rem;
+      max-width: 650px;
+      margin: 0 auto 4rem auto;
     }
     .section-eyebrow {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.4rem;
-      background: rgba(245, 158, 11, 0.08);
-      border: 1px solid rgba(245, 158, 11, 0.2);
-      color: var(--gold);
-      padding: 0.35rem 0.9rem;
-      border-radius: 99px;
-      font-size: 0.72rem;
-      font-weight: 700;
-      letter-spacing: 0.08em;
+      font-size: 0.85rem;
+      font-weight: 800;
       text-transform: uppercase;
-      margin-bottom: 1rem;
+      letter-spacing: 0.1em;
+      color: var(--emerald);
+      margin-bottom: 0.75rem;
     }
     .section-title {
-      font-family: var(--font-title);
-      font-size: clamp(1.8rem, 3.5vw, 2.75rem);
-      font-weight: 800;
-      letter-spacing: -0.02em;
+      font-size: 2.2rem;
+      color: #FFF;
       margin-bottom: 1rem;
     }
     .section-title span {
-      background: linear-gradient(135deg, var(--emerald), var(--teal));
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
+      color: var(--gold);
     }
     .section-desc {
       color: var(--text-muted);
       font-size: 1rem;
-      max-width: 560px;
-      margin: 0 auto;
+      line-height: 1.6;
     }
 
-    /* ─── PROJECTS GRID ──────────────────────────────────── */
-    .project-grid {
+    /* ─── HIGHLIGHTS / SPECS ────────────────────────────────── */
+    .specs-grid {
       display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 2.25rem;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 2rem;
     }
-    @media (max-width: 860px) {
-      .project-grid {
+    @media (max-width: 868px) {
+      .specs-grid {
         grid-template-columns: 1fr;
       }
     }
-    
-    .project-card {
+    .spec-card {
       background: var(--card-bg);
       border: 1px solid var(--card-border);
-      border-radius: 1.75rem;
-      overflow: hidden;
-      backdrop-filter: blur(16px);
-      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      border-radius: 24px;
+      padding: 2.5rem;
+      backdrop-filter: blur(12px);
+      transition: all 0.3s ease;
       display: flex;
       flex-direction: column;
+      gap: 1.2rem;
     }
-    .project-card:hover {
+    .spec-card:hover {
       border-color: var(--card-hover-border);
-      transform: translateY(-4px);
-      box-shadow: 0 20px 40px -15px rgba(16, 185, 129, 0.12);
+      transform: translateY(-5px);
+      box-shadow: 0 10px 30px rgba(16, 185, 129, 0.05);
+    }
+    .spec-icon {
+      width: 56px; height: 56px;
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.8rem;
+      color: var(--emerald);
+    }
+    .spec-card h3 {
+      font-size: 1.25rem;
+      color: #FFF;
+    }
+    .spec-card p {
+      font-size: 0.92rem;
+      color: var(--text-muted);
+      line-height: 1.6;
+    }
+
+    /* ─── CONFIGURATEUR INTERACTIF (PLAYGROUND) ───────────────── */
+    .configurator-panel {
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid var(--card-border);
+      border-radius: 32px;
+      padding: 3rem;
+      backdrop-filter: blur(20px);
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4rem;
+      align-items: center;
+    }
+    @media (max-width: 868px) {
+      .configurator-panel {
+        grid-template-columns: 1fr;
+        padding: 2rem;
+        gap: 3rem;
+      }
     }
     
-    .project-preview {
-      height: 240px;
-      background: #040713;
+    /* Configurator Box Visual */
+    .configurator-visual {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
       position: relative;
-      overflow: hidden;
+      gap: 2rem;
+    }
+    .box-container {
+      position: relative;
+      width: 280px;
+      height: 280px;
       display: flex;
       align-items: center;
       justify-content: center;
-      border-bottom: 1px solid var(--card-border);
     }
 
-    .project-details {
-      padding: 1.75rem;
+    /* Virtual Box styles */
+    .virtual-box {
+      width: 260px;
+      height: 260px;
+      border-radius: 36px;
       display: flex;
-      flex-direction: column;
-      flex-grow: 1;
-    }
-    .project-meta {
-      display: flex;
-      justify-content: space-between;
       align-items: center;
-      margin-bottom: 0.75rem;
+      justify-content: center;
+      position: relative;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.8), inset 0 2px 4px rgba(255, 255, 255, 0.1);
+      transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+      overflow: hidden;
     }
-    .project-category {
-      font-size: 0.72rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      color: var(--emerald);
+
+    /* Finish styles */
+    .finish-wood {
+      background: linear-gradient(135deg, #7c2d12 0%, #3f1a0a 100%);
+      border: 5px solid #9a3412;
     }
-    .project-version {
-      font-size: 0.7rem;
-      font-family: monospace;
-      color: var(--text-muted);
-      background: rgba(255,255,255,0.04);
-      padding: 0.2rem 0.5rem;
-      border-radius: 4px;
-      border: 1px solid rgba(255,255,255,0.06);
+    .finish-wood::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      opacity: 0.12;
+      background-image: repeating-linear-gradient(45deg, #000 0px, #000 2px, transparent 2px, transparent 12px);
+      pointer-events: none;
     }
-    .project-title-link {
-      font-family: var(--font-title);
-      font-size: 1.35rem;
-      font-weight: 700;
+
+    .finish-matte-black {
+      background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+      border: 5px solid #334155;
+    }
+    .finish-matte-black::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      opacity: 0.06;
+      background: radial-gradient(circle, #fff 12%, transparent 13%);
+      background-size: 8px 8px;
+      pointer-events: none;
+    }
+
+    .finish-marble {
+      background: linear-gradient(135deg, #f8fafc 0%, #cbd5e1 100%);
+      border: 5px solid #e2e8f0;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5), inset 0 2px 4px rgba(255, 255, 255, 0.6);
+    }
+    .finish-marble::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      opacity: 0.15;
+      background-image: linear-gradient(60deg, transparent 45%, #94a3b8 46%, #94a3b8 47%, transparent 48%),
+                        linear-gradient(-30deg, transparent 52%, #94a3b8 53%, #94a3b8 54%, transparent 55%);
+      pointer-events: none;
+    }
+
+    .finish-brass {
+      background: linear-gradient(135deg, #eab308 0%, #78350f 100%);
+      border: 5px solid #ca8a04;
+    }
+    .finish-brass::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      opacity: 0.15;
+      background: linear-gradient(to right, transparent, rgba(255,255,255,0.4), transparent);
+      animation: brass-shine 4s infinite linear;
+      pointer-events: none;
+    }
+
+    @keyframes brass-shine {
+      0% { transform: translateX(-120%) skewX(-30deg); }
+      100% { transform: translateX(200%) skewX(-30deg); }
+    }
+
+    /* Speaker mesh and layout */
+    .box-speaker-grille {
+      width: 170px;
+      height: 170px;
+      border-radius: 50%;
+      background: rgba(0, 0, 0, 0.4);
+      border: 2px dashed rgba(255, 255, 255, 0.05);
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: inset 0 4px 12px rgba(0, 0, 0, 0.6);
+    }
+    .speaker-center {
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
       color: #FFF;
-      margin-bottom: 0.75rem;
-      text-decoration: none;
-      transition: color 0.2s ease;
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
+      z-index: 5;
     }
-    .project-title-link:hover {
-      color: var(--emerald);
+    
+    /* 16 LED Ring Arrangement */
+    .led-ring {
+      position: absolute;
+      width: 130px;
+      height: 130px;
+      border-radius: 50%;
+      z-index: 4;
     }
-    .project-description {
-      color: var(--text-muted);
-      font-size: 0.9rem;
-      line-height: 1.65;
-      margin-bottom: 1.5rem;
-      flex-grow: 1;
-    }
-    .project-tags {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.4rem;
-      margin-bottom: 1.5rem;
-    }
-    .tag {
-      font-size: 0.72rem;
-      font-weight: 600;
-      padding: 0.22rem 0.65rem;
-      border-radius: 99px;
-      background: rgba(255,255,255,0.03);
-      border: 1px solid rgba(255,255,255,0.05);
-      color: var(--text-muted);
-    }
-    .tag-highlight {
-      background: rgba(16, 185, 129, 0.08);
-      border-color: rgba(16, 185, 129, 0.2);
-      color: var(--emerald);
-    }
-    .project-actions {
-      display: flex;
-      gap: 0.75rem;
+    .led {
+      position: absolute;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.08);
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%) rotate(var(--angle)) translate(56px) rotate(calc(-1 * var(--angle)));
+      transition: all 0.3s ease;
     }
 
-    /* ─── INTERACTIVE PREVIEWS IN PROJECTS ────────────────── */
-    .preview-box {
-      width: 100%;
-      height: 100%;
+    /* LED Modes Animations */
+    /* Golden Breathing */
+    .led-mode-breathing .led {
+      background: rgba(245, 158, 11, 0.85);
+      box-shadow: 0 0 6px rgba(245, 158, 11, 0.6);
+      animation: led-pulse 2s infinite ease-in-out;
+    }
+    @keyframes led-pulse {
+      0%, 100% { opacity: 0.3; box-shadow: 0 0 3px rgba(245, 158, 11, 0.3); }
+      50% { opacity: 1; box-shadow: 0 0 10px rgba(245, 158, 11, 0.9); }
+    }
+
+    /* Rainbow wave */
+    .led-mode-rainbow .led {
+      animation: led-rainbow 3.2s infinite linear;
+      animation-delay: calc(var(--idx) * 0.2s);
+    }
+    @keyframes led-rainbow {
+      0% { background: #ef4444; box-shadow: 0 0 6px #ef4444; }
+      20% { background: #f59e0b; box-shadow: 0 0 6px #f59e0b; }
+      40% { background: #10b981; box-shadow: 0 0 6px #10b981; }
+      60% { background: #06b6d4; box-shadow: 0 0 6px #06b6d4; }
+      80% { background: #8b5cf6; box-shadow: 0 0 6px #8b5cf6; }
+      100% { background: #ef4444; box-shadow: 0 0 6px #ef4444; }
+    }
+
+    /* Medina Green */
+    .led-mode-medina .led {
+      background: rgba(16, 185, 129, 0.95);
+      box-shadow: 0 0 8px rgba(16, 185, 129, 0.8);
+    }
+
+    /* Candle flicker */
+    .led-mode-candle .led {
+      background: rgba(249, 115, 22, 0.9);
+      animation: led-flicker 0.15s infinite alternate ease-in-out;
+      animation-delay: calc(var(--idx) * 0.035s);
+    }
+    @keyframes led-flicker {
+      0% { opacity: 0.4; box-shadow: 0 0 3px rgba(249, 115, 22, 0.4); }
+      100% { opacity: 1; box-shadow: 0 0 9px rgba(249, 115, 22, 0.8); }
+    }
+
+    /* Audio wave simulation when audio is playing */
+    .audio-waves {
+      display: flex;
+      gap: 3px;
+      height: 24px;
+      align-items: flex-end;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+    .audio-waves.active {
+      opacity: 1;
+    }
+    .audio-bar {
+      width: 3px;
+      height: 4px;
+      background: var(--emerald);
+      border-radius: 2px;
+      animation: bounce 0.6s infinite alternate ease-in-out;
+    }
+    .audio-bar:nth-child(2) { animation-delay: 0.15s; }
+    .audio-bar:nth-child(3) { animation-delay: 0.3s; }
+    .audio-bar:nth-child(4) { animation-delay: 0.05s; }
+    .audio-bar:nth-child(5) { animation-delay: 0.2s; }
+    @keyframes bounce {
+      0% { height: 4px; }
+      100% { height: 24px; }
+    }
+
+    /* Configurator Form controls */
+    .configurator-controls {
+      display: flex;
+      flex-direction: column;
+      gap: 1.8rem;
+    }
+    .control-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.6rem;
+    }
+    .control-label {
+      font-size: 0.85rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+    }
+    .finish-options {
+      display: flex;
+      gap: 1rem;
+    }
+    .option-dot {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      cursor: pointer;
+      position: relative;
+      transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+      box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+    }
+    .option-dot:hover {
+      transform: scale(1.1);
+    }
+    .option-dot.active {
+      box-shadow: 0 0 0 3px var(--bg-darkest), 0 0 0 5px var(--emerald);
+    }
+    .dot-wood { background: linear-gradient(135deg, #7c2d12, #9a3412); }
+    .dot-black { background: linear-gradient(135deg, #334155, #0f172a); }
+    .dot-marble { background: linear-gradient(135deg, #f8fafc, #cbd5e1); }
+    .dot-brass { background: linear-gradient(135deg, #eab308, #ca8a04); }
+
+    .led-modes-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 0.8rem;
+    }
+    .led-btn {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      border-radius: 12px;
+      color: var(--text-muted);
+      padding: 0.8rem;
+      font-size: 0.85rem;
+      font-weight: 700;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .led-btn:hover {
+      background: rgba(255, 255, 255, 0.06);
+      color: #FFF;
+    }
+    .led-btn.active {
+      background: rgba(16, 185, 129, 0.1);
+      border-color: var(--emerald);
+      color: var(--emerald);
+    }
+
+    .audio-player-control {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid rgba(255, 255, 255, 0.04);
+      padding: 1rem;
+      border-radius: 16px;
+    }
+    .audio-select {
+      flex-grow: 1;
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      color: #FFF;
+      padding: 0.6rem;
+      border-radius: 8px;
+      font-family: inherit;
+      font-size: 0.85rem;
+      outline: none;
+      cursor: pointer;
+    }
+    .play-btn {
+      background: var(--emerald);
+      border: none;
+      border-radius: 50%;
+      width: 44px; height: 44px;
       display: flex;
       align-items: center;
       justify-content: center;
+      cursor: pointer;
+      color: #022c22;
+      transition: all 0.2s ease;
+      box-shadow: 0 4px 12px var(--emerald-glow);
+    }
+    .play-btn:hover {
+      transform: scale(1.08);
+      background: #059669;
     }
 
-    /* Mobile App Simulator (Flutter API Sync Simulator) */
-    .mobile-mockup {
-      width: 130px;
-      height: 225px;
-      background: #111827;
-      border-radius: 20px;
-      border: 2px solid #374151;
-      padding: 5px;
-      box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+    /* ─── CONNECTIVITÉ MAWAQIT ──────────────────────────────── */
+    .mawaqit-section {
+      background: linear-gradient(180deg, transparent, rgba(16, 185, 129, 0.02) 50%, transparent);
+    }
+    .mawaqit-row {
+      display: grid;
+      grid-template-columns: 0.9fr 1.1fr;
+      gap: 4rem;
+      align-items: center;
+    }
+    @media (max-width: 868px) {
+      .mawaqit-row {
+        grid-template-columns: 1fr;
+        gap: 3rem;
+      }
+    }
+    .mawaqit-visual {
+      position: relative;
+      display: flex;
+      justify-content: center;
+    }
+    
+    /* Elegant API Sync diagram mock */
+    .api-sync-mock {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 28px;
+      padding: 2rem;
+      width: 100%;
+      max-width: 420px;
+      backdrop-filter: blur(12px);
       display: flex;
       flex-direction: column;
+      gap: 1.5rem;
+    }
+    .api-node {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255,255,255,0.03);
+      padding: 0.8rem 1.2rem;
+      border-radius: 16px;
+    }
+    .node-icon {
+      width: 40px; height: 40px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.25rem;
+    }
+    .node-text h4 {
+      font-size: 0.9rem;
+      color: #FFF;
+    }
+    .node-text p {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      font-family: monospace;
+    }
+    .api-arrow-down {
+      display: flex;
+      justify-content: center;
+      position: relative;
+      height: 40px;
+    }
+    .api-arrow-line {
+      width: 2px;
+      height: 100%;
+      background: linear-gradient(180deg, var(--emerald) 0%, transparent 100%);
       position: relative;
     }
-    .mobile-screen {
-      background: #090d16;
-      flex-grow: 1;
-      border-radius: 15px;
+    .api-arrow-line::after {
+      content: '';
+      position: absolute;
+      bottom: 0; left: 50%;
+      transform: translateX(-50%);
+      border-left: 5px solid transparent;
+      border-right: 5px solid transparent;
+      border-top: 6px solid var(--emerald);
+    }
+    .api-glow-dot {
+      position: absolute;
+      width: 6px; height: 6px;
+      background: var(--emerald);
+      border-radius: 50%;
+      left: -2px;
+      animation: arrow-flow 2s infinite linear;
+    }
+    @keyframes arrow-flow {
+      0% { top: 0; }
+      100% { top: 100%; }
+    }
+
+    /* ─── COMPANION APP SECTION ─────────────────────────────── */
+    .app-row {
+      display: grid;
+      grid-template-columns: 1.15fr 0.85fr;
+      gap: 5rem;
+      align-items: center;
+    }
+    @media (max-width: 968px) {
+      .app-row {
+        grid-template-columns: 1fr;
+        gap: 3rem;
+      }
+    }
+    .phone-showcase {
+      display: flex;
+      justify-content: center;
+    }
+    
+    /* Mockup of Companion app screen */
+    .mobile-mockup {
+      width: 260px;
+      height: 520px;
+      border-radius: 40px;
+      border: 12px solid #111827;
+      background: #020617;
+      box-shadow: 0 30px 60px rgba(0,0,0,0.6), 0 0 0 2px rgba(255,255,255,0.05);
+      position: relative;
       overflow: hidden;
-      font-size: 8px;
-      padding: 6px;
       display: flex;
       flex-direction: column;
+    }
+    .mobile-mockup::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 50%;
+      transform: translateX(-50%);
+      width: 110px; height: 25px;
+      background: #111827;
+      border-bottom-left-radius: 16px;
+      border-bottom-right-radius: 16px;
+      z-index: 10;
     }
     .mobile-screen-header {
-      text-align: center;
+      padding: 40px 15px 15px 15px;
+      background: rgba(255,255,255,0.02);
       border-bottom: 1px solid rgba(255,255,255,0.05);
-      padding-bottom: 4px;
-      margin-bottom: 6px;
+      font-size: 0.9rem;
       font-weight: 700;
+      text-align: center;
+      color: #FFF;
     }
-    .mobile-screen-row {
+    .mobile-content {
+      padding: 1.2rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      flex-grow: 1;
+    }
+    .mobile-status-card {
+      background: rgba(16, 185, 129, 0.08);
+      border: 1px solid rgba(16, 185, 129, 0.15);
+      border-radius: 16px;
+      padding: 0.8rem;
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+    }
+    .status-indicator {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--emerald);
+      animation: pulse 1.5s infinite;
+    }
+    .mobile-menu-item {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.05);
+      border-radius: 12px;
+      padding: 0.8rem;
       display: flex;
       justify-content: space-between;
-      padding: 3px 6px;
-      background: rgba(255,255,255,0.02);
-      border-radius: 4px;
-      margin-bottom: 4px;
+      align-items: center;
+      font-size: 0.8rem;
     }
     .mobile-sync-btn {
       margin-top: auto;
       background: var(--emerald);
       color: #022c22;
       border: none;
-      border-radius: 6px;
-      padding: 5px;
-      font-size: 7.5px;
-      font-weight: 700;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 2px;
-    }
-    
-    /* Live Sync Log Console */
-    .console-overlay {
-      display: none;
-      position: absolute;
-      inset: 0;
-      background: rgba(4, 7, 18, 0.98);
-      border-radius: 15px;
-      font-family: monospace;
-      font-size: 6px;
-      color: #34D399;
-      padding: 10px;
-      overflow: hidden;
-      flex-direction: column;
-      text-align: left;
-    }
-    .console-line {
-      margin-bottom: 2px;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    /* Desktop Overlay Simulator */
-    .desktop-mockup {
-      width: 250px;
-      height: 155px;
-      background: #1f2937;
-      border-radius: 8px 8px 0 0;
-      border: 1.5px solid #4B5563;
-      padding: 4px;
-      position: relative;
-    }
-    .desktop-mockup::after {
-      content: '';
-      position: absolute;
-      bottom: -10px; left: 50%; transform: translateX(-50%);
-      width: 50px; height: 10px;
-      background: #374151;
-      border-radius: 0 0 4px 4px;
-    }
-    .desktop-screen {
-      width: 100%; height: 100%;
-      background: #030712;
-      border-radius: 4px;
-      position: relative;
-      overflow: hidden;
-      border: 3px solid transparent;
-      transition: border-color 0.4s ease, box-shadow 0.4s ease;
-      font-size: 8px;
-      padding: 6px;
-    }
-    .overlay-controls {
-      position: absolute;
-      bottom: 10px;
-      left: 50%;
-      transform: translateX(-50%);
-      display: flex;
-      gap: 6px;
-      background: rgba(17, 24, 39, 0.85);
-      padding: 4px 8px;
-      border-radius: 99px;
-      border: 1px solid rgba(255,255,255,0.06);
-    }
-    .overlay-state-btn {
-      font-size: 7px;
-      background: transparent;
-      border: none;
-      color: var(--text-muted);
-      cursor: pointer;
-      font-weight: 700;
-    }
-    .overlay-state-btn.active-green { color: var(--emerald); }
-    .overlay-state-btn.active-gold { color: var(--gold); }
-    .overlay-state-btn.active-rose { color: var(--rose); }
-
-    /* Tactile Kiosk interface simulation */
-    .kiosk-mockup {
-      width: 260px;
-      height: 170px;
-      background: #111827;
+      padding: 0.8rem;
       border-radius: 12px;
-      border: 2px solid #374151;
-      padding: 5px;
-      display: flex;
-      flex-direction: column;
-    }
-    .kiosk-screen {
-      background: #090d16;
-      flex-grow: 1;
-      border-radius: 8px;
-      padding: 10px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      position: relative;
-    }
-    .kiosk-campaign-tab {
-      display: flex;
-      gap: 3px;
-      width: 100%;
-      justify-content: center;
-      margin-bottom: 4px;
-    }
-    .kiosk-tab-btn {
-      font-size: 6.5px;
-      background: rgba(255,255,255,0.03);
-      border: 1px solid rgba(255,255,255,0.05);
-      border-radius: 3px;
-      color: var(--text-muted);
-      padding: 2px 4px;
+      font-size: 0.8rem;
+      font-weight: 800;
       cursor: pointer;
-    }
-    .kiosk-tab-btn.active {
-      background: rgba(16, 185, 129, 0.12);
-      border-color: var(--emerald);
-      color: var(--emerald);
-    }
-    .kiosk-amount-grid {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 5px;
-      width: 100%;
-      margin: 6px 0;
-    }
-    .kiosk-amount-btn {
-      background: rgba(255,255,255,0.03);
-      border: 1px solid rgba(255,255,255,0.06);
-      border-radius: 4px;
-      color: #FFF;
-      font-size: 8.5px;
-      font-weight: 700;
-      padding: 5px;
-      cursor: pointer;
-      transition: all 0.15s ease;
-    }
-    .kiosk-amount-btn.active {
-      background: rgba(245, 158, 11, 0.15);
-      border-color: var(--gold);
-      color: var(--gold);
-    }
-    .kiosk-pay-btn {
-      width: 100%;
-      background: var(--emerald);
-      color: #022c22;
-      border: none;
-      border-radius: 5px;
-      padding: 5px;
-      font-size: 8.5px;
-      font-weight: 700;
-      cursor: pointer;
-      margin-top: auto;
-    }
-    .kiosk-success {
-      display: none;
-      position: absolute;
-      inset: 0;
-      background: rgba(9, 13, 22, 0.98);
+      display: flex;
       align-items: center;
       justify-content: center;
-      flex-direction: column;
+      gap: 0.4rem;
+      transition: all 0.2s ease;
+    }
+    .mobile-sync-btn:hover {
+      background: #059669;
+    }
+    .mobile-console {
+      background: #000;
+      font-family: monospace;
+      font-size: 0.65rem;
+      padding: 8px;
       border-radius: 8px;
-      font-size: 9px;
-      gap: 4px;
       color: var(--emerald);
-      text-align: center;
-      padding: 10px;
+      height: 80px;
+      overflow-y: hidden;
+      border: 1px solid rgba(16, 185, 129, 0.15);
+    }
+    .mobile-console p {
+      margin-bottom: 2px;
     }
 
-    /* ─── PARCOURS DE MAKER ──────────────────────────────── */
-    .timeline {
-      position: relative;
-      max-width: 800px;
-      margin: 0 auto;
-      padding: 2rem 0;
-    }
-    .timeline::before {
-      content: '';
-      position: absolute;
-      top: 0; bottom: 0; left: 50%;
-      width: 2px;
-      background: var(--card-border);
-      transform: translateX(-50%);
-    }
-    @media (max-width: 600px) {
-      .timeline::before { left: 20px; }
-    }
-    
-    .timeline-item {
-      position: relative;
-      width: 50%;
-      padding: 0 2.5rem;
-      margin-bottom: 3.5rem;
-    }
-    .timeline-item:nth-child(odd) {
-      left: 0;
-      text-align: right;
-    }
-    .timeline-item:nth-child(even) {
-      left: 50%;
-      text-align: left;
-    }
-    @media (max-width: 600px) {
-      .timeline-item {
-        width: 100%;
-        left: 0 !important;
-        text-align: left !important;
-        padding-left: 3rem;
-        padding-right: 0;
-      }
-    }
-    
-    .timeline-dot {
-      position: absolute;
-      top: 6px;
-      width: 14px; height: 14px;
-      border-radius: 50%;
-      background: var(--bg-darkest);
-      border: 3px solid var(--emerald);
-      z-index: 2;
-    }
-    .timeline-item:nth-child(odd) .timeline-dot {
-      right: -7px;
-    }
-    .timeline-item:nth-child(even) .timeline-dot {
-      left: -7px;
-    }
-    @media (max-width: 600px) {
-      .timeline-dot {
-        left: 13px !important;
-      }
-    }
-    
-    .timeline-date {
-      font-family: var(--font-title);
-      font-size: 0.85rem;
-      font-weight: 700;
-      color: var(--gold);
-      margin-bottom: 0.35rem;
-    }
-    .timeline-content {
-      background: var(--card-bg);
-      border: 1px solid var(--card-border);
-      border-radius: 1.25rem;
-      padding: 1.5rem;
-      backdrop-filter: blur(12px);
-    }
-    .timeline-content h3 {
-      font-family: var(--font-title);
-      font-size: 1.1rem;
-      font-weight: 700;
-      color: #FFF;
-      margin-bottom: 0.5rem;
-    }
-    .timeline-content p {
-      font-size: 0.85rem;
-      color: var(--text-muted);
-      line-height: 1.6;
-    }
-
-    /* ─── COMPETENCES ───────────────────────────── */
-    .skills-grid {
+    /* ─── ECOSYSTEM / KIOSK & OVERLAY ────────────────────────── */
+    .ecosystem-grid {
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 1.5rem;
-      margin-top: 2rem;
+      grid-template-columns: 1fr 1fr;
+      gap: 3rem;
     }
-    @media (max-width: 860px) {
-      .skills-grid {
-        grid-template-columns: repeat(2, 1fr);
-      }
-    }
-    @media (max-width: 520px) {
-      .skills-grid {
+    @media (max-width: 868px) {
+      .ecosystem-grid {
         grid-template-columns: 1fr;
       }
     }
-    .skill-card {
+    .eco-card {
       background: var(--card-bg);
       border: 1px solid var(--card-border);
-      border-radius: 1.25rem;
+      border-radius: 28px;
+      padding: 3rem;
+      backdrop-filter: blur(12px);
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+      transition: all 0.3s ease;
+    }
+    .eco-card:hover {
+      border-color: rgba(245, 158, 11, 0.2);
+      transform: translateY(-3px);
+    }
+    .eco-card h3 {
+      font-size: 1.5rem;
+      color: #FFF;
+    }
+    .eco-card p {
+      font-size: 0.95rem;
+      color: var(--text-muted);
+      line-height: 1.6;
+    }
+    .eco-visual {
+      background: rgba(0, 0, 0, 0.2);
+      border-radius: 18px;
+      border: 1px solid rgba(255,255,255,0.03);
       padding: 1.5rem;
-      backdrop-filter: blur(16px);
-      transition: all 0.25s ease;
       display: flex;
-      gap: 1rem;
-      align-items: center;
-    }
-    .skill-card:hover {
-      border-color: var(--card-hover-border);
-      transform: translateY(-2px);
-    }
-    .skill-icon {
-      width: 48px; height: 48px;
-      border-radius: 12px;
-      background: rgba(255,255,255,0.03);
-      border: 1px solid rgba(255,255,255,0.05);
-      display: flex;
-      align-items: center;
       justify-content: center;
-      font-size: 1.35rem;
+      align-items: center;
+    }
+    
+    /* ─── PRICING / ACCÈS ───────────────────────────────────── */
+    .pricing-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 3rem;
+      max-width: 900px;
+      margin: 0 auto;
+    }
+    @media (max-width: 768px) {
+      .pricing-grid {
+        grid-template-columns: 1fr;
+        gap: 2rem;
+      }
+    }
+    .price-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 28px;
+      padding: 3rem;
+      backdrop-filter: blur(16px);
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      overflow: hidden;
+      transition: all 0.3s ease;
+    }
+    .price-card:hover {
+      transform: translateY(-4px);
+    }
+    .price-card.featured {
+      border-color: var(--emerald);
+      box-shadow: 0 10px 40px rgba(16, 185, 129, 0.08);
+    }
+    .featured-badge {
+      position: absolute;
+      top: 20px; right: -40px;
+      background: var(--emerald);
+      color: #022c22;
+      font-weight: 800;
+      font-size: 0.72rem;
+      padding: 0.4rem 3rem;
+      transform: rotate(45deg);
+    }
+    .price-card h3 {
+      font-size: 1.6rem;
+      color: #FFF;
+      margin-bottom: 0.5rem;
+    }
+    .price-description {
+      color: var(--text-muted);
+      font-size: 0.85rem;
+      margin-bottom: 2rem;
+    }
+    .price-amount {
+      font-size: 2.5rem;
+      font-weight: 900;
+      color: #FFF;
+      margin-bottom: 2rem;
+      display: flex;
+      align-items: baseline;
+      font-family: var(--font-title);
+    }
+    .price-amount span {
+      font-size: 1rem;
+      color: var(--text-muted);
+      font-weight: 500;
+      margin-left: 0.4rem;
+    }
+    .price-features {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      margin-bottom: 2.5rem;
+    }
+    .price-features li {
+      display: flex;
+      align-items: center;
+      gap: 0.8rem;
+      font-size: 0.9rem;
+      color: var(--text-main);
+    }
+    .price-features li svg {
+      color: var(--emerald);
       flex-shrink: 0;
     }
-    .skill-info h3 {
-      font-family: var(--font-title);
-      font-size: 0.95rem;
-      font-weight: 700;
-      color: #FFF;
-      margin-bottom: 0.2rem;
-    }
-    .skill-info p {
-      font-size: 0.78rem;
-      color: var(--text-muted);
+    .price-card .btn {
+      margin-top: auto;
     }
 
-    /* ─── FOOTER ─────────────────────────────────────────── */
+    /* ─── FAQ ───────────────────────────────────────────────── */
+    .faq-max {
+      max-width: 750px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 1.2rem;
+    }
+    .faq-item {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 18px;
+      overflow: hidden;
+      transition: all 0.3s ease;
+    }
+    .faq-question {
+      padding: 1.4rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-weight: 700;
+      color: #FFF;
+      cursor: pointer;
+      user-select: none;
+    }
+    .faq-answer {
+      padding: 0 1.4rem 1.4rem 1.4rem;
+      color: var(--text-muted);
+      font-size: 0.92rem;
+      line-height: 1.6;
+      display: none;
+    }
+    .faq-toggle-icon {
+      font-size: 1.2rem;
+      color: var(--emerald);
+      transition: transform 0.25s ease;
+    }
+    .faq-item.active .faq-toggle-icon {
+      transform: rotate(45deg);
+    }
+    .faq-item.active {
+      border-color: rgba(255, 255, 255, 0.1);
+      background: rgba(255,255,255,0.04);
+    }
+
+    /* ─── FOOTER ────────────────────────────────────────────── */
     footer {
-      background: rgba(3, 7, 18, 0.95);
+      background: #020617;
       border-top: 1px solid var(--card-border);
-      padding: 3.5rem 0;
+      padding: 4rem 0 2rem 0;
       text-align: center;
-      position: relative;
-      z-index: 10;
+      font-size: 0.9rem;
     }
     .footer-arabic {
       font-family: 'Amiri', serif;
-      font-size: 1.6rem;
+      font-size: 1.8rem;
       color: var(--gold);
-      opacity: 0.8;
-      margin-bottom: 1rem;
+      margin-bottom: 1.5rem;
     }
     .footer-desc {
       color: var(--text-muted);
-      font-size: 0.9rem;
-      margin-bottom: 1.5rem;
+      max-width: 500px;
+      margin: 0 auto 2rem auto;
+      line-height: 1.6;
     }
     .footer-links {
       display: flex;
       justify-content: center;
-      gap: 1.5rem;
-      margin-bottom: 1.5rem;
+      gap: 2rem;
+      margin-bottom: 2rem;
     }
     .footer-links a {
-      color: var(--text-muted);
+      color: var(--text-dim);
       text-decoration: none;
-      font-size: 0.8rem;
       transition: color 0.2s ease;
     }
     .footer-links a:hover {
@@ -1055,35 +1181,49 @@
     .footer-credit {
       font-size: 0.75rem;
       color: var(--text-dim);
+      border-top: 1px solid rgba(255,255,255,0.03);
+      padding-top: 1.5rem;
+    }
+
+    /* Animations helpers */
+    @keyframes pulse {
+      0% { transform: scale(0.95); opacity: 0.5; }
+      50% { transform: scale(1.05); opacity: 1; }
+      100% { transform: scale(0.95); opacity: 0.5; }
     }
   </style>
 </head>
 <body>
 
-  <!-- Background Interactive Canvas -->
+  <!-- Background Canvas -->
   <canvas id="bg-canvas"></canvas>
   
-  <!-- Radial Blur Glow Orbs -->
+  <!-- Glowing effects -->
   <div class="bg-glow-orbs">
     <div class="orb orb-1"></div>
     <div class="orb orb-2"></div>
     <div class="orb orb-3"></div>
   </div>
 
-  <!-- ═══ HEADER / NAVIGATION ════════════════════════════════ -->
+  <!-- ═══ HEADER / NAVBAR ════════════════════════════════════ -->
   <header id="navbar">
-    <a href="#" class="logo">
-      <div class="logo-dot"></div>
-      Adel Hanifi<span>.dev</span>
-    </a>
-    <nav>
-      <ul>
-        <li><a href="#projets">Projets</a></li>
-        <li><a href="#parcours">Parcours</a></li>
-        <li><a href="#competences">Compétences</a></li>
-        <li class="cta-link"><a href="https://github.com/adelhanifiOne" target="_blank" rel="noopener">GitHub ↗</a></li>
-      </ul>
-    </nav>
+    <div class="container header-container">
+      <a href="#" class="logo">
+        <div class="logo-icon">🕌</div>
+        Adhan<span>Box</span>
+      </a>
+      <nav>
+        <ul>
+          <li><a href="#boitier">Le Boîtier</a></li>
+          <li><a href="#mawaqit">Mawaqit</a></li>
+          <li><a href="#configurateur">Personnaliser</a></li>
+          <li><a href="#app">Application</a></li>
+          <li><a href="#offres">Découvrir</a></li>
+          <li><a href="#faq">FAQ</a></li>
+          <li><a href="#offres" class="btn btn-primary" style="padding: 0.5rem 1.2rem; font-size: 0.82rem;">Commander</a></li>
+        </ul>
+      </nav>
+    </div>
   </header>
 
   <!-- ═══ HERO SECTION ═══════════════════════════════════════ -->
@@ -1091,85 +1231,317 @@
     <div class="container">
       <div class="hero-grid">
         <div class="hero-info">
-          <div class="bismillah">بِسْمِ ٱللَّٰهِ ٱلرَّحْمَٰنِ ٱلرَّhِيمِ</div>
+          <div class="hero-bismillah">بِسْمِ ٱللَّٰهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ</div>
           <div class="hero-badge">
             <span></span>
-            Hardware & Software Maker
+            Boîtier connecté de nouvelle génération
           </div>
           <h1 class="hero-title">
-            Adel Hanifi<br>
-            <span>Écosystème AdhanBox</span>
+            L'Appel à la Prière,<br>
+            <span>Réinventé pour votre Foyer</span>
           </h1>
           <p class="hero-text">
-            Concepteur de solutions technologiques autonomes dédiées à la pratique religieuse. Je développe le matériel (PCBs IoT, firmwares C++ sur ESP32) et les applications d'intégration (Flutter, Electron desktop) pour offrir une expérience harmonieuse au quotidien.
+            AdhanBox est un boîtier connecté haut de gamme, logé dans un châssis imprimé en 3D esthétique et 1000% personnalisable. Synchronisé automatiquement avec l'API Mawaqit, il joue l'adhan avec un son d'une netteté absolue et s'illumine discrètement à l'approche de la prière.
           </p>
           <div class="hero-actions">
-            <a href="#projets" class="btn btn-primary">
-              Découvrir les projets
+            <a href="#configurateur" class="btn btn-primary">
+              <span>Personnaliser mon boîtier</span>
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
             </a>
-            <a href="https://github.com/adelhanifiOne" target="_blank" rel="noopener" class="btn btn-secondary">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/></svg>
-              GitHub
-            </a>
+            <a href="#offres" class="btn btn-secondary">Voir les options</a>
           </div>
         </div>
 
         <div class="hero-visual">
-          <div class="hardware-showcase">
-            <div class="hardware-header">
-              <div class="hardware-tag">
-                <span class="hardware-status-dot"></span>ESP32-S3 Console
+          <div class="hero-product-display">
+            <!-- 3D visual card placeholder for aesthetic rendering -->
+            <svg width="320" height="320" viewBox="0 0 320 320" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+                  <stop offset="0%" stop-color="#10B981" stop-opacity="0.3"/>
+                  <stop offset="100%" stop-color="#10B981" stop-opacity="0"/>
+                </radialGradient>
+              </defs>
+              <circle cx="160" cy="160" r="140" fill="url(#glow)"/>
+              <!-- Elegant casing rendering -->
+              <rect x="50" y="50" width="220" height="220" rx="44" fill="url(#boxGrad)" stroke="rgba(255,255,255,0.08)" stroke-width="2" style="filter: drop-shadow(0 15px 30px rgba(0,0,0,0.6));"/>
+              <circle cx="160" cy="160" r="64" fill="#000" stroke="rgba(16, 185, 129, 0.2)" stroke-width="2"/>
+              <!-- LED ring indicators -->
+              <circle cx="160" cy="160" r="76" fill="none" stroke="rgba(16, 185, 129, 0.4)" stroke-width="1.5" stroke-dasharray="8 6"/>
+              <!-- Decorative icon -->
+              <path d="M160 135v50M135 160h50" stroke="#10B981" stroke-width="3" stroke-linecap="round"/>
+              <circle cx="160" cy="160" r="30" fill="none" stroke="#F59E0B" stroke-width="1.5" stroke-dasharray="3 3"/>
+              
+              <!-- Gradients used -->
+              <linearGradient id="boxGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#7c2d12"/>
+                <stop offset="100%" stop-color="#3f1a0a"/>
+              </linearGradient>
+            </svg>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ LE BOÎTIER & CARACTÉRISTIQUES ═════════════════════ -->
+  <section id="boitier">
+    <div class="container">
+      <div class="section-header">
+        <div class="section-eyebrow">Haute Technologie</div>
+        <h2 class="section-title">Le Matériel sans <span>Aucun Compromis</span></h2>
+        <p class="section-desc">Développé pour être fiable, durable et beau. Une pièce d'artisanat numérique dans votre salon.</p>
+      </div>
+
+      <div class="specs-grid">
+        <!-- Spec 1: Custom case -->
+        <div class="spec-card">
+          <div class="spec-icon">📐</div>
+          <h3>Boîtier 3D Personnalisable</h3>
+          <p>
+            Oubliez les boîtes en plastique génériques. Chaque boîtier est imprimé en 3D haute qualité en France avec des finitions de texture soignées (effets bois, matte, marbre, laiton). Vous pouvez également le personnaliser en choisissant vos matériaux pour qu'il s'harmonise parfaitement avec votre décoration.
+          </p>
+        </div>
+
+        <!-- Spec 2: Custom PCB -->
+        <div class="spec-card">
+          <div class="spec-icon">⚡</div>
+          <h3>PCB Conçu Sur-Mesure</h3>
+          <p>
+            Une carte mère électronique dessinée spécifiquement pour le projet. Intègre un microcontrôleur ESP32-S3, un module RTC DS3231 haute précision pour conserver l'heure hors-ligne et une isolation électrique poussée du DFPlayer Mini pour éliminer tout souffle audio parasite.
+          </p>
+        </div>
+
+        <!-- Spec 3: Mawaqit connection -->
+        <div class="spec-card">
+          <div class="spec-icon">📡</div>
+          <h3>Connectivité Mawaqit Directe</h3>
+          <p>
+            Le boîtier se connecte directement à votre Wi-Fi résidentiel pour récupérer en temps réel les horaires de la mosquée de votre choix via la plateforme Mawaqit. Plus aucun calcul approximatif : l'Adhan sonne exactement au même instant que dans votre mosquée locale.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ MAWAQIT SYNCHRONISATION ══════════════════════════ -->
+  <section id="mawaqit" class="mawaqit-section">
+    <div class="container">
+      <div class="mawaqit-row">
+        <div class="mawaqit-info">
+          <div class="section-eyebrow">Précision Absolute</div>
+          <h2 class="section-title" style="text-align: left;">Connecté en temps réel avec <span>votre mosquée</span></h2>
+          <p class="hero-text">
+            Traditionnellement, les horloges électroniques d'adhan calculent les horaires via des équations mathématiques génériques, provoquant des décalages avec votre mosquée locale.
+          </p>
+          <p class="hero-text" style="margin-top: 1rem;">
+            Grâce à l'intégration officielle de l'API **Mawaqit**, AdhanBox se synchronise quotidiennement en arrière-plan. Dès que les horaires de votre mosquée changent, le boîtier s'ajuste instantanément à la seconde près.
+          </p>
+        </div>
+
+        <div class="mawaqit-visual">
+          <div class="api-sync-mock">
+            <!-- Node 1: Mawaqit Cloud -->
+            <div class="api-node">
+              <div class="node-icon" style="background: rgba(59, 130, 246, 0.15); color: #3b82f6;">🌐</div>
+              <div class="node-text">
+                <h4>Plateforme Mawaqit</h4>
+                <p>GET /api/v6/mosque/timetable</p>
               </div>
-              <div style="font-family: monospace; font-size: 0.72rem; color: var(--gold);">FIRMWARE SIM v1.4</div>
             </div>
             
-            <div class="hardware-screen">
-              <div class="chime-waves" id="waves-container">
-                <div class="chime-wave-bar"></div>
-                <div class="chime-wave-bar"></div>
-                <div class="chime-wave-bar"></div>
-                <div class="chime-wave-bar"></div>
-                <div class="chime-wave-bar"></div>
-              </div>
-              <div class="hardware-leds led-mode-rainbow" id="virtual-leds">
-                <div class="led-dot"></div>
-                <div class="led-dot"></div>
-                <div class="led-dot"></div>
-                <div class="led-dot"></div>
-                <div class="led-dot"></div>
-                <div class="led-dot"></div>
-                <div class="led-dot"></div>
-                <div class="led-dot"></div>
-              </div>
-              <div style="text-align: center; margin-top: 0.5rem; z-index: 2;">
-                <div id="screen-title" style="font-family: var(--font-title); font-weight: 700; color: #FFF; font-size: 0.95rem;">DFPlayer: En attente</div>
-                <div id="screen-subtitle" style="font-size: 0.72rem; color: var(--text-muted); margin-top: 0.15rem;">Volume: 20/30 | Brightness: 50%</div>
+            <div class="api-arrow-down">
+              <div class="api-arrow-line">
+                <div class="api-glow-dot"></div>
               </div>
             </div>
 
-            <div class="controls-grid" style="margin-bottom: 0.6rem;">
-              <select id="track-select" class="control-select">
-                <option value="2">Piste 2 (Adhan standard)</option>
-                <option value="3">Piste 3 (Adhan alternatif)</option>
-                <option value="1">Piste 1 (Duaa de fin)</option>
+            <!-- Node 2: AdhanBox API -->
+            <div class="api-node" style="border-color: rgba(16, 185, 129, 0.2);">
+              <div class="node-icon" style="background: rgba(16, 185, 129, 0.15); color: var(--emerald);">🕌</div>
+              <div class="node-text">
+                <h4>Votre AdhanBox</h4>
+                <p>ESP32-S3 Synced (DS3231 RTC)</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ CONFIGURATEUR INTERACTIF ══════════════════════════ -->
+  <section id="configurateur">
+    <div class="container">
+      <div class="section-header">
+        <div class="section-eyebrow">Playground Interactif</div>
+        <h2 class="section-title">Créez votre <span>AdhanBox</span></h2>
+        <p class="section-desc">Personnalisez virtuellement le boîtier en choisissant les finitions de la coque, le mode des 16 LEDs de notification et en écoutant l'appel.</p>
+      </div>
+
+      <div class="configurator-panel">
+        
+        <!-- Left: Virtual Box Visualizer -->
+        <div class="configurator-visual">
+          <div class="box-container">
+            <div class="virtual-box finish-wood" id="virtual-box">
+              <div class="box-speaker-grille">
+                <!-- 16 LEDs container -->
+                <div class="led-ring led-mode-rainbow" id="led-ring">
+                  <div class="led" style="--angle: 0deg; --idx: 0;"></div>
+                  <div class="led" style="--angle: 22.5deg; --idx: 1;"></div>
+                  <div class="led" style="--angle: 45deg; --idx: 2;"></div>
+                  <div class="led" style="--angle: 67.5deg; --idx: 3;"></div>
+                  <div class="led" style="--angle: 90deg; --idx: 4;"></div>
+                  <div class="led" style="--angle: 112.5deg; --idx: 5;"></div>
+                  <div class="led" style="--angle: 135deg; --idx: 6;"></div>
+                  <div class="led" style="--angle: 157.5deg; --idx: 7;"></div>
+                  <div class="led" style="--angle: 180deg; --idx: 8;"></div>
+                  <div class="led" style="--angle: 202.5deg; --idx: 9;"></div>
+                  <div class="led" style="--angle: 225deg; --idx: 10;"></div>
+                  <div class="led" style="--angle: 247.5deg; --idx: 11;"></div>
+                  <div class="led" style="--angle: 270deg; --idx: 12;"></div>
+                  <div class="led" style="--angle: 292.5deg; --idx: 13;"></div>
+                  <div class="led" style="--angle: 315deg; --idx: 14;"></div>
+                  <div class="led" style="--angle: 337.5deg; --idx: 15;"></div>
+                </div>
+                <!-- Core speaker look -->
+                <div class="speaker-center">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" id="speaker-icon">
+                    <path d="M11 5L6 9H2v6h4l5 4V5zM15.54 8.46a5 5 0 0 1 0 7.07M19.07 4.93a10 10 0 0 1 0 14.14"/>
+                  </svg>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Audio Waves visual effect -->
+          <div class="audio-waves" id="audio-waves">
+            <div class="audio-bar"></div>
+            <div class="audio-bar"></div>
+            <div class="audio-bar"></div>
+            <div class="audio-bar"></div>
+            <div class="audio-bar"></div>
+          </div>
+        </div>
+
+        <!-- Right: Controls -->
+        <div class="configurator-controls">
+          <!-- 1. Casing Finish -->
+          <div class="control-group">
+            <span class="control-label">Finition du Châssis (Imprimé 3D)</span>
+            <div class="finish-options">
+              <div class="option-dot dot-wood active" onclick="setFinish('wood')" title="Bois Précieux"></div>
+              <div class="option-dot dot-black" onclick="setFinish('matte-black')" title="Carbone Noir Mat"></div>
+              <div class="option-dot dot-marble" onclick="setFinish('marble')" title="Blanc Marbre"></div>
+              <div class="option-dot dot-brass" onclick="setFinish('brass')" title="Laiton Brossé"></div>
+            </div>
+            <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.2rem;" id="finish-text">Bois Précieux : Finition organique et chaleureuse.</p>
+          </div>
+
+          <!-- 2. LED Ring Mode -->
+          <div class="control-group">
+            <span class="control-label">Animation des 16 LEDs NeoPixel</span>
+            <div class="led-modes-grid">
+              <button class="led-btn active" onclick="setLedMode('rainbow', this)">Arc-en-ciel</button>
+              <button class="led-btn" onclick="setLedMode('breathing', this)">Respiration Dorée</button>
+              <button class="led-btn" onclick="setLedMode('medina', this)">Vert Médinois</button>
+              <button class="led-btn" onclick="setLedMode('candle', this)">Bougie Vacillante</button>
+            </div>
+          </div>
+
+          <!-- 3. Audio track testing -->
+          <div class="control-group">
+            <span class="control-label">Tester le Son de l'Adhan</span>
+            <div class="audio-player-control">
+              <select class="audio-select" id="track-select">
+                <option value="../0002.mp3">Adhan Standard - Mecque</option>
+                <option value="../0003.mp3">Adhan Doux - Médine</option>
+                <option value="../0001.mp3">Duaa de fin de prière</option>
               </select>
-              <button class="control-btn" id="btn-sound" onclick="simulateFirmwarePlay()" style="background: rgba(16, 185, 129, 0.15); color: var(--emerald); border-color: var(--emerald);">
-                <span>Play / Stop</span>
+              <button class="play-btn" onclick="toggleAdhanPlay()" id="btn-play">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" id="play-icon-svg">
+                  <path d="M8 5v14l11-7z"/>
+                </svg>
               </button>
             </div>
-            
-            <div class="controls-grid">
-              <select id="scenario-select" class="control-select" onchange="changeLedScenario(this.value)">
-                <option value="8">Scénario 8 (Arc-en-ciel)</option>
-                <option value="11">Scénario 11 (Respiration)</option>
-                <option value="5">Scénario 5 (Vert Fixe)</option>
-                <option value="3">Scénario 3 (Bleu Fixe)</option>
-                <option value="0">Scénario 0 (Éteint)</option>
-              </select>
-              <button class="control-btn" onclick="triggerDeviceReset()">
-                Reboot Box
+          </div>
+
+          <!-- CTA to Buy -->
+          <a href="#offres" class="btn btn-gold" style="margin-top: 1rem;">
+            Obtenir cette configuration
+          </a>
+
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ MOBILE COMPANION APP ══════════════════════════════ -->
+  <section id="app">
+    <div class="container">
+      <div class="app-row">
+        <div class="app-info">
+          <div class="section-eyebrow">Contrôle Total</div>
+          <h2 class="section-title" style="text-align: left;">Une application mobile simple, <span>pensée pour tous</span></h2>
+          <p class="hero-text">
+            Pas besoin d'être un ingénieur. Grâce à l'application compagnon **AdhanBox App** (iOS & Android), connectez et gérez votre boîtier en toute simplicité.
+          </p>
+          <ul class="price-features" style="margin: 1.5rem 0;">
+            <li>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg>
+              <strong>Configuration Instantanée</strong> : Détection automatique en Wi-Fi local grâce au protocole mDNS.
+            </li>
+            <li>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg>
+              <strong>Synchronisation en 1 Tap</strong> : Envoi automatique des coordonnées GPS de votre téléphone pour régler le fuseau horaire et les horaires astronomiques.
+            </li>
+            <li>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg>
+              <strong>Personnalisation Audio</strong> : Choisissez parmi plusieurs styles d'adhans préchargés sur la carte SD ou téléversez le vôtre.
+            </li>
+          </ul>
+          <a href="https://github.com/adelhanifiOne/adhanbox/tree/main/flutter_app" target="_blank" rel="noopener" class="btn btn-secondary">
+            Découvrir l'application sur GitHub
+          </a>
+        </div>
+
+        <div class="phone-showcase">
+          <!-- Smartphone Casing Mockup -->
+          <div class="mobile-mockup">
+            <div class="mobile-screen-header">AdhanBox Compagnon</div>
+            <div class="mobile-content">
+              
+              <div class="mobile-status-card">
+                <div class="status-indicator"></div>
+                <div style="font-size: 0.72rem; color: #FFF;">
+                  <strong>Boîtier connecté</strong><br>
+                  <span style="color: var(--text-muted); font-size: 0.65rem;">IP: 192.168.1.42 (adhanbox.local)</span>
+                </div>
+              </div>
+
+              <div class="mobile-menu-item">
+                <span>Wi-Fi Status</span>
+                <span style="color: var(--emerald); font-weight: 700;">Connecté</span>
+              </div>
+
+              <div class="mobile-menu-item">
+                <span>Mawaqit Mosquée</span>
+                <span style="color: var(--gold); font-weight: 700;">Tarbes (El-Hijra)</span>
+              </div>
+
+              <!-- Interactive Simulator button inside phone -->
+              <button class="mobile-sync-btn" onclick="simulateAppSync()">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+                Synchroniser GPS & RTC
               </button>
+
+              <div class="mobile-console" id="phone-console">
+                <p style="color: var(--text-dim);">// Console logs mobile</p>
+                <p>> En attente d'action...</p>
+              </div>
+
             </div>
           </div>
         </div>
@@ -1177,338 +1549,176 @@
     </div>
   </section>
 
-  <!-- ═══ PORTFOLIO / PROJETS ════════════════════════════════ -->
-  <section id="projets">
+  <!-- ═══ ECOSYSTEM FOR MOSQUES & OVERLAY ════════════════════ -->
+  <section id="ecosystem" style="background: rgba(0,0,0,0.15);">
     <div class="container">
       <div class="section-header">
-        <div class="section-eyebrow">Projets</div>
-        <h2 class="section-title">L'Écosystème <span>AdhanBox</span></h2>
-        <p class="section-desc">Du prototypage électronique de la carte mère aux applications mobiles et logicielles coordonnées pour les pratiquants et les mosquées.</p>
+        <div class="section-eyebrow">Écosystème Étendu</div>
+        <h2 class="section-title">Pour aller <span>Encore Plus Loin</span></h2>
+        <p class="section-desc">AdhanBox s'accompagne d'autres outils conçus pour soutenir la vie de la communauté et votre travail sur ordinateur.</p>
       </div>
 
-      <div class="project-grid">
-        
-        <!-- PROJET 1 : AdhanBox (IoT / C++ firmware) -->
-        <div class="project-card">
-          <div class="project-preview">
-            <div class="preview-box">
-              <svg width="240" height="160" viewBox="0 0 240 160" xmlns="http://www.w3.org/2000/svg">
-                <rect x="20" y="25" width="200" height="110" rx="14" fill="#0b1021" stroke="rgba(16, 185, 129, 0.2)" stroke-width="2"/>
-                <circle cx="200" cy="45" r="4" fill="#10B981" />
-                <rect x="36" y="45" width="80" height="70" rx="8" fill="#111827" stroke="#374151"/>
-                <line x1="48" y1="58" x2="104" y2="58" stroke="#374151" stroke-width="1.5" />
-                <line x1="48" y1="68" x2="104" y2="68" stroke="#374151" stroke-width="1.5" />
-                <line x1="48" y1="78" x2="104" y2="78" stroke="#374151" stroke-width="1.5" />
-                <line x1="48" y1="88" x2="104" y2="88" stroke="#374151" stroke-width="1.5" />
-                <line x1="48" y1="98" x2="104" y2="98" stroke="#374151" stroke-width="1.5" />
-                
-                <path d="M140 80h40v20" fill="none" stroke="#10B981" stroke-dasharray="3, 3" stroke-width="1.5" />
-                <rect x="175" y="90" width="30" height="20" rx="3" fill="#1f2937" stroke="#10B981" />
-                <text x="190" y="103" fill="#10B981" font-size="8" font-family="monospace" font-weight="700" text-anchor="middle">S3</text>
-                
-                <rect x="30" y="19" width="180" height="4" rx="2" fill="#10B981" opacity="0.85"/>
-              </svg>
-            </div>
-          </div>
-          <div class="project-details">
-            <div class="project-meta">
-              <span class="project-category">Matériel &amp; Firmware embarqué</span>
-              <span class="project-version">v1.4.0</span>
-            </div>
-            <a href="https://github.com/adelhanifiOne/adhanbox" target="_blank" rel="noopener" class="project-title-link">
-              AdhanBox (ESP32-S3)
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3"/></svg>
-            </a>
-            <p class="project-description">
-              Système embarqué autonome sur ESP32-S3. Conçu avec une horloge temps réel DS3231 (RTC) pour fonctionner hors-ligne. Il calcule localement les horaires ou se synchronise avec les horaires exacts d'une mosquée via l'API Mawaqit. Il gère la lecture audio par protocole série (DFPlayer Mini) et contrôle un ruban LED SK6812 via l'API NeoPixel selon plusieurs scénarios configurables (off, fixe, arc-en-ciel, respiration, bougie).
-            </p>
-            <div class="project-tags">
-              <span class="tag tag-highlight">C++ / FreeRTOS</span>
-              <span class="tag">Mawaqit API Sync</span>
-              <span class="tag">mDNS / DNS Server</span>
-              <span class="tag">BLE Provisioning</span>
-              <span class="tag">MQTT Client</span>
-            </div>
-            <div class="project-actions">
-              <a href="https://github.com/adelhanifiOne/adhanbox" target="_blank" rel="noopener" class="btn btn-secondary">
-                Voir le dépôt
-              </a>
+      <div class="ecosystem-grid">
+        <!-- 1. Adhan Kiosk (Tactile terminal) -->
+        <div class="eco-card">
+          <div class="eco-icon">💳</div>
+          <h3>Borne Tactile Mosquée (Adhan Kiosk)</h3>
+          <p>
+            Une application mode kiosque plein écran destinée aux mosquées pour simplifier et moderniser les dons physiques des fidèles. Les dons par carte sont enregistrés localement dans une base SQLite ultra-fiable et sécurisée, puis synchronisés avec les serveurs de la mosquée de manière chiffrée.
+          </p>
+          <div class="eco-visual" style="color: var(--emerald);">
+            <div style="text-align: center; font-size: 0.8rem; font-family: monospace;">
+              <span style="color: #FFF; font-weight: 700;">SQLITE LOCAL DATABASE</span><br>
+              [OK] Transaction logged | Encrypted sync ✓
             </div>
           </div>
         </div>
 
-        <!-- PROJET 2 : AdhanBox App (Flutter Mobile) -->
-        <div class="project-card">
-          <div class="project-preview">
-            <div class="mobile-mockup">
-              <div class="mobile-screen">
-                <div class="mobile-screen-header">AdhanBox Settings</div>
-                <div class="mobile-screen-row" style="margin-top: 10px;">
-                  <span style="font-weight: 500;">GPS Téléphone</span>
-                  <span style="color: var(--emerald); font-weight: 700;">OK</span>
-                </div>
-                <div class="mobile-screen-row">
-                  <span style="font-weight: 500;">mDNS Status</span>
-                  <span style="color: var(--teal); font-weight: 700;">Found</span>
-                </div>
-                <button class="mobile-sync-btn" onclick="triggerMobileConsoleSync()">
-                  <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
-                  Mettre à jour l'AdhanBox
-                </button>
-              </div>
-              <div class="console-overlay" id="mobile-console"></div>
-            </div>
-          </div>
-          <div class="project-details">
-            <div class="project-meta">
-              <span class="project-category">Mobile · Android &amp; iOS</span>
-              <span class="project-version">v1.0.0</span>
-            </div>
-            <a href="https://github.com/adelhanifiOne/adhanbox/tree/main/flutter_app" target="_blank" rel="noopener" class="project-title-link">
-              AdhanBox App (Flutter)
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3"/></svg>
-            </a>
-            <p class="project-description">
-              Application compagnon Flutter conçue pour simplifier la configuration matérielle. Grâce à la découverte mDNS locale, elle détecte le boîtier sur le réseau et propose une synchronisation en un seul clic : elle récupère les coordonnées GPS du smartphone et configure automatiquement la position (`set_location`), l'heure exacte du RTC DS3231 (`set_rtc_manual`), le fuseau horaire (`set_tz`), et lance une synchronisation immédiate des horaires Mawaqit de la mosquée.
-            </p>
-            <div class="project-tags">
-              <span class="tag tag-highlight">Flutter / Dart</span>
-              <span class="tag">mDNS Discovery</span>
-              <span class="tag">REST API Client</span>
-              <span class="tag">Location Service</span>
-              <span class="tag">Riverpod State</span>
-            </div>
-            <div class="project-actions">
-              <a href="https://github.com/adelhanifiOne/adhanbox/tree/main/flutter_app" target="_blank" rel="noopener" class="btn btn-secondary">
-                Voir l'application
-              </a>
+        <!-- 2. Desktop Overlay -->
+        <div class="eco-card">
+          <div class="eco-icon">🖥️</div>
+          <h3>Widget Bureau (Adhan Overlay)</h3>
+          <p>
+            Une application Windows & Mac légère (Electron) qui s'intègre en arrière-plan et interroge directement votre AdhanBox locale. À l'approche de la prière, elle crée une bordure colorée et discrète aux contours de votre écran, sans perturber vos clics ou votre travail, pour vous rappeler l'heure sans nuisance.
+          </p>
+          <div class="eco-visual" style="color: var(--gold);">
+            <div style="text-align: center; font-size: 0.8rem; font-family: monospace;">
+              <span style="color: #FFF; font-weight: 700;">ELECTRON OVERLAY ACTIVE</span><br>
+              HTTP Request to adhanbox.local/prayer_times ✓
             </div>
           </div>
         </div>
-
-        <!-- PROJET 3 : Adhan Overlay (Electron / Windows Desktop) -->
-        <div class="project-card">
-          <div class="project-preview">
-            <div class="desktop-mockup">
-              <div class="desktop-screen" id="virtual-screen" style="border-color: var(--emerald); box-shadow: 0 0 8px var(--emerald-glow);">
-                <div style="font-weight: 700; color: var(--emerald); margin-bottom: 2px;" id="screen-overlay-state">● Prière en cours</div>
-                <div style="color: var(--text-dim); font-family: monospace; font-size: 5px; line-height: 1.5;">
-                  // prayer.js logic<br>
-                  if (isWithinPrayer) setBorderColor('#10B981')<br>
-                  if (soonToEnd) setBorderColor('#F59E0B')<br>
-                  if (lastTenMin) setBorderColor('#F43F5E')
-                </div>
-                <div class="overlay-controls">
-                  <button class="overlay-state-btn active-green" onclick="changeOverlayState('active')">En cours</button>
-                  <button class="overlay-state-btn active-gold" onclick="changeOverlayState('warning')">&lt; 15m</button>
-                  <button class="overlay-state-btn active-rose" onclick="changeOverlayState('urgent')">&lt; 10m</button>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div class="project-details">
-            <div class="project-meta">
-              <span class="project-category">Desktop · Windows App</span>
-              <span class="project-version">v1.1.0</span>
-            </div>
-            <a href="https://github.com/adelhanifiOne/adhanbox" target="_blank" rel="noopener" class="project-title-link">
-              Adhan Overlay (Electron)
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3"/></svg>
-            </a>
-            <p class="project-description">
-              Application de bureau pour Windows facilitant le rappel visuel et discret de la prière lors du travail sur ordinateur. Elle dessine un cadre lumineux et coloré transparent aux bords de l'écran sans jamais interrompre les clics ou la visibilité (transparent et cliquable à travers). Elle se connecte à l'AdhanBox locale via requêtes HTTP REST.
-            </p>
-            <div class="project-tags">
-              <span class="tag tag-highlight">Electron / JS</span>
-              <span class="tag">Transparent Windows</span>
-              <span class="tag">Click-through API</span>
-              <span class="tag">mDNS Scanner</span>
-              <span class="tag">Node Native API</span>
-            </div>
-            <div class="project-actions">
-              <a href="https://github.com/adelhanifiOne/adhanbox" target="_blank" rel="noopener" class="btn btn-secondary">
-                Détails du projet
-              </a>
-            </div>
-          </div>
-        </div>
-
-        <!-- PROJET 4 : Adhan Kiosk (Electron tactile terminal) -->
-        <div class="project-card">
-          <div class="project-preview">
-            <div class="kiosk-mockup">
-              <div class="kiosk-screen">
-                <div class="kiosk-campaign-tab">
-                  <button class="kiosk-tab-btn active" id="camp-gen" onclick="selectKioskCampaign('gen')">Don Général</button>
-                  <button class="kiosk-tab-btn" id="camp-trav" onclick="selectKioskCampaign('trav')">Travaux</button>
-                </div>
-                <div style="font-size: 8px; font-weight: 700; color: #FFF; margin-top: 2px;" id="kiosk-camp-title">Mosquée El-Hijra : Don Général</div>
-                <div class="kiosk-amount-grid">
-                  <button class="kiosk-amount-btn" onclick="selectKioskAmount(this, 10)">10 €</button>
-                  <button class="kiosk-amount-btn active" onclick="selectKioskAmount(this, 20)">20 €</button>
-                  <button class="kiosk-amount-btn" onclick="selectKioskAmount(this, 50)">50 €</button>
-                </div>
-                <button class="kiosk-pay-btn" onclick="triggerKioskPayment()">Simuler le Paiement</button>
-                
-                <div class="kiosk-success" id="kiosk-success-screen">
-                  <span style="font-size: 18px;">🕌</span>
-                  <span style="font-weight: 700; margin-top: 4px;">Paiement Simulé avec succès !</span>
-                  <span style="color: var(--emerald); font-size: 7px; font-family: monospace;">SQLITE: Transaction logged ✓</span>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div class="project-details">
-            <div class="project-meta">
-              <span class="project-category">Interactive tactile kiosk</span>
-              <span class="project-version">v1.2.0</span>
-            </div>
-            <a href="https://github.com/adelhanifiOne/adhanbox" target="_blank" rel="noopener" class="project-title-link">
-              Adhan Kiosk (Borne Tactile)
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3"/></svg>
-            </a>
-            <p class="project-description">
-              Borne interactive développée en mode Kiosk plein écran sous Electron pour simplifier la collecte physique de dons à la Mosquée El-Hijra de Tarbes. Elle intègre un clavier numérique et des sélections rapides par campagnes configurables. Les transactions de dons validées sont enregistrées localement dans une base SQLite robuste et synchronisées de manière chiffrée vers l'administration.
-            </p>
-            <div class="project-tags">
-              <span class="tag tag-highlight">Electron / SQLite</span>
-              <span class="tag">Kiosk Mode Web API</span>
-              <span class="tag">Multi-campaigns</span>
-              <span class="tag">Sync protocol</span>
-              <span class="tag">Tailored touch UI</span>
-            </div>
-            <div class="project-actions">
-              <a href="https://github.com/adelhanifiOne/adhanbox" target="_blank" rel="noopener" class="btn btn-secondary">
-                Détails de la borne
-              </a>
-            </div>
-          </div>
-        </div>
-
       </div>
     </div>
   </section>
 
-  <!-- ═══ TIMELINE / PARCOURS ════════════════════════════════ -->
-  <section id="parcours">
+  <!-- ═══ OFFRES & TARIFS ════════════════════════════════════ -->
+  <section id="offres">
     <div class="container">
       <div class="section-header">
-        <div class="section-eyebrow">Parcours</div>
-        <h2 class="section-title">Mon cheminement de <span>Maker</span></h2>
-        <p class="section-desc">Comment je suis passé du routage d'un circuit imprimé au déploiement d'un écosystème d'applications interconnectées.</p>
+        <div class="section-eyebrow">Accéder au projet</div>
+        <h2 class="section-title">Choisissez votre <span>Formule</span></h2>
+        <p class="section-desc">Que vous souhaitiez un boîtier fini prêt à l'emploi ou fabriquer le vôtre en mode DIY, l'écosystème s'adapte à vous.</p>
       </div>
 
-      <div class="timeline">
-        
-        <!-- Etape 1 -->
-        <div class="timeline-item">
-          <div class="timeline-dot"></div>
-          <div class="timeline-date">2024</div>
-          <div class="timeline-content">
-            <h3>Conception Électronique (PCB)</h3>
-            <p>Conception et routage de la carte électronique d'AdhanBox dans KiCad. Intégration de l'ESP32-S3, routage d'un oscillateur RTC haute précision (DS3231) sur bus I2C, et intégration du contrôleur DFPlayer Mini avec isolation pour éviter les parasites audio.</p>
-          </div>
+      <div class="pricing-grid">
+        <!-- Option DIY Maker -->
+        <div class="price-card">
+          <h3>DIY Maker (Open Source)</h3>
+          <p class="price-description">Idéal si vous aimez bidouiller et souder vous-même.</p>
+          <div class="price-amount">0 €<span>Gratuit &amp; Libre</span></div>
+          
+          <ul class="price-features">
+            <li>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg>
+              Accès illimité aux dépôts GitHub
+            </li>
+            <li>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg>
+              Schémas du PCB (fichiers KiCad)
+            </li>
+            <li>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg>
+              Modèles 3D du châssis (fichiers STL)
+            </li>
+            <li>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg>
+              Firmware C++ ESP32-S3 libre
+            </li>
+          </ul>
+
+          <a href="https://github.com/adelhanifiOne/adhanbox" target="_blank" rel="noopener" class="btn btn-secondary">
+            Voir sur GitHub
+          </a>
         </div>
 
-        <!-- Etape 2 -->
-        <div class="timeline-item">
-          <div class="timeline-dot"></div>
-          <div class="timeline-date">Début 2025</div>
-          <div class="timeline-content">
-            <h3>Firmware C++ (Arduino/FreeRTOS)</h3>
-            <p>Développement du firmware C++ embarqué. Mise en œuvre du protocole de calcul astronomique des horaires en local, gestion d'un serveur DNS captif pour la configuration et développement d'un serveur BLE (Bluetooth Low Energy) pour scanner les réseaux WiFi environnants.</p>
-          </div>
-        </div>
+        <!-- Option Clé en Main -->
+        <div class="price-card featured">
+          <div class="featured-badge">Recommandé</div>
+          <h3>AdhanBox Assemblé</h3>
+          <p class="price-description">Boîtier assemblé, soudé, testé et livré prêt à fonctionner.</p>
+          <div class="price-amount">Sur devis<span>/ Pièce assemblée</span></div>
+          
+          <ul class="price-features">
+            <li>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg>
+              <strong>Finition 3D au choix</strong> (Bois, Laiton, Noir...)
+            </li>
+            <li>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg>
+              PCB soudé par des professionnels
+            </li>
+            <li>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg>
+              Carte MicroSD avec Adhans préchargés
+            </li>
+            <li>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg>
+              Support de configuration inclus
+            </li>
+          </ul>
 
-        <!-- Etape 3 -->
-        <div class="timeline-item">
-          <div class="timeline-dot"></div>
-          <div class="timeline-date">Mi 2025</div>
-          <div class="timeline-content">
-            <h3>Applications Desktop & Tactile</h3>
-            <p>Conception d'Adhan Overlay en Electron (Windows) pour un affichage discret, et programmation de la borne interactive Adhan Kiosk pour la Mosquée El-Hijra de Tarbes (collecte locale avec base de données SQLite).</p>
-          </div>
+          <a href="mailto:contact@adhanbox.com?subject=Demande de devis AdhanBox assemblé" class="btn btn-primary">
+            Demander un devis
+          </a>
         </div>
-
-        <!-- Etape 4 -->
-        <div class="timeline-item">
-          <div class="timeline-dot"></div>
-          <div class="timeline-date">2026</div>
-          <div class="timeline-content">
-            <h3>Application Mobile Flutter & API Mawaqit</h3>
-            <p>Développement de l'application mobile en Flutter pour Android & iOS, avec refonte de l'interface pour la rendre simple et technophobe-friendly (synchro GPS/RTC/Timezone en un seul tap). Intégration de la synchronisation distante avec l'API Mawaqit.</p>
-          </div>
-        </div>
-
       </div>
     </div>
   </section>
 
-  <!-- ═══ COMPETENCES ═══════════════════════════════════════ -->
-  <section id="competences">
+  <!-- ═══ FAQ SECTION ════════════════════════════════════════ -->
+  <section id="faq">
     <div class="container">
       <div class="section-header">
-        <div class="section-eyebrow">Compétences</div>
-        <h2 class="section-title">Mes Compétences <span>Clés</span></h2>
-        <p class="section-desc">Les langages et outils que j'utilise pour concevoir mes projets du matériel à l'applicatif.</p>
+        <div class="section-eyebrow">Foire Aux Questions</div>
+        <h2 class="section-title">Toutes vos <span>Questions</span></h2>
+        <p class="section-desc">Des éclaircissements sur le fonctionnement technique et pratique de l'AdhanBox.</p>
       </div>
 
-      <div class="skills-grid">
-        
-        <!-- Skill 1 -->
-        <div class="skill-card">
-          <div class="skill-icon">⚡</div>
-          <div class="skill-info">
-            <h3>C++ / Arduino &amp; FreeRTOS</h3>
-            <p>Conception de firmware embarqué performant, gestion du multitâche.</p>
+      <div class="faq-max">
+        <!-- FAQ 1 -->
+        <div class="faq-item">
+          <div class="faq-question" onclick="toggleFaq(this)">
+            <span>Le boîtier fonctionne-t-il sans connexion Internet ?</span>
+            <span class="faq-toggle-icon">+</span>
+          </div>
+          <div class="faq-answer">
+            Oui ! AdhanBox intègre un circuit d'horloge temps réel haute précision (RTC DS3231) doté d'une pile de sauvegarde. Une fois configuré avec l'application mobile, il peut calculer les horaires localement de manière autonome et continuer à sonner même s'il n'y a plus de Wi-Fi.
           </div>
         </div>
 
-        <!-- Skill 2 -->
-        <div class="skill-card">
-          <div class="skill-icon">📱</div>
-          <div class="skill-info">
-            <h3>Flutter / Dart</h3>
-            <p>Développement mobile réactif, gestion d'état, découverte réseau local.</p>
+        <!-- FAQ 2 -->
+        <div class="faq-item">
+          <div class="faq-question" onclick="toggleFaq(this)">
+            <span>Comment se configure le boîtier la première fois ?</span>
+            <span class="faq-toggle-icon">+</span>
+          </div>
+          <div class="faq-answer">
+            C'est extrêmement simple : allumez le boîtier, ouvrez l'application mobile compagnon sur votre téléphone et appuyez sur "Synchroniser". L'application détecte le boîtier sur votre réseau local (via mDNS), transmet vos coordonnées GPS ainsi que les identifiants Wi-Fi et configure le tout en moins de 10 secondes.
           </div>
         </div>
 
-        <!-- Skill 3 -->
-        <div class="skill-card">
-          <div class="skill-icon">🖥️</div>
-          <div class="skill-info">
-            <h3>Electron / Node.js</h3>
-            <p>Création d'applications de bureau natives, gestion SQLite, mode Kiosk.</p>
+        <!-- FAQ 3 -->
+        <div class="faq-item">
+          <div class="faq-question" onclick="toggleFaq(this)">
+            <span>Puis-je changer ou ajouter mes propres sons d'Adhan ?</span>
+            <span class="faq-toggle-icon">+</span>
+          </div>
+          <div class="faq-answer">
+            Tout à fait. Les fichiers audio sont stockés sur une carte MicroSD insérée dans le boîtier. Vous pouvez retirer la carte et y glisser n'importe quel fichier MP3 nommé selon l'index de votre choix (ex: 0005.mp3 pour l'appel de votre récitateur préféré) ou utiliser l'application mobile pour changer de piste par défaut.
           </div>
         </div>
 
-        <!-- Skill 4 -->
-        <div class="skill-card">
-          <div class="skill-icon">⚙️</div>
-          <div class="skill-info">
-            <h3>Conception PCB (KiCad)</h3>
-            <p>Routage électronique double face, bus I2C/SPI, prototypage IoT.</p>
+        <!-- FAQ 4 -->
+        <div class="faq-item">
+          <div class="faq-question" onclick="toggleFaq(this)">
+            <span>Quelles sont les dimensions et l'alimentation requise ?</span>
+            <span class="faq-toggle-icon">+</span>
+          </div>
+          <div class="faq-answer">
+            Le boîtier mesure environ 12 cm de côté et s'alimente via un simple câble USB-C (5V), identique à un chargeur de smartphone standard.
           </div>
         </div>
-
-        <!-- Skill 5 -->
-        <div class="skill-card">
-          <div class="skill-icon">📡</div>
-          <div class="skill-info">
-            <h3>Intégrations Réseaux</h3>
-            <p>Bluetooth LE (GATT), mDNS/Bonjour, API REST, MQTT Client, WiFi.</p>
-          </div>
-        </div>
-
-        <!-- Skill 6 -->
-        <div class="skill-card">
-          <div class="skill-icon">🕌</div>
-          <div class="skill-info">
-            <h3>Intégrations APIs</h3>
-            <p>Gestion de l'API Mawaqit, calculs d'angles astronomiques (Fajr/Isha).</p>
-          </div>
-        </div>
-
       </div>
     </div>
   </section>
@@ -1531,6 +1741,9 @@
     </div>
   </footer>
 
+  <!-- Audio Element for playground testing -->
+  <audio id="playground-audio" preload="auto"></audio>
+
   <!-- Scripts -->
   <script>
     // ─── NAVBAR EFFECT ─────────────────────────────────────
@@ -1548,7 +1761,7 @@
     const ctx = canvas.getContext('2d');
 
     let particlesArray = [];
-    const maxParticles = 60;
+    const maxParticles = 50;
 
     function resizeCanvas() {
       canvas.width = window.innerWidth;
@@ -1562,9 +1775,9 @@
         this.x = Math.random() * canvas.width;
         this.y = Math.random() * canvas.height;
         this.size = Math.random() * 2 + 0.5;
-        this.speedX = Math.random() * 0.3 - 0.15;
-        this.speedY = Math.random() * 0.3 - 0.15;
-        this.opacity = Math.random() * 0.4 + 0.15;
+        this.speedX = Math.random() * 0.25 - 0.125;
+        this.speedY = Math.random() * 0.25 - 0.125;
+        this.opacity = Math.random() * 0.35 + 0.1;
       }
       update() {
         this.x += this.speedX;
@@ -1596,8 +1809,8 @@
       for (let a = 0; a < particlesArray.length; a++) {
         for (let b = a; b < particlesArray.length; b++) {
           let dist = Math.hypot(particlesArray[a].x - particlesArray[b].x, particlesArray[a].y - particlesArray[b].y);
-          if (dist < 120) {
-            opacityValue = (1 - (dist / 120)) * 0.1;
+          if (dist < 130) {
+            opacityValue = (1 - (dist / 130)) * 0.08;
             ctx.strokeStyle = `rgba(16, 185, 129, ${opacityValue})`;
             ctx.lineWidth = 0.5;
             ctx.beginPath();
@@ -1620,239 +1833,128 @@
     }
     animateParticles();
 
-
-    // ─── INTERACTIVE SIMULATORS LOGIC ──────────────────────
-
-    // Synthesizer Web Audio API for DFPlayer series simulation
-    let audioCtx = null;
-    
-    function playSynthesizedTrack(track) {
-      try {
-        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-        if (!AudioContextClass) return;
-        
-        if (!audioCtx) {
-          audioCtx = new AudioContextClass();
-        }
-        
-        if (audioCtx.state === 'suspended') {
-          audioCtx.resume();
-        }
-
-        const now = audioCtx.currentTime;
-
-        const playTone = (freq, startTime, duration, vol = 0.15) => {
-          const osc = audioCtx.createOscillator();
-          const gainNode = audioCtx.createGain();
-          
-          osc.type = 'sine';
-          osc.frequency.setValueAtTime(freq, startTime);
-          
-          gainNode.gain.setValueAtTime(vol, startTime);
-          gainNode.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
-          
-          osc.connect(gainNode);
-          gainNode.connect(audioCtx.destination);
-          
-          osc.start(startTime);
-          osc.stop(startTime + duration);
-        };
-
-        if (track == 2) {
-          // Play a rich Adhan-like major/minor sequence chord (Track 2)
-          playTone(293.66, now, 1.5, 0.18);      // D4
-          playTone(440.00, now + 0.2, 1.5, 0.15); // A4
-          playTone(587.33, now + 0.4, 2.0, 0.12); // D5
-        } else if (track == 3) {
-          // Alternate Adhan sequence (Track 3)
-          playTone(329.63, now, 1.5, 0.18);      // E4
-          playTone(493.88, now + 0.25, 1.5, 0.15); // B4
-          playTone(659.25, now + 0.5, 2.0, 0.12); // E5
-        } else {
-          // Soft Duaa (Track 1)
-          playTone(440.00, now, 1.2, 0.15);      // A4
-          playTone(554.37, now + 0.2, 1.2, 0.12); // C#5
-          playTone(659.25, now + 0.4, 1.8, 0.10); // E5
-        }
-        
-      } catch (e) {
-        console.warn('Audio Context block.', e);
-      }
-    }
-
-    // 1. Hardware Simulator (ESP32-S3 Firmware)
-    let isDFPlayerActive = false;
-
-    function simulateFirmwarePlay() {
-      const btn = document.getElementById('btn-sound');
-      const screenTitle = document.getElementById('screen-title');
-      const screenSubtitle = document.getElementById('screen-subtitle');
-      const waves = document.getElementById('waves-container');
-      const track = document.getElementById('track-select').value;
-      const volume = 20; // default simulator volume
-
-      if (isDFPlayerActive) {
-        // STOP AUDIO
-        isDFPlayerActive = false;
-        btn.classList.remove('active');
-        btn.innerHTML = 'Play / Stop';
-        screenTitle.innerText = 'DFPlayer: Arrêté';
-        screenSubtitle.innerText = `HTTP 200 OK | /stopplay`;
-        waves.classList.remove('playing');
-        return;
-      }
-
-      // START AUDIO
-      isDFPlayerActive = true;
-      btn.classList.add('active');
-      btn.innerHTML = 'STOP ⏹';
+    // ─── FAQ INTERACTION ────────────────────────────────────
+    function toggleFaq(el) {
+      const item = el.parentElement;
+      const answer = item.querySelector('.faq-answer');
+      const isActive = item.classList.contains('active');
       
-      const trackNames = { '1': 'Piste 1 (Duaa)', '2': 'Piste 2 (Adhan)', '3': 'Piste 3 (Adhan Alt)' };
-      screenTitle.innerText = `Lecture : ${trackNames[track]}`;
-      screenSubtitle.innerText = `POST /api/prayer/test | Vol: ${volume}/30`;
-      waves.classList.add('playing');
-
-      playSynthesizedTrack(track);
-
-      // Auto-stop after 3 seconds for demo purposes
-      setTimeout(() => {
-        if (isDFPlayerActive) {
-          isDFPlayerActive = false;
-          btn.classList.remove('active');
-          btn.innerHTML = 'Play / Stop';
-          screenTitle.innerText = 'DFPlayer: En attente';
-          screenSubtitle.innerText = `Volume: 20/30 | Brightness: 50%`;
-          waves.classList.remove('playing');
-        }
-      }, 3500);
-    }
-
-    function changeLedScenario(val) {
-      const leds = document.getElementById('virtual-leds');
-      leds.className = 'hardware-leds';
-      
-      if (val == 8) {
-        leds.classList.add('led-mode-rainbow');
-      } else if (val == 11) {
-        leds.classList.add('led-mode-pulse');
-      } else if (val == 5) {
-        leds.classList.add('led-mode-solid');
-      } else if (val == 3) {
-        leds.classList.add('led-mode-blue');
-      }
-      
-      const screenSubtitle = document.getElementById('screen-subtitle');
-      screenSubtitle.innerText = `POST /api/led/scenario | Scenario: ${val}`;
-    }
-
-    function triggerDeviceReset() {
-      const screenTitle = document.getElementById('screen-title');
-      const screenSubtitle = document.getElementById('screen-subtitle');
-      const leds = document.getElementById('virtual-leds');
-      
-      screenTitle.innerText = 'Rebooting ESP32...';
-      screenSubtitle.innerText = 'Init RTC & DFPlayer...';
-      leds.style.opacity = '0.15';
-      
-      setTimeout(() => {
-        screenTitle.innerText = 'DFPlayer: En attente';
-        screenSubtitle.innerText = 'WiFi Connected (192.168.1.150)';
-        leds.style.opacity = '1';
-      }, 1500);
-    }
-
-    // 2. Mobile App (Flutter Sync Console Simulator)
-    function triggerMobileConsoleSync() {
-      const consoleOverlay = document.getElementById('mobile-console');
-      consoleOverlay.style.display = 'flex';
-      consoleOverlay.innerHTML = '';
-      
-      const logs = [
-        '[mDNS] Scanning network for adhanbox.local...',
-        '[mDNS] Found AdhanBox at 192.168.1.150 ✓',
-        '[HTTP] POST /set_rtc_manual -> {"status":"success"} (200 OK)',
-        '[HTTP] POST /set_location -> {"lat":43.233,"lon":0.083,"acc":10} (200)',
-        '[HTTP] POST /set_tz -> {"tz_min":120} (200 OK)',
-        '[HTTP] POST /api/mawaqit/sync -> {"status":"synced"} (200 OK)',
-        '[Flutter] Synchronisation complète réussie !'
-      ];
-      
-      logs.forEach((log, index) => {
-        setTimeout(() => {
-          const line = document.createElement('div');
-          line.className = 'console-line';
-          line.innerText = log;
-          consoleOverlay.appendChild(line);
-          
-          if (index === logs.length - 1) {
-            setTimeout(() => {
-              consoleOverlay.style.display = 'none';
-              
-              // Trigger temporary hardware sync response
-              const screenSubtitle = document.getElementById('screen-subtitle');
-              screenSubtitle.innerText = 'Settings Synced from App ✓';
-            }, 1800);
-          }
-        }, index * 400);
+      // Close all first
+      document.querySelectorAll('.faq-item').forEach(x => {
+        x.classList.remove('active');
+        x.querySelector('.faq-answer').style.display = 'none';
       });
-    }
 
-    // 3. Desktop Overlay Simulator
-    function changeOverlayState(state) {
-      const screen = document.getElementById('virtual-screen');
-      const txt = document.getElementById('screen-overlay-state');
-
-      if (state === 'active') {
-        screen.style.borderColor = 'var(--emerald)';
-        screen.style.boxShadow = '0 0 10px var(--emerald-glow)';
-        txt.innerText = '● Prière en cours';
-        txt.style.color = 'var(--emerald)';
-      } else if (state === 'warning') {
-        screen.style.borderColor = 'var(--gold)';
-        screen.style.boxShadow = '0 0 10px var(--gold-glow)';
-        txt.innerText = '● Fin de prière imminente (<15m)';
-        txt.style.color = 'var(--gold)';
-      } else if (state === 'urgent') {
-        screen.style.borderColor = 'var(--rose)';
-        screen.style.boxShadow = '0 0 10px rgba(244, 63, 94, 0.25)';
-        txt.innerText = '● Urgence (<10m)';
-        txt.style.color = 'var(--rose)';
+      if (!isActive) {
+        item.classList.add('active');
+        answer.style.display = 'block';
       }
     }
 
-    // 4. Kiosk Simulator
-    let selectedKioskAmountVal = 20;
-    function selectKioskAmount(btn, amt) {
-      document.querySelectorAll('.kiosk-amount-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      selectedKioskAmountVal = amt;
+    // ─── CONFIGURATEUR INTERACTION ──────────────────────────
+    const virtualBox = document.getElementById('virtual-box');
+    const ledRing = document.getElementById('led-ring');
+    const audioWaves = document.getElementById('audio-waves');
+    const playAudioElement = document.getElementById('playground-audio');
+    const playBtn = document.getElementById('btn-play');
+    const playIconSvg = document.getElementById('play-icon-svg');
+    const finishTextText = document.getElementById('finish-text');
+
+    const finishDescriptions = {
+      'wood': 'Bois Précieux : Finition organique et chaleureuse pour un style classique.',
+      'matte-black': 'Carbon Noir Mat : Style discret, moderne et technologique.',
+      'marble': 'Blanc Marbre : Design élégant et épuré avec de légers reflets veinés.',
+      'brass': 'Laiton Brossé : Finition métallique dorée haut de gamme et brillante.'
+    };
+
+    function setFinish(finishName) {
+      // Remove previous finishes
+      virtualBox.classList.remove('finish-wood', 'finish-matte-black', 'finish-marble', 'finish-brass');
+      virtualBox.classList.add(`finish-${finishName}`);
+      
+      // Update dots active state
+      document.querySelectorAll('.option-dot').forEach(dot => {
+        dot.classList.remove('active');
+      });
+      event.target.classList.add('active');
+
+      // Update text
+      finishTextText.innerText = finishDescriptions[finishName];
     }
 
-    function selectKioskCampaign(camp) {
-      document.getElementById('camp-gen').classList.remove('active');
-      document.getElementById('camp-trav').classList.remove('active');
-      
-      const title = document.getElementById('kiosk-camp-title');
+    function setLedMode(modeName, buttonElement) {
+      // Remove previous led modes from ring
+      ledRing.className = 'led-ring';
+      ledRing.classList.add(`led-mode-${modeName}`);
 
-      if (camp === 'gen') {
-        document.getElementById('camp-gen').classList.add('active');
-        title.innerText = 'Mosquée El-Hijra : Don Général';
+      // Update button active state
+      document.querySelectorAll('.led-btn').forEach(btn => {
+        btn.classList.remove('active');
+      });
+      buttonElement.classList.add('active');
+    }
+
+    // Play/Pause Playground Audio
+    let isPlaying = false;
+
+    function toggleAdhanPlay() {
+      const selectTrack = document.getElementById('track-select');
+      const trackSrc = selectTrack.value;
+
+      if (isPlaying) {
+        playAudioElement.pause();
+        stopVisualPlayback();
       } else {
-        document.getElementById('camp-trav').classList.add('active');
-        title.innerText = 'Mosquée El-Hijra : Travaux';
+        playAudioElement.src = trackSrc;
+        playAudioElement.play()
+          .then(() => {
+            startVisualPlayback();
+          })
+          .catch(err => {
+            console.warn("L'audio n'a pas pu être chargé (chemin local inexistant sur le serveur web statique)", err);
+            // Simulate playing anyway if local files are missing
+            startVisualPlayback();
+            setTimeout(() => {
+              stopVisualPlayback();
+            }, 6000);
+          });
       }
     }
 
-    function triggerKioskPayment() {
-      const success = document.getElementById('kiosk-success-screen');
-      success.style.display = 'flex';
+    playAudioElement.addEventListener('ended', () => {
+      stopVisualPlayback();
+    });
+
+    function startVisualPlayback() {
+      isPlaying = true;
+      audioWaves.classList.add('active');
+      playIconSvg.innerHTML = '<path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>'; // Pause SVG icon
+    }
+
+    function stopVisualPlayback() {
+      isPlaying = false;
+      audioWaves.classList.remove('active');
+      playIconSvg.innerHTML = '<path d="M8 5v14l11-7z"/>'; // Play SVG icon
+    }
+
+    // ─── APPLICATION MOBILE SIMULATION ───────────────────────
+    function simulateAppSync() {
+      const phoneConsole = document.getElementById('phone-console');
+      phoneConsole.innerHTML = '<p>> scan_mdns()...</p>';
       
-      // Play a little chime
-      playSynthesizedTrack(2);
+      setTimeout(() => {
+        phoneConsole.innerHTML += '<p style="color: var(--emerald);">> AdhanBox détecté ! IP: 192.168.1.42</p>';
+        phoneConsole.innerHTML += '<p>> POST /api/set_location ...</p>';
+      }, 1000);
 
       setTimeout(() => {
-        success.style.display = 'none';
-      }, 2500);
+        phoneConsole.innerHTML += '<p>> POST /api/set_rtc_manual ...</p>';
+        phoneConsole.innerHTML += '<p>> POST /api/mawaqit/sync ...</p>';
+      }, 2200);
+
+      setTimeout(() => {
+        phoneConsole.innerHTML += '<p style="color: var(--gold);">> Synchro réussie ✓ Mosquée configurée.</p>';
+      }, 3400);
     }
   </script>
 </body>
