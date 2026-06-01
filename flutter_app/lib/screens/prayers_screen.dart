@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../models/prayer_time.dart';
 import '../services/connection_service.dart';
 import '../services/adhanbox_api.dart';
@@ -11,26 +10,25 @@ import '../providers/adhanbox_provider.dart';
 import '../theme/app_theme.dart';
 import 'device_setup_screen.dart';
 import 'calculation_setup_screen.dart';
+import 'mawaqit_config_screen.dart';
 
-class HomeScreen extends ConsumerWidget {
-  const HomeScreen({Key? key}) : super(key: key);
+class PrayersScreen extends ConsumerWidget {
+  const PrayersScreen({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final autoConnectAsync = ref.watch(autoReconnectProvider);
     return autoConnectAsync.when(
-      data: (deviceIp) => deviceIp == null
-          ? _NoDeviceScreen(ref: ref)
-          : _MainHomeScreen(ref: ref),
-      loading: () => const _SplashScreen(),
-      error: (_, __) => _ErrorScreen(ref: ref),
+      data: (ip) => ip == null ? _NoDeviceView(ref: ref) : const _ConnectedView(),
+      loading: () => const _SplashView(),
+      error: (_, __) => _ErrorView(ref: ref),
     );
   }
 }
 
-// ─────────────────────────── SPLASH ───────────────────────────
-class _SplashScreen extends StatelessWidget {
-  const _SplashScreen();
+// ─── SPLASH ───────────────────────────────────────────────────────
+class _SplashView extends StatelessWidget {
+  const _SplashView();
 
   @override
   Widget build(BuildContext context) {
@@ -39,17 +37,17 @@ class _SplashScreen extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _MosqueIcon(size: 80)
+            const _MosqueIcon(size: 72)
                 .animate()
                 .scale(duration: 600.ms, curve: Curves.elasticOut),
-            const SizedBox(height: 28),
+            const SizedBox(height: 24),
             Text('AdhanBox', style: Theme.of(context).textTheme.displaySmall),
             const SizedBox(height: 8),
             Text('Connexion en cours...', style: Theme.of(context).textTheme.bodyMedium),
-            const SizedBox(height: 36),
+            const SizedBox(height: 32),
             const SizedBox(
-              width: 24,
-              height: 24,
+              width: 22,
+              height: 22,
               child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.emerald),
             ),
           ],
@@ -59,10 +57,10 @@ class _SplashScreen extends StatelessWidget {
   }
 }
 
-// ─────────────────────────── NO DEVICE ───────────────────────────
-class _NoDeviceScreen extends StatelessWidget {
+// ─── NO DEVICE ────────────────────────────────────────────────────
+class _NoDeviceView extends StatelessWidget {
   final WidgetRef ref;
-  const _NoDeviceScreen({required this.ref});
+  const _NoDeviceView({required this.ref});
 
   @override
   Widget build(BuildContext context) {
@@ -71,43 +69,42 @@ class _NoDeviceScreen extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 28),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              const SizedBox(height: 64),
-              _MosqueIcon(size: 96)
+              const SizedBox(height: 60),
+              const _MosqueIcon(size: 88)
                   .animate()
                   .scale(duration: 500.ms, curve: Curves.elasticOut)
                   .then()
-                  .shimmer(duration: 1600.ms, color: AppTheme.emerald.withOpacity(0.25)),
-              const SizedBox(height: 32),
+                  .shimmer(duration: 1600.ms, color: AppTheme.emerald),
+              const SizedBox(height: 28),
               Text('AdhanBox', style: Theme.of(context).textTheme.displaySmall),
-              const SizedBox(height: 8),
+              const SizedBox(height: 6),
               Text(
                 'Votre compagnon de prière intelligent',
                 style: Theme.of(context).textTheme.bodyMedium,
                 textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 48),
+              const SizedBox(height: 44),
               _FeatureTile(
                 icon: Icons.access_time_rounded,
                 color: AppTheme.emerald,
                 title: 'Horaires précis',
                 subtitle: 'Calcul automatique selon votre position',
-              ).animate().fadeIn(delay: 150.ms).slideX(begin: -0.15),
-              const SizedBox(height: 14),
+              ).animate().fadeIn(delay: 150.ms).slideX(begin: -0.1),
+              const SizedBox(height: 12),
               _FeatureTile(
-                icon: Icons.light_rounded,
+                icon: Icons.mosque_rounded,
                 color: AppTheme.gold,
-                title: 'Ambiance LED',
-                subtitle: 'Éclairage personnalisé pour chaque moment',
-              ).animate().fadeIn(delay: 250.ms).slideX(begin: -0.15),
-              const SizedBox(height: 14),
+                title: 'Mosquée locale',
+                subtitle: 'Synchronisez avec les horaires de votre mosquée',
+              ).animate().fadeIn(delay: 250.ms).slideX(begin: -0.1),
+              const SizedBox(height: 12),
               _FeatureTile(
                 icon: Icons.music_note_rounded,
                 color: AppTheme.fajrColor,
                 title: 'Adhan personnalisé',
-                subtitle: 'Choisissez votre appel à la prière',
-              ).animate().fadeIn(delay: 350.ms).slideX(begin: -0.15),
+                subtitle: 'Choisissez l\'appel à la prière',
+              ).animate().fadeIn(delay: 350.ms).slideX(begin: -0.1),
               const Spacer(),
               SizedBox(
                 width: double.infinity,
@@ -117,9 +114,11 @@ class _NoDeviceScreen extends StatelessWidget {
                   ),
                   icon: const Icon(Icons.add_rounded),
                   label: const Text('Configurer mon appareil'),
-                  style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16)),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                  ),
                 ),
-              ).animate().fadeIn(delay: 450.ms).slideY(begin: 0.2),
+              ).animate().fadeIn(delay: 450.ms).slideY(begin: 0.15),
               const SizedBox(height: 12),
               TextButton.icon(
                 onPressed: () => _showHelp(context),
@@ -153,10 +152,10 @@ class _NoDeviceScreen extends StatelessWidget {
   }
 }
 
-// ─────────────────────────── ERROR SCREEN ───────────────────────────
-class _ErrorScreen extends StatelessWidget {
+// ─── ERROR ────────────────────────────────────────────────────────
+class _ErrorView extends StatelessWidget {
   final WidgetRef ref;
-  const _ErrorScreen({required this.ref});
+  const _ErrorView({required this.ref});
 
   @override
   Widget build(BuildContext context) {
@@ -169,13 +168,13 @@ class _ErrorScreen extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Container(
-                width: 88,
-                height: 88,
+                width: 84,
+                height: 84,
                 decoration: BoxDecoration(
                   color: Colors.orange.withOpacity(0.12),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.wifi_off_rounded, size: 44, color: Colors.orange),
+                child: const Icon(Icons.wifi_off_rounded, size: 42, color: Colors.orange),
               ).animate().scale(duration: 400.ms),
               const SizedBox(height: 28),
               Text(
@@ -227,23 +226,14 @@ class _ErrorScreen extends StatelessWidget {
   }
 }
 
-// ─────────────────────────── MAIN HOME ───────────────────────────
-class _MainHomeScreen extends ConsumerWidget {
-  final WidgetRef ref;
-  const _MainHomeScreen({required this.ref});
+// ─── CONNECTED MAIN VIEW ──────────────────────────────────────────
+class _ConnectedView extends ConsumerWidget {
+  const _ConnectedView();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final prayerTimesAsync = ref.watch(adjustedPrayerTimesProvider);
     final connectionState = ref.watch(connectionStateProvider);
-    final deviceIp = ref.watch(currentDeviceIpProvider);
-    final savedDevices = ref.watch(savedDevicesProvider).valueOrNull ?? [];
-    
-    final currentDeviceName = savedDevices.firstWhere(
-      (d) => d.ip == deviceIp, 
-      orElse: () => SavedDevice(name: 'AdhanBox', ip: deviceIp ?? ''),
-    ).name;
-
     final isDisconnected = connectionState.status == ConnectionStatus.disconnected ||
         connectionState.status == ConnectionStatus.error;
 
@@ -257,87 +247,64 @@ class _MainHomeScreen extends ConsumerWidget {
         },
         child: CustomScrollView(
           slivers: [
-            // ── Gradient Header ──
             SliverAppBar(
-              expandedHeight: 220,
+              expandedHeight: 210,
               pinned: true,
-              floating: false,
               backgroundColor: AppTheme.emeraldDeep,
               flexibleSpace: FlexibleSpaceBar(
                 collapseMode: CollapseMode.parallax,
-                background: _HeaderBackground(
-                  prayerTimesAsync: prayerTimesAsync,
-                ),
+                background: _GradientHeader(prayerTimesAsync: prayerTimesAsync),
               ),
-              title: GestureDetector(
-                onTap: () => _showDeviceSwitcher(context, ref, savedDevices, deviceIp),
-                child: Row(
-                  children: [
-                    const _MosqueIcon(size: 26, color: Colors.white),
-                    const SizedBox(width: 10),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          currentDeviceName,
-                          style: GoogleFonts.poppins(
-                            color: Colors.white,
-                            fontSize: 18,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        if (savedDevices.length > 1)
-                          Row(
-                            children: [
-                              Text(
-                                'Changer d\'appareil',
-                                style: GoogleFonts.inter(color: Colors.white70, fontSize: 11),
-                              ),
-                              const Icon(Icons.arrow_drop_down_rounded, color: Colors.white70, size: 14),
-                            ],
-                          ),
-                      ],
+              title: Row(
+                children: [
+                  const _MosqueIcon(size: 24, color: Colors.white),
+                  const SizedBox(width: 10),
+                  Text(
+                    'AdhanBox',
+                    style: GoogleFonts.poppins(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
               actions: [
-                _ConnectionChip(state: connectionState),
-                IconButton(
-                  icon: const Icon(Icons.add_rounded, color: Colors.white),
-                  onPressed: () => Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const DeviceSetupScreen()),
-                  ),
-                ),
+                _ConnectionDot(state: connectionState),
+                const SizedBox(width: 8),
               ],
             ),
 
-            // ── Disconnected Banner ──
             if (isDisconnected)
               SliverPadding(
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
                 sliver: SliverToBoxAdapter(
-                  child: _DisconnectedBanner(ref: ref),
+                  child: _OfflineBanner(ref: ref),
                 ),
               ),
 
-            // ── Prayer List ──
+            // Hijri date + mosquée card
             SliverPadding(
-              padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
-              sliver: prayerTimesAsync.when(
-                data: (times) => _PrayerSliver(
-                  times: times,
-                  onOpenSetup: () async {
-                    await Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => const CalculationSetupScreen()),
-                    );
-                    ref.invalidate(prayerTimesProvider);
-                    ref.invalidate(prayerOffsetsProvider);
-                  },
+              padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
+              sliver: SliverToBoxAdapter(
+                child: Column(
+                  children: [
+                    _HijriDateCard(),
+                    const SizedBox(height: 12),
+                    _MosqueSyncCard(),
+                    const SizedBox(height: 20),
+                  ],
                 ),
+              ),
+            ),
+
+            // Prayer list
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
+              sliver: prayerTimesAsync.when(
+                data: (times) => _PrayerListSliver(times: times),
                 loading: () => const SliverToBoxAdapter(child: _SkeletonList()),
-                error: (e, _) => SliverToBoxAdapter(child: _InlineError(message: e.toString())),
+                error: (e, _) => SliverToBoxAdapter(child: _ErrorCard(e.toString())),
               ),
             ),
           ],
@@ -345,65 +312,12 @@ class _MainHomeScreen extends ConsumerWidget {
       ),
     );
   }
-
-  void _showDeviceSwitcher(BuildContext context, WidgetRef ref, List<SavedDevice> devices, String? currentIp) {
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (ctx) {
-        return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const SizedBox(height: 8),
-              Container(width: 36, height: 4, decoration: BoxDecoration(color: AppTheme.darkBorder, borderRadius: BorderRadius.circular(2))),
-              const SizedBox(height: 16),
-              Text('Mes Appareils', style: Theme.of(context).textTheme.titleLarge),
-              const SizedBox(height: 16),
-              ...devices.map((device) {
-                final isSelected = device.ip == currentIp;
-                return ListTile(
-                  leading: const Icon(Icons.router_rounded, color: AppTheme.emerald),
-                  title: Text(device.name, style: TextStyle(fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
-                  subtitle: Text(device.ip),
-                  trailing: isSelected ? const Icon(Icons.check_circle_rounded, color: AppTheme.emerald) : null,
-                  onTap: () async {
-                    Navigator.pop(ctx);
-                    if (!isSelected) {
-                      final prefs = await SharedPreferences.getInstance();
-                      await prefs.setString('deviceIp', device.ip);
-                      ref.read(currentDeviceIpProvider.notifier).state = device.ip;
-                      ref.invalidate(autoReconnectProvider);
-                      ref.invalidate(prayerTimesProvider);
-                      ref.invalidate(prayerOffsetsProvider);
-                      ref.invalidate(adjustedPrayerTimesProvider);
-                      ref.invalidate(connectionStateProvider);
-                    }
-                  },
-                );
-              }).toList(),
-              const Divider(),
-              ListTile(
-                leading: const Icon(Icons.add_rounded),
-                title: const Text('Ajouter un nouvel appareil'),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  Navigator.of(context).push(MaterialPageRoute(builder: (_) => const DeviceSetupScreen()));
-                },
-              ),
-              const SizedBox(height: 16),
-            ],
-          ),
-        );
-      },
-    );
-  }
 }
 
-// ─────────────────────────── HEADER BACKGROUND ───────────────────────────
-class _HeaderBackground extends StatelessWidget {
+// ─── GRADIENT HEADER ──────────────────────────────────────────────
+class _GradientHeader extends StatelessWidget {
   final AsyncValue<PrayerTimes> prayerTimesAsync;
-  const _HeaderBackground({required this.prayerTimesAsync});
+  const _GradientHeader({required this.prayerTimesAsync});
 
   @override
   Widget build(BuildContext context) {
@@ -417,9 +331,7 @@ class _HeaderBackground extends StatelessWidget {
       ),
       child: Stack(
         children: [
-          // Subtle geometric pattern
           Positioned.fill(child: CustomPaint(painter: _GeomPainter())),
-          // Next prayer info
           Positioned(
             bottom: 24,
             left: 20,
@@ -442,8 +354,7 @@ class _NextPrayerInfo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final now = DateTime.now();
-    final nowMins = now.hour * 60 + now.minute;
+    final nowMins = DateTime.now().hour * 60 + DateTime.now().minute;
     PrayerTime? next;
     int minsLeft = 0;
 
@@ -472,14 +383,14 @@ class _NextPrayerInfo extends StatelessWidget {
       children: [
         Text(
           'Prochaine prière',
-          style: GoogleFonts.inter(color: Colors.white70, fontSize: 13),
+          style: GoogleFonts.inter(color: Colors.white70, fontSize: 12),
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: 2),
         Text(
           next.name,
           style: GoogleFonts.poppins(
             color: Colors.white,
-            fontSize: 34,
+            fontSize: 32,
             fontWeight: FontWeight.bold,
           ),
         ),
@@ -521,11 +432,11 @@ class _Pill extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, color: fg, size: 13),
+          Icon(icon, color: fg, size: 12),
           const SizedBox(width: 5),
           Text(
             label,
-            style: GoogleFonts.inter(color: fg, fontSize: 13, fontWeight: FontWeight.w600),
+            style: GoogleFonts.inter(color: fg, fontSize: 12, fontWeight: FontWeight.w600),
           ),
         ],
       ),
@@ -533,11 +444,174 @@ class _Pill extends StatelessWidget {
   }
 }
 
-// ─────────────────────────── PRAYER SLIVER ───────────────────────────
-class _PrayerSliver extends StatelessWidget {
+// ─── HIJRI DATE ───────────────────────────────────────────────────
+class _HijriDateCard extends StatelessWidget {
+  static const _hijriMonths = [
+    'Muharram', 'Safar', 'Rabi I', 'Rabi II',
+    'Joumada I', 'Joumada II', 'Rajab', 'Chaabane',
+    'Ramadan', 'Chawwal', 'Dhou al-Qida', 'Dhou al-Hijja',
+  ];
+
+  static const _weekdays = [
+    'Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi',
+  ];
+
+  static const _months = [
+    '', 'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
+    'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre',
+  ];
+
+  String _gregorianToHijri(DateTime date) {
+    // Gregorian → Julian Day Number
+    final a = (14 - date.month) ~/ 12;
+    final ya = date.year + 4800 - a;
+    final ma = date.month + 12 * a - 3;
+    final jdn = date.day + (153 * ma + 2) ~/ 5 + 365 * ya +
+        ya ~/ 4 - ya ~/ 100 + ya ~/ 400 - 32045;
+
+    // JDN → Hijri (tabular Islamic calendar, epoch 1948440 = 1 Muharram 1 AH)
+    final n = jdn - 1948440;
+    final hy = (30 * n + 10646) ~/ 10631;
+    final yearStart = (10631 * hy - 10617) ~/ 30 + 1948440;
+
+    const leapYearRemainders = {2, 5, 7, 10, 13, 16, 18, 21, 24, 26, 29};
+    final isLeap = leapYearRemainders.contains(hy % 30);
+    final monthLengths = [30, 29, 30, 29, 30, 29, 30, 29, 30, 29, 30, isLeap ? 30 : 29];
+
+    var dayOfYear = jdn - yearStart + 1;
+    int hm = 1;
+    for (final len in monthLengths) {
+      if (dayOfYear <= len) break;
+      dayOfYear -= len;
+      hm++;
+    }
+
+    final monthName = (hm >= 1 && hm <= 12) ? _hijriMonths[hm - 1] : '?';
+    return '$dayOfYear $monthName $hy';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final now = DateTime.now();
+    final weekday = _weekdays[now.weekday % 7];
+    final gregorian = '${now.day} ${_months[now.month]} ${now.year}';
+    final hijri = _gregorianToHijri(now);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: isDark ? AppTheme.darkCard : AppTheme.lightCard,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDark ? AppTheme.darkBorder : AppTheme.lightBorder,
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: AppTheme.gold.withOpacity(isDark ? 0.15 : 0.1),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(Icons.calendar_today_rounded, color: AppTheme.gold, size: 20),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '$weekday · $gregorian',
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  hijri,
+                  style: GoogleFonts.inter(
+                    color: AppTheme.gold,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    ).animate().fadeIn(duration: 400.ms);
+  }
+}
+
+// ─── MAWAQIT MOSQUE CARD ──────────────────────────────────────────
+class _MosqueSyncCard extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return GestureDetector(
+      onTap: () async {
+        await Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const MawaqitConfigScreen()),
+        );
+        ref.invalidate(prayerTimesProvider);
+        ref.invalidate(adjustedPrayerTimesProvider);
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: isDark
+              ? AppTheme.emerald.withOpacity(0.08)
+              : AppTheme.emerald.withOpacity(0.05),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: AppTheme.emerald.withOpacity(isDark ? 0.3 : 0.25),
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: AppTheme.emerald.withOpacity(isDark ? 0.18 : 0.12),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(Icons.mosque_rounded, color: AppTheme.emerald, size: 22),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Mosquée de référence',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      color: AppTheme.emerald,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Synchroniser avec votre mosquée locale',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right_rounded, color: AppTheme.emerald, size: 20),
+          ],
+        ),
+      ),
+    ).animate().fadeIn(delay: 100.ms);
+  }
+}
+
+// ─── PRAYER LIST ──────────────────────────────────────────────────
+class _PrayerListSliver extends StatelessWidget {
   final PrayerTimes times;
-  final VoidCallback? onOpenSetup;
-  const _PrayerSliver({required this.times, this.onOpenSetup});
+  const _PrayerListSliver({required this.times});
 
   int _findNextIndex() {
     final nowMins = DateTime.now().hour * 60 + DateTime.now().minute;
@@ -553,22 +627,23 @@ class _PrayerSliver extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final prayers = times.times;
     final nextIndex = _findNextIndex();
     return SliverList(
       delegate: SliverChildBuilderDelegate(
         (ctx, i) {
           if (i == 0) {
             return Padding(
-              padding: const EdgeInsets.only(bottom: 16),
+              padding: const EdgeInsets.only(bottom: 14),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text("Aujourd'hui", style: Theme.of(ctx).textTheme.headlineMedium),
                   TextButton.icon(
-                    onPressed: onOpenSetup ?? () => Navigator.of(ctx).push(
-                      MaterialPageRoute(builder: (_) => const CalculationSetupScreen()),
-                    ),
+                    onPressed: () async {
+                      await Navigator.of(ctx).push(
+                        MaterialPageRoute(builder: (_) => const CalculationSetupScreen()),
+                      );
+                    },
                     icon: const Icon(Icons.tune_rounded, size: 15),
                     label: const Text('Ajuster'),
                     style: TextButton.styleFrom(
@@ -579,17 +654,17 @@ class _PrayerSliver extends StatelessWidget {
               ),
             );
           }
-          final prayer = prayers[i - 1];
+          final prayer = times.times[i - 1];
           final isNext = (i - 1) == nextIndex;
           return Padding(
             padding: const EdgeInsets.only(bottom: 10),
             child: _PrayerCard(prayer: prayer, isNext: isNext)
                 .animate()
-                .fadeIn(delay: Duration(milliseconds: 60 * i))
-                .slideY(begin: 0.08, curve: Curves.easeOut),
+                .fadeIn(delay: Duration(milliseconds: 50 * i))
+                .slideY(begin: 0.06, curve: Curves.easeOut),
           );
         },
-        childCount: prayers.length + 1,
+        childCount: times.times.length + 1,
       ),
     );
   }
@@ -615,7 +690,7 @@ class _PrayerCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: isNext
-              ? AppTheme.emerald.withOpacity(0.5)
+              ? AppTheme.emerald.withOpacity(0.45)
               : (isDark ? AppTheme.darkBorder : AppTheme.lightBorder),
           width: isNext ? 1.5 : 1,
         ),
@@ -623,15 +698,15 @@ class _PrayerCard extends StatelessWidget {
       child: Row(
         children: [
           Container(
-            width: 46,
-            height: 46,
+            width: 44,
+            height: 44,
             decoration: BoxDecoration(
               color: color.withOpacity(isDark ? 0.18 : 0.1),
-              borderRadius: BorderRadius.circular(13),
+              borderRadius: BorderRadius.circular(12),
             ),
-            child: Icon(icon, color: color, size: 22),
+            child: Icon(icon, color: color, size: 20),
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -646,7 +721,9 @@ class _PrayerCard extends StatelessWidget {
                 if (isNext)
                   Text(
                     'Prochaine',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppTheme.emerald),
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: AppTheme.emerald,
+                    ),
                   ),
               ],
             ),
@@ -667,10 +744,10 @@ class _PrayerCard extends StatelessWidget {
   }
 }
 
-// ─────────────────────────── HELPERS ───────────────────────────
-class _ConnectionChip extends StatelessWidget {
+// ─── HELPERS ─────────────────────────────────────────────────────
+class _ConnectionDot extends StatelessWidget {
   final ESP32ConnectionState state;
-  const _ConnectionChip({required this.state});
+  const _ConnectionDot({required this.state});
 
   @override
   Widget build(BuildContext context) {
@@ -684,7 +761,7 @@ class _ConnectionChip extends StatelessWidget {
       margin: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.18),
+        color: Colors.white.withOpacity(0.15),
         borderRadius: BorderRadius.circular(20),
       ),
       child: Row(
@@ -692,11 +769,10 @@ class _ConnectionChip extends StatelessWidget {
         children: [
           state.isChecking
               ? const SizedBox(
-                  width: 12,
-                  height: 12,
+                  width: 12, height: 12,
                   child: CircularProgressIndicator(strokeWidth: 1.5, color: Colors.white),
                 )
-              : Icon(icon, color: color, size: 14),
+              : Icon(icon, color: color, size: 13),
           const SizedBox(width: 4),
           Container(width: 6, height: 6, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
         ],
@@ -705,9 +781,9 @@ class _ConnectionChip extends StatelessWidget {
   }
 }
 
-class _DisconnectedBanner extends ConsumerWidget {
+class _OfflineBanner extends ConsumerWidget {
   final WidgetRef ref;
-  const _DisconnectedBanner({required this.ref});
+  const _OfflineBanner({required this.ref});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -720,8 +796,8 @@ class _DisconnectedBanner extends ConsumerWidget {
       ),
       child: Row(
         children: [
-          const Icon(Icons.wifi_off_rounded, color: Colors.orange, size: 20),
-          const SizedBox(width: 12),
+          const Icon(Icons.wifi_off_rounded, color: Colors.orange, size: 18),
+          const SizedBox(width: 10),
           Expanded(
             child: Text(
               'AdhanBox hors ligne',
@@ -733,12 +809,13 @@ class _DisconnectedBanner extends ConsumerWidget {
             style: TextButton.styleFrom(
               foregroundColor: Colors.orange,
               padding: const EdgeInsets.symmetric(horizontal: 8),
+              minimumSize: Size.zero,
             ),
             child: const Text('Réessayer'),
           ),
         ],
       ),
-    ).animate().slideY(begin: -0.1).fadeIn();
+    );
   }
 }
 
@@ -754,7 +831,7 @@ class _SkeletonList extends StatelessWidget {
         (i) => Padding(
           padding: const EdgeInsets.only(bottom: 10),
           child: Container(
-            height: 74,
+            height: 72,
             decoration: BoxDecoration(
               color: isDark ? AppTheme.darkCard : AppTheme.lightCard,
               borderRadius: BorderRadius.circular(16),
@@ -768,9 +845,9 @@ class _SkeletonList extends StatelessWidget {
   }
 }
 
-class _InlineError extends StatelessWidget {
+class _ErrorCard extends StatelessWidget {
   final String message;
-  const _InlineError({required this.message});
+  const _ErrorCard(this.message);
 
   @override
   Widget build(BuildContext context) {
@@ -783,8 +860,8 @@ class _InlineError extends StatelessWidget {
       ),
       child: Row(
         children: [
-          const Icon(Icons.error_outline_rounded, color: Colors.red, size: 20),
-          const SizedBox(width: 12),
+          const Icon(Icons.error_outline_rounded, color: Colors.red, size: 18),
+          const SizedBox(width: 10),
           Expanded(
             child: Text(message, style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.red)),
           ),
@@ -814,15 +891,15 @@ class _FeatureTile extends StatelessWidget {
       child: Row(
         children: [
           Container(
-            width: 46,
-            height: 46,
+            width: 44,
+            height: 44,
             decoration: BoxDecoration(
               color: color.withOpacity(0.12),
-              borderRadius: BorderRadius.circular(13),
+              borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(icon, color: color, size: 22),
           ),
-          const SizedBox(width: 14),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -838,7 +915,6 @@ class _FeatureTile extends StatelessWidget {
   }
 }
 
-// ─────────────────────────── MOSQUE ICON ───────────────────────────
 class _MosqueIcon extends StatelessWidget {
   final double size;
   final Color color;
@@ -858,12 +934,11 @@ class _MosqueIcon extends StatelessWidget {
   }
 }
 
-// ─────────────────────────── GEOMETRIC PATTERN ───────────────────────────
 class _GeomPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = Colors.white.withOpacity(0.045)
+      ..color = Colors.white.withOpacity(0.04)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 0.8;
     const step = 56.0;

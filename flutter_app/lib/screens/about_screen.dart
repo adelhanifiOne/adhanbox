@@ -143,7 +143,7 @@ class AboutScreen extends ConsumerWidget {
                         icon: Icons.music_note_rounded,
                         iconColor: AppTheme.fajrColor,
                         title: 'Adhans personnalisés',
-                        subtitle: '11 voix différentes par prière',
+                        subtitle: 'Choix de voix d\'adhans personnalisées',
                         showDivider: false,
                       ),
                     ],
@@ -189,10 +189,8 @@ class _DeviceInfoList extends StatelessWidget {
   Widget build(BuildContext context) {
     final items = [
       ('Firmware', reader(status, ['firmware', 'version'])),
-      ('Adresse MAC', reader(status, ['mac_address', 'mac'])),
       ('Adresse IP', reader(status, ['ip'])),
-      ('Heure RTC', reader(status, ['rtc_time', 'rtc'])),
-      ('Uptime', reader(status, ['uptime'])),
+      ('Heure appareil', reader(status, ['rtc_time', 'rtc'])),
       ('Position', locationReader(status)),
     ];
 
