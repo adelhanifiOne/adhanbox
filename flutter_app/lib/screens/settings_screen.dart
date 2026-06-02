@@ -2,17 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../providers/adhanbox_provider.dart';
 import '../services/location_service.dart';
 import '../services/wifi_service.dart';
-import '../services/esp32_discovery_service.dart';
 import '../theme/app_theme.dart';
 import '../main.dart';
-import 'adhan_config_screen.dart';
-import 'calculation_setup_screen.dart';
+import 'privacy_policy_screen.dart';
 import 'device_setup_screen.dart';
-import '../services/connection_service.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({Key? key}) : super(key: key);
@@ -22,45 +18,73 @@ class SettingsScreen extends ConsumerStatefulWidget {
 }
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
-  late TextEditingController _ipController;
-  double _volume = 20;
-  int _timezone = 1;
-  bool _isLoading = true;
+  int _timezone = DateTime.now().timeZoneOffset.inMinutes ~/ 60;
 
   @override
   void initState() {
     super.initState();
-    _ipController = TextEditingController();
-    _loadSettings();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadTimezone());
   }
 
-  Future<void> _loadSettings() async {
+  Future<void> _loadTimezone() async {
     final api = ref.read(adhanboxApiProvider);
-    if (api != null) {
-      try {
-        final vol = await api.getAudioVolume();
-        if (mounted) setState(() { _volume = vol.toDouble(); _isLoading = false; });
-      } catch (_) {
-        if (mounted) setState(() => _isLoading = false);
+    if (api == null) return;
+    try {
+      final data = await api.getTimezone();
+      if (mounted) {
+        setState(() => _timezone = ((data['tz_min'] as num?) ?? 0).toInt() ~/ 60);
       }
-    } else {
-      if (mounted) setState(() => _isLoading = false);
+    } catch (_) {}
+  }
+
+  // ── Sync time & location automatically (Simple 1-tap action for technophobes) ──
+  Future<void> _syncTimeAndLocation() async {
+    final api = ref.read(adhanboxApiProvider);
+    if (api == null) {
+      _showError("L'AdhanBox n'est pas connecté. Veuillez le configurer.");
+      return;
+    }
+
+    _showLoading("Mise à jour en cours…");
+
+    try {
+      // 1. Sync time
+      await api.setRtcTime(DateTime.now());
+
+      // 2. Sync Timezone
+      final tzOffsetMin = DateTime.now().timeZoneOffset.inMinutes;
+      await api.setTimezone(tzOffsetMin);
+
+      // 3. Sync Location (optional, try to get phone GPS)
+      String locMsg = "";
+      try {
+        final locService = ref.read(locationServiceProvider);
+        final pos = await locService.getCurrentLocation();
+        if (pos != null) {
+          await api.setLocation(pos.latitude, pos.longitude, pos.accuracy);
+          locMsg = "\nLocalisation géographique mise à jour.";
+        }
+      } catch (_) {
+        locMsg = "\n(Heure synchronisée, GPS ignoré)";
+      }
+
+      if (mounted) {
+        Navigator.pop(context); // Close loading dialog
+        _showSuccess("Mise à jour réussie !$locMsg");
+        _loadTimezone(); // Refresh timezone display
+      }
+    } catch (e) {
+      if (mounted) Navigator.pop(context);
+      _showError("Impossible de synchroniser : $e");
     }
   }
 
   @override
-  void dispose() {
-    _ipController.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final deviceIp = ref.watch(currentDeviceIpProvider) ?? '';
-    final themeMode = ref.watch(themeModeProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    _ipController.text = deviceIp;
+    final themeMode = ref.watch(themeModeProvider);
+    final deviceIp = ref.watch(currentDeviceIpProvider) ?? '';
+    final api = ref.read(adhanboxApiProvider);
 
     return Scaffold(
       body: CustomScrollView(
@@ -69,356 +93,200 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             pinned: true,
             title: Text('Réglages', style: Theme.of(context).appBarTheme.titleTextStyle),
           ),
-          if (_isLoading)
-            const SliverFillRemaining(
-              child: Center(child: CircularProgressIndicator(color: AppTheme.emerald)),
-            )
-          else
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-              sliver: SliverList(
-                delegate: SliverChildListDelegate([
-                  // ── Apparence ──
-                  _SectionHeader(label: 'Apparence'),
-                  _SettingsCard(children: [
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 40),
+            sliver: SliverList(
+              delegate: SliverChildListDelegate([
+
+                // ── ÉTAT DE L'APPAREIL ──
+                _SectionHeader('Mon AdhanBox'),
+                _SettingsCard(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 48, height: 48,
+                            decoration: BoxDecoration(
+                              color: AppTheme.emerald.withOpacity(0.12),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Icon(Icons.router_rounded, color: AppTheme.emerald, size: 24),
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  deviceIp.isEmpty ? 'Non connecté' : 'AdhanBox connecté',
+                                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  deviceIp.isEmpty 
+                                      ? 'Associez votre appareil pour commencer.' 
+                                      : 'Fonctionne correctement sur votre réseau.',
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
+                              ],
+                            ),
+                          ),
+                          _StatusBadge(isConnected: deviceIp.isNotEmpty),
+                        ],
+                      ),
+                    ),
+                  ],
+                ).animate().fadeIn(delay: 50.ms).slideY(begin: 0.06),
+
+                const SizedBox(height: 20),
+
+                // ── ACTIONS SIMPLIFIÉES ──
+                _SectionHeader('Réglages Automatiques'),
+                _ThemedClickableCard(
+                  onTap: _syncTimeAndLocation,
+                  child: Padding(
+                    padding: const EdgeInsets.all(18),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 46, height: 46,
+                          decoration: BoxDecoration(
+                            color: AppTheme.gold.withOpacity(0.15),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(Icons.auto_fix_high_rounded, color: AppTheme.gold, size: 22),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                "Mettre à jour l'AdhanBox",
+                                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.w700,
+                                  color: isDark ? Colors.white : Colors.black87,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                "Règle l'heure et les horaires de prière en fonction de votre téléphone. Simple et rapide.",
+                                style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 12),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const Icon(Icons.chevron_right_rounded, color: AppTheme.emerald),
+                      ],
+                    ),
+                  ),
+                ).animate().fadeIn(delay: 100.ms).slideY(begin: 0.06),
+
+                const SizedBox(height: 20),
+
+                // ── CONNEXION & WIFI ──
+                _SectionHeader('Connexion & WiFi'),
+                _SettingsCard(
+                  children: [
+                    _ActionTile(
+                      icon: Icons.wifi_rounded,
+                      iconColor: Colors.blue,
+                      title: 'Changer le réseau WiFi',
+                      subtitle: "Connecter l'appareil à une autre box internet",
+                      onTap: _showWiFiPicker,
+                    ),
+                    _CardDivider(),
+                    _ActionTile(
+                      icon: Icons.add_rounded,
+                      iconColor: AppTheme.emeraldDark,
+                      title: 'Associer un autre appareil',
+                      subtitle: "Configurer un nouvel AdhanBox",
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const DeviceSetupScreen()),
+                      ),
+                    ),
+                  ],
+                ).animate().fadeIn(delay: 200.ms).slideY(begin: 0.06),
+
+                const SizedBox(height: 20),
+
+                // ── APPARENCE & THÈME ──
+                _SectionHeader('Préférences'),
+                _SettingsCard(
+                  children: [
                     _ToggleTile(
                       icon: isDark ? Icons.dark_mode_rounded : Icons.light_mode_rounded,
                       iconColor: isDark ? AppTheme.fajrColor : AppTheme.gold,
-                      title: 'Thème',
-                      subtitle: isDark ? 'Mode sombre' : 'Mode clair',
+                      title: 'Mode Sombre',
+                      subtitle: isDark ? 'Affichage sombre' : 'Affichage clair',
                       trailing: Switch(
                         value: themeMode == ThemeMode.dark,
+                        activeColor: AppTheme.emerald,
                         onChanged: (v) {
                           ref.read(themeModeProvider.notifier).state =
                               v ? ThemeMode.dark : ThemeMode.light;
                         },
                       ),
                     ),
-                  ]).animate().fadeIn(delay: 50.ms).slideY(begin: 0.06),
+                  ],
+                ).animate().fadeIn(delay: 250.ms).slideY(begin: 0.06),
 
-                  const SizedBox(height: 24),
+                const SizedBox(height: 20),
 
-                  // ── Mes Appareils ──
-                  _SectionHeader(label: 'Mes Appareils'),
-                  _SettingsCard(children: [
-                    ...((ref.watch(savedDevicesProvider).valueOrNull ?? []).asMap().entries.map((entry) {
-                      final i = entry.key;
-                      final d = entry.value;
-                      final isSelected = d.ip == deviceIp;
-                      return Column(
-                        children: [
-                          if (i > 0) const _CardDivider(),
-                          ListTile(
-                            leading: Icon(Icons.router_rounded, color: isSelected ? AppTheme.emerald : (isDark ? AppTheme.darkTextMuted : AppTheme.lightTextMuted)),
-                            title: Text(d.name, style: TextStyle(fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
-                            subtitle: Text(d.ip),
-                            trailing: isSelected 
-                                ? const Icon(Icons.check_circle_rounded, color: AppTheme.emerald) 
-                                : IconButton(
-                                    icon: const Icon(Icons.delete_outline_rounded, color: Colors.red),
-                                    onPressed: () => removeSavedDevice(ref, d.ip),
-                                  ),
-                            onTap: () async {
-                              if (!isSelected) {
-                                final prefs = await SharedPreferences.getInstance();
-                                await prefs.setString('deviceIp', d.ip);
-                                ref.read(currentDeviceIpProvider.notifier).state = d.ip;
-                                ref.invalidate(autoReconnectProvider);
-                                ref.invalidate(prayerTimesProvider);
-                                ref.invalidate(prayerOffsetsProvider);
-                                ref.invalidate(adjustedPrayerTimesProvider);
-                                ref.invalidate(connectionStateProvider);
-                              }
-                            },
-                          ),
-                        ],
-                      );
-                    }).toList()),
-                    if ((ref.watch(savedDevicesProvider).valueOrNull ?? []).isNotEmpty) const _CardDivider(),
+                // ── ASSISTANCE ──
+                _SectionHeader('Assistance'),
+                _SettingsCard(
+                  children: [
                     _ActionTile(
-                      icon: Icons.add_rounded,
-                      iconColor: AppTheme.emerald,
-                      title: 'Ajouter un appareil',
-                      subtitle: 'Détecter ou ajouter manuellement',
-                      onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const DeviceSetupScreen())),
-                    ),
-                  ]).animate().fadeIn(delay: 100.ms).slideY(begin: 0.06),
-
-                  const SizedBox(height: 24),
-
-                  // ── Audio ──
-                  _SectionHeader(label: 'Audio'),
-                  _SettingsCard(children: [
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Row(children: [
-                            Icon(Icons.volume_up_rounded, color: AppTheme.asrColor, size: 20),
-                            const SizedBox(width: 10),
-                            Text('Volume', style: Theme.of(context).textTheme.titleMedium),
-                          ]),
-                          Text(
-                            '${_volume.toInt()} / 30',
-                            style: Theme.of(context).textTheme.titleMedium?.copyWith(color: AppTheme.emerald),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      child: Slider(
-                        value: _volume,
-                        min: 0,
-                        max: 30,
-                        divisions: 30,
-                        onChanged: (v) => setState(() => _volume = v),
-                        onChangeEnd: (v) async {
-                          final api = ref.read(adhanboxApiProvider);
-                          if (api != null) {
-                            try { await api.setAudioVolume(v.toInt()); } catch (_) {}
-                          }
-                        },
-                      ),
-                    ),
-                    const _CardDivider(),
-                    _ActionTile(
-                      icon: Icons.music_note_rounded,
-                      iconColor: AppTheme.fajrColor,
-                      title: 'Configurer les adhans',
-                      subtitle: 'Choisir l\'appel à la prière par prière',
+                      icon: Icons.privacy_tip_outlined,
+                      iconColor: AppTheme.darkTextMuted,
+                      title: 'Politique de confidentialité',
+                      subtitle: 'Comment vos données sont protégées',
                       onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute(builder: (_) => const AdhanConfigScreen()),
+                        MaterialPageRoute(builder: (_) => const PrivacyPolicyScreen()),
                       ),
                     ),
-                  ]).animate().fadeIn(delay: 150.ms).slideY(begin: 0.06),
+                  ],
+                ).animate().fadeIn(delay: 300.ms).slideY(begin: 0.06),
 
-                  const SizedBox(height: 24),
-
-                  // ── Localisation & Calcul ──
-                  _SectionHeader(label: 'Prières'),
-                  _SettingsCard(children: [
-                    _ActionTile(
-                      icon: Icons.my_location_rounded,
-                      iconColor: AppTheme.emerald,
-                      title: 'Ma position GPS',
-                      subtitle: 'Envoyer la localisation à l\'appareil',
-                      onTap: _sendGPSLocation,
+                const SizedBox(height: 24),
+                Center(
+                  child: Text(
+                    'AdhanBox · Version 1.0.0',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      fontSize: 12,
+                      color: isDark ? AppTheme.darkTextMuted : AppTheme.lightTextMuted,
                     ),
-                    const _CardDivider(),
-                    _ActionTile(
-                      icon: Icons.calculate_rounded,
-                      iconColor: AppTheme.ishaColor,
-                      title: 'Méthode de calcul',
-                      subtitle: 'MWL, UOIF, ISNA et autres',
-                      onTap: () async {
-                        await Navigator.of(context).push(
-                          MaterialPageRoute(builder: (_) => const CalculationSetupScreen()),
-                        );
-                        ref.invalidate(prayerTimesProvider);
-                        ref.invalidate(prayerOffsetsProvider);
-                      },
-                    ),
-                  ]).animate().fadeIn(delay: 200.ms).slideY(begin: 0.06),
-
-                  const SizedBox(height: 24),
-
-                  // ── WiFi ──
-                  _SectionHeader(label: 'WiFi'),
-                  _SettingsCard(children: [
-                    _ActionTile(
-                      icon: Icons.wifi_rounded,
-                      iconColor: Colors.blue,
-                      title: 'Changer le réseau WiFi',
-                      subtitle: 'Connecter l\'appareil à un autre réseau',
-                      onTap: _showWiFiPicker,
-                    ),
-                  ]).animate().fadeIn(delay: 250.ms).slideY(begin: 0.06),
-
-                  const SizedBox(height: 24),
-
-                  // ── Heure ──
-                  _SectionHeader(label: 'Heure'),
-                  _SettingsCard(children: [
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Row(children: [
-                            const Icon(Icons.schedule_rounded, color: AppTheme.gold, size: 20),
-                            const SizedBox(width: 10),
-                            Text('Fuseau horaire', style: Theme.of(context).textTheme.titleMedium),
-                          ]),
-                          Text(
-                            'UTC ${_timezone >= 0 ? '+' : ''}$_timezone',
-                            style: Theme.of(context).textTheme.titleMedium?.copyWith(color: AppTheme.emerald),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      child: Slider(
-                        value: _timezone.toDouble(),
-                        min: -12,
-                        max: 14,
-                        divisions: 26,
-                        onChanged: (v) async {
-                          setState(() => _timezone = v.toInt());
-                          final api = ref.read(adhanboxApiProvider);
-                          if (api != null) await api.setTimezone(_timezone * 60);
-                        },
-                      ),
-                    ),
-                    const _CardDivider(),
-                    _ActionTile(
-                      icon: Icons.sync_rounded,
-                      iconColor: AppTheme.emerald,
-                      title: 'Synchroniser l\'heure',
-                      subtitle: 'Envoyer l\'heure actuelle du téléphone',
-                      onTap: () async {
-                        final api = ref.read(adhanboxApiProvider);
-                        if (api != null) {
-                          try {
-                            await api.setRtcTime(DateTime.now());
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Heure synchronisée'), backgroundColor: AppTheme.emerald),
-                              );
-                            }
-                          } catch (e) {
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text('Erreur: $e')),
-                              );
-                            }
-                          }
-                        }
-                      },
-                    ),
-                  ]).animate().fadeIn(delay: 300.ms).slideY(begin: 0.06),
-                ]),
-              ),
+                  ),
+                ),
+              ]),
             ),
+          ),
         ],
       ),
     );
   }
 
-  Future<void> _discoverDevice() async {
-    _showLoading('Recherche de l\'AdhanBox...');
-    try {
-      final service = ref.read(esp32DiscoveryServiceProvider);
-      final device = await service.findAdhanBox(timeout: const Duration(seconds: 6));
-
-      if (!mounted) return;
-      Navigator.pop(context);
-
-      if (device != null) {
-        ref.read(currentDeviceIpProvider.notifier).state = device.host;
-        await saveDeviceIp(ref, device.host);
-        _ipController.text = device.host;
-        _showSuccess('AdhanBox trouvé : ${device.host}');
-        return;
-      }
-
-      final subnet = await service.getLocalSubnet();
-      if (subnet == null) { _showError('Sous-réseau introuvable'); return; }
-      final hosts = await service.scanLocalNetwork(subnet: subnet);
-      if (!mounted) return;
-
-      if (hosts.isEmpty) {
-        _showError('Aucun appareil trouvé');
-        return;
-      }
-      _showDeviceList(hosts);
-    } catch (e) {
-      if (mounted) Navigator.pop(context);
-      _showError('Erreur: $e');
-    }
-  }
-
-  void _showDeviceList(List<String> hosts) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (ctx) => DraggableScrollableSheet(
-        initialChildSize: 0.4,
-        minChildSize: 0.2,
-        maxChildSize: 0.7,
-        expand: false,
-        builder: (_, controller) => Column(
-          children: [
-            const SizedBox(height: 8),
-            Container(width: 36, height: 4, decoration: BoxDecoration(color: AppTheme.darkBorder, borderRadius: BorderRadius.circular(2))),
-            const SizedBox(height: 16),
-            Text('Appareils trouvés', style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: 8),
-            Expanded(
-              child: ListView.builder(
-                controller: controller,
-                itemCount: hosts.length,
-                itemBuilder: (_, i) => ListTile(
-                  leading: const Icon(Icons.devices_rounded, color: AppTheme.emerald),
-                  title: Text(hosts[i]),
-                  trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 16),
-                  onTap: () async {
-                    ref.read(currentDeviceIpProvider.notifier).state = hosts[i];
-                    await saveDeviceIp(ref, hosts[i]);
-                    _ipController.text = hosts[i];
-                    if (ctx.mounted) Navigator.pop(ctx);
-                    _showSuccess('IP configurée : ${hosts[i]}');
-                  },
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _sendGPSLocation() async {
-    _showLoading('Récupération GPS...');
-    try {
-      final service = ref.read(locationServiceProvider);
-      final pos = await service.getCurrentLocation();
-      if (!mounted) return;
-      Navigator.pop(context);
-
-      if (pos == null) { _showError('GPS indisponible'); return; }
-
-      final api = ref.read(adhanboxApiProvider);
-      if (api != null) {
-        await api.setLocation(pos.latitude, pos.longitude, pos.accuracy);
-        _showSuccess('Position envoyée : ${pos.latitude.toStringAsFixed(4)}, ${pos.longitude.toStringAsFixed(4)}');
-      }
-    } catch (e) {
-      if (mounted) Navigator.pop(context);
-      _showError('Erreur GPS: $e');
-    }
-  }
-
   Future<void> _showWiFiPicker() async {
-    _showLoading('Scan WiFi...');
+    _showLoading('Recherche des réseaux WiFi…');
     try {
       final service = ref.read(wifiServiceProvider);
       final networks = await service.scanNetworks();
       if (!mounted) return;
       Navigator.pop(context);
-
-      if (networks.isEmpty) { _showError('Aucun réseau trouvé'); return; }
+      if (networks.isEmpty) { _showError('Aucun réseau trouvé.'); return; }
 
       showModalBottomSheet(
         context: context,
         isScrollControlled: true,
         shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
         builder: (ctx) => DraggableScrollableSheet(
-          initialChildSize: 0.5,
-          minChildSize: 0.3,
+          initialChildSize: 0.6,
+          minChildSize: 0.4,
           maxChildSize: 0.85,
           expand: false,
           builder: (_, controller) => Column(
@@ -426,7 +294,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               const SizedBox(height: 8),
               Container(width: 36, height: 4, decoration: BoxDecoration(color: AppTheme.darkBorder, borderRadius: BorderRadius.circular(2))),
               const SizedBox(height: 16),
-              Text('Réseaux WiFi', style: Theme.of(context).textTheme.titleLarge),
+              Text('Sélectionnez votre réseau', style: Theme.of(context).textTheme.titleLarge),
               const SizedBox(height: 8),
               Expanded(
                 child: ListView.builder(
@@ -438,8 +306,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     final signalColor = strength >= 75 ? AppTheme.emerald : (strength >= 40 ? AppTheme.gold : Colors.red);
                     return ListTile(
                       leading: Icon(Icons.wifi_rounded, color: signalColor),
-                      title: Text(n.ssid),
-                      subtitle: Text('Signal $strength%'),
+                      title: Text(n.ssid, style: const TextStyle(fontWeight: FontWeight.w600)),
+                      subtitle: Text('Signal de connexion : $strength%'),
                       trailing: n.capabilities.contains('WPA')
                           ? const Icon(Icons.lock_rounded, size: 16, color: AppTheme.darkTextMuted)
                           : null,
@@ -457,43 +325,59 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       );
     } catch (e) {
       if (mounted) Navigator.pop(context);
-      _showError('Erreur WiFi: $e');
+      _showError('Erreur WiFi : $e');
     }
   }
 
   void _showPasswordDialog(String ssid) {
     final pwdCtrl = TextEditingController();
+    bool obscurePwd = true;
+
     showDialog(
       context: context,
-      builder: (_) => AlertDialog(
-        title: Text('Connexion à $ssid'),
-        content: TextField(
-          controller: pwdCtrl,
-          obscureText: true,
-          autofocus: true,
-          decoration: const InputDecoration(
-            labelText: 'Mot de passe',
-            prefixIcon: Icon(Icons.key_rounded),
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Text(
+            'Rejoindre $ssid',
+            style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 18),
           ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Annuler')),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              final api = ref.read(adhanboxApiProvider);
-              if (api != null) {
-                try {
-                  await api.connectWiFi(ssid, pwdCtrl.text);
-                  _showSuccess('Configuration WiFi envoyée');
-                } catch (e) {
-                  _showError('Erreur: $e');
+          content: TextField(
+            controller: pwdCtrl,
+            obscureText: obscurePwd,
+            autofocus: true,
+            decoration: InputDecoration(
+              labelText: 'Mot de passe WiFi',
+              prefixIcon: const Icon(Icons.key_rounded),
+              suffixIcon: IconButton(
+                icon: Icon(obscurePwd ? Icons.visibility_rounded : Icons.visibility_off_rounded),
+                onPressed: () => setDialogState(() => obscurePwd = !obscurePwd),
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogCtx),
+              child: const Text('Annuler'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.pop(dialogCtx);
+                final api = ref.read(adhanboxApiProvider);
+                if (api != null) {
+                  try {
+                    await api.connectWiFi(ssid, pwdCtrl.text);
+                    _showSuccess('Configuration WiFi envoyée avec succès');
+                  } catch (e) {
+                    _showError('Erreur : $e');
+                  }
                 }
-              }
-            },
-            child: const Text('Connecter'),
-          ),
-        ],
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: AppTheme.emerald),
+              child: const Text('Connecter'),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -525,32 +409,43 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   void _showSuccess(String msg) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg), backgroundColor: AppTheme.emerald),
+      SnackBar(
+        content: Text(msg, style: const TextStyle(fontWeight: FontWeight.w600)), 
+        backgroundColor: AppTheme.emerald,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
     );
   }
 
   void _showError(String msg) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg), backgroundColor: Colors.red[700]),
+      SnackBar(
+        content: Text(msg, style: const TextStyle(fontWeight: FontWeight.w600)), 
+        backgroundColor: Colors.red[700],
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
     );
   }
 }
 
-// ─────────────────────────── UI COMPONENTS ───────────────────────────
+// ─── UI COMPONENTS ───
+
 class _SectionHeader extends StatelessWidget {
   final String label;
-  const _SectionHeader({required this.label});
+  const _SectionHeader(this.label);
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(left: 4, bottom: 10),
+      padding: const EdgeInsets.only(left: 4, bottom: 8),
       child: Text(
         label.toUpperCase(),
         style: GoogleFonts.inter(
           fontSize: 11,
-          fontWeight: FontWeight.w700,
+          fontWeight: FontWeight.w800,
           color: AppTheme.emerald,
           letterSpacing: 1.2,
         ),
@@ -573,6 +468,39 @@ class _SettingsCard extends StatelessWidget {
         border: Border.all(color: isDark ? AppTheme.darkBorder : AppTheme.lightBorder),
       ),
       child: Column(children: children),
+    );
+  }
+}
+
+class _ThemedClickableCard extends StatelessWidget {
+  final Widget child;
+  final VoidCallback onTap;
+  const _ThemedClickableCard({required this.child, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      decoration: BoxDecoration(
+        color: isDark ? AppTheme.darkCard : AppTheme.lightCard,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: isDark ? AppTheme.darkBorder : AppTheme.lightBorder),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          )
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(16),
+          child: child,
+        ),
+      ),
     );
   }
 }
@@ -602,8 +530,7 @@ class _ActionTile extends StatelessWidget {
         child: Row(
           children: [
             Container(
-              width: 40,
-              height: 40,
+              width: 40, height: 40,
               decoration: BoxDecoration(
                 color: iconColor.withOpacity(0.12),
                 borderRadius: BorderRadius.circular(11),
@@ -615,7 +542,8 @@ class _ActionTile extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title, style: Theme.of(context).textTheme.titleMedium),
+                  Text(title, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 2),
                   Text(subtitle, style: Theme.of(context).textTheme.bodySmall),
                 ],
               ),
@@ -653,8 +581,7 @@ class _ToggleTile extends StatelessWidget {
       child: Row(
         children: [
           Container(
-            width: 40,
-            height: 40,
+            width: 40, height: 40,
             decoration: BoxDecoration(
               color: iconColor.withOpacity(0.12),
               borderRadius: BorderRadius.circular(11),
@@ -666,7 +593,8 @@ class _ToggleTile extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: Theme.of(context).textTheme.titleMedium),
+                Text(title, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+                const SizedBox(height: 2),
                 Text(subtitle, style: Theme.of(context).textTheme.bodySmall),
               ],
             ),
@@ -679,15 +607,44 @@ class _ToggleTile extends StatelessWidget {
 }
 
 class _CardDivider extends StatelessWidget {
-  const _CardDivider();
-
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Divider(
       height: 1,
-      indent: 70,
+      indent: 16,
       color: isDark ? AppTheme.darkBorder : AppTheme.lightBorder,
+    );
+  }
+}
+
+class _StatusBadge extends StatelessWidget {
+  final bool isConnected;
+  const _StatusBadge({required this.isConnected});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = isConnected ? AppTheme.emerald : Colors.red;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 7, height: 7,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            isConnected ? 'Actif' : 'Inactif',
+            style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.bold),
+          ),
+        ],
+      ),
     );
   }
 }
