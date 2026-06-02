@@ -1364,6 +1364,19 @@
             </div>
           </div>
 
+          <!-- 3. Mandala Face Selection -->
+          <div class="control-group" id="mandala-face-group" style="display: none;">
+            <span class="control-label">Emplacement du Motif</span>
+            <div class="mandala-model-options">
+              <button class="mandala-btn mandala-face-btn active" onclick="setMandalaFace('local-posY', this)">Arrière</button>
+              <button class="mandala-btn mandala-face-btn" onclick="setMandalaFace('local-negY', this)">Avant</button>
+              <button class="mandala-btn mandala-face-btn" onclick="setMandalaFace('local-negX', this)">Gauche</button>
+              <button class="mandala-btn mandala-face-btn" onclick="setMandalaFace('local-posX', this)">Droite</button>
+              <button class="mandala-btn mandala-face-btn" onclick="setMandalaFace('local-posZ', this)">Dessus</button>
+              <button class="mandala-btn mandala-face-btn" onclick="setMandalaFace('local-negZ', this)">Dessous</button>
+            </div>
+          </div>
+
           <!-- 3. Mandala Color Selection -->
           <div class="control-group" id="mandala-color-group" style="display: none;">
             <span class="control-label">Couleur du Mandala</span>
@@ -1962,7 +1975,7 @@
         updateBoxMaterial();
 
         // Rotate the group by 90 degrees around X-axis: "tourner de 90 degres, laisse la partie vide vers le haut"
-        boxGroup.rotation.x = Math.PI / 2;
+        boxGroup.rotation.x = -Math.PI / 2;
 
         // Start animation loop
         animate();
@@ -2039,12 +2052,15 @@
       }
 
       const colorGroup = document.getElementById('mandala-color-group');
+      const faceGroup = document.getElementById('mandala-face-group');
       if (modelIndex === 0) {
         colorGroup.style.display = 'none';
+        faceGroup.style.display = 'none';
         return;
       }
 
       colorGroup.style.display = 'block';
+      faceGroup.style.display = 'block';
 
       // Load mandala GLB
       const url = `mandala${modelIndex}.glb`;
@@ -2123,6 +2139,25 @@
 
       // Apply to 3D model
       updateMandalaMaterial();
+    }
+
+    let mandalaFace = 'local-posY'; // default face
+
+    function setMandalaFace(faceName, buttonElement) {
+      mandalaFace = faceName;
+
+      // Update button active state
+      document.querySelectorAll('.mandala-face-btn').forEach(btn => {
+        btn.classList.remove('active');
+      });
+      if (buttonElement) buttonElement.classList.add('active');
+
+      // Instantly translate and rotate the existing mandala model in the 3D scene graph
+      if (currentMandalaModel !== 0 && mandalaMesh) {
+        const placement = getMandalaPlacement(mandalaFace);
+        mandalaMesh.position.set(...placement.pos);
+        mandalaMesh.rotation.set(...placement.rot);
+      }
     }
 
     // Initialize 3D Scene when DOM is loaded
