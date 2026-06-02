@@ -1827,6 +1827,51 @@
     let currentMandalaModel = 0; // 0 = Aucun
     let currentMandalaColor = 'gold';
 
+    // Face to place the mandala on. Options: 
+    // 'local-negZ' (original default)
+    // 'local-posZ' (front)
+    // 'local-posY' (top)
+    // 'local-negY' (bottom)
+    // 'local-posX' (right)
+    // 'local-negX' (left)
+    const mandalaFace = 'local-posY';
+
+    function getMandalaPlacement(faceName) {
+      const offset = 0.0015;
+      switch (faceName) {
+        case 'local-posY': // Local +Y face
+          return {
+            pos: [0, boxSize.y / 2 + offset, 0],
+            rot: [-Math.PI / 2, 0, 0]
+          };
+        case 'local-negY': // Local -Y face
+          return {
+            pos: [0, -boxSize.y / 2 - offset, 0],
+            rot: [Math.PI / 2, 0, 0]
+          };
+        case 'local-posZ': // Local +Z face
+          return {
+            pos: [0, 0, boxSize.z / 2 + offset],
+            rot: [0, 0, 0]
+          };
+        case 'local-negZ': // Local -Z face (old default)
+          return {
+            pos: [0, 0, -boxSize.z / 2 - offset],
+            rot: [0, Math.PI, 0]
+          };
+        case 'local-posX': // Local +X face
+          return {
+            pos: [boxSize.x / 2 + offset, 0, 0],
+            rot: [0, Math.PI / 2, 0]
+          };
+        case 'local-negX': // Local -X face
+          return {
+            pos: [-boxSize.x / 2 - offset, 0, 0],
+            rot: [0, -Math.PI / 2, 0]
+          };
+      }
+    }
+
     // Three.js global variables
     let scene, camera, renderer, controls;
     let boxGroup; // Holds the box and the mandala
@@ -1916,8 +1961,8 @@
         // Apply initial finish
         updateBoxMaterial();
 
-        // Rotate the group by 90 degrees around X-axis (flipped 180 degrees relative to previous): "tourner de 90 degres, laisse la partie vide vers le haut"
-        boxGroup.rotation.x = -Math.PI / 2;
+        // Rotate the group by 90 degrees around X-axis: "tourner de 90 degres, laisse la partie vide vers le haut"
+        boxGroup.rotation.x = Math.PI / 2;
 
         // Start animation loop
         animate();
@@ -2038,11 +2083,10 @@
         const targetScale = (boxSize.x * 0.7) / Math.max(size.x, size.y, size.z);
         wrapper.scale.set(targetScale, targetScale, targetScale);
 
-        // Position on the local +Z face (which points UP when boxGroup.rotation.x = -Math.PI / 2)
-        wrapper.position.set(0, 0, boxSize.z / 2 + 0.0015);
-        
-        // Face outwards on +Z plane
-        wrapper.rotation.set(0, 0, 0);
+        // Position and rotate wrapper based on selected face
+        const placement = getMandalaPlacement(mandalaFace);
+        wrapper.position.set(...placement.pos);
+        wrapper.rotation.set(...placement.rot);
 
         // Store reference and add to box group
         mandalaMesh = wrapper;
