@@ -8,6 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Amiri:ital,wght@0,400;0,700;1,400;1,700&family=Outfit:wght@100..900&display=swap" rel="stylesheet">
+  <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.4.0/model-viewer.min.js"></script>
   
   <style>
     /* ─── BASE DESIGN SYSTEM ────────────────────────────────── */
@@ -1385,32 +1386,38 @@
         <div class="configurator-visual">
           <div class="box-container">
             <div class="virtual-box finish-wood" id="virtual-box">
-              <div class="box-speaker-grille">
-                <!-- 16 LEDs container -->
-                <div class="led-ring led-mode-rainbow" id="led-ring">
-                  <div class="led" style="--angle: 0deg; --idx: 0;"></div>
-                  <div class="led" style="--angle: 22.5deg; --idx: 1;"></div>
-                  <div class="led" style="--angle: 45deg; --idx: 2;"></div>
-                  <div class="led" style="--angle: 67.5deg; --idx: 3;"></div>
-                  <div class="led" style="--angle: 90deg; --idx: 4;"></div>
-                  <div class="led" style="--angle: 112.5deg; --idx: 5;"></div>
-                  <div class="led" style="--angle: 135deg; --idx: 6;"></div>
-                  <div class="led" style="--angle: 157.5deg; --idx: 7;"></div>
-                  <div class="led" style="--angle: 180deg; --idx: 8;"></div>
-                  <div class="led" style="--angle: 202.5deg; --idx: 9;"></div>
-                  <div class="led" style="--angle: 225deg; --idx: 10;"></div>
-                  <div class="led" style="--angle: 247.5deg; --idx: 11;"></div>
-                  <div class="led" style="--angle: 270deg; --idx: 12;"></div>
-                  <div class="led" style="--angle: 292.5deg; --idx: 13;"></div>
-                  <div class="led" style="--angle: 315deg; --idx: 14;"></div>
-                  <div class="led" style="--angle: 337.5deg; --idx: 15;"></div>
-                </div>
-                <!-- Core speaker look -->
-                <div class="speaker-center">
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" id="speaker-icon">
-                    <path d="M11 5L6 9H2v6h4l5 4V5zM15.54 8.46a5 5 0 0 1 0 7.07M19.07 4.93a10 10 0 0 1 0 14.14"/>
-                  </svg>
-                </div>
+              <!-- 3D Model Viewer -->
+              <model-viewer 
+                id="adhanbox-3d" 
+                src="adhanbox.glb" 
+                camera-controls 
+                auto-rotate 
+                shadow-intensity="1"
+                ar
+                ar-modes="webxr scene-viewer quick-look"
+                interaction-prompt="none"
+                rotation-per-second="15deg"
+                style="width: 100%; height: 100%; background: transparent;">
+              </model-viewer>
+              
+              <!-- 16 LEDs Ring Overlay (absolute positioned on top of the 3D model) -->
+              <div class="led-ring led-mode-rainbow" id="led-ring" style="position: absolute; pointer-events: none; width: 140px; height: 140px; z-index: 10;">
+                <div class="led" style="--angle: 0deg; --idx: 0;"></div>
+                <div class="led" style="--angle: 22.5deg; --idx: 1;"></div>
+                <div class="led" style="--angle: 45deg; --idx: 2;"></div>
+                <div class="led" style="--angle: 67.5deg; --idx: 3;"></div>
+                <div class="led" style="--angle: 90deg; --idx: 4;"></div>
+                <div class="led" style="--angle: 112.5deg; --idx: 5;"></div>
+                <div class="led" style="--angle: 135deg; --idx: 6;"></div>
+                <div class="led" style="--angle: 157.5deg; --idx: 7;"></div>
+                <div class="led" style="--angle: 180deg; --idx: 8;"></div>
+                <div class="led" style="--angle: 202.5deg; --idx: 9;"></div>
+                <div class="led" style="--angle: 225deg; --idx: 10;"></div>
+                <div class="led" style="--angle: 247.5deg; --idx: 11;"></div>
+                <div class="led" style="--angle: 270deg; --idx: 12;"></div>
+                <div class="led" style="--angle: 292.5deg; --idx: 13;"></div>
+                <div class="led" style="--angle: 315deg; --idx: 14;"></div>
+                <div class="led" style="--angle: 337.5deg; --idx: 15;"></div>
               </div>
             </div>
           </div>
@@ -1867,7 +1874,49 @@
       'brass': 'Laiton Brossé : Finition métallique dorée haut de gamme et brillante.'
     };
 
+    const modelViewer = document.getElementById('adhanbox-3d');
+
+    const finishPBR = {
+      'wood': {
+        baseColor: [0.35, 0.15, 0.05, 1.0],
+        roughness: 0.7,
+        metallic: 0.0
+      },
+      'matte-black': {
+        baseColor: [0.08, 0.08, 0.1, 1.0],
+        roughness: 0.5,
+        metallic: 0.1
+      },
+      'marble': {
+        baseColor: [0.9, 0.9, 0.92, 1.0],
+        roughness: 0.2,
+        metallic: 0.1
+      },
+      'brass': {
+        baseColor: [0.85, 0.65, 0.15, 1.0],
+        roughness: 0.35,
+        metallic: 1.0
+      }
+    };
+
+    let currentFinish = 'wood';
+
+    function applyPBR(finishName) {
+      if (!modelViewer || !modelViewer.model) return;
+      const material = modelViewer.model.materials[0];
+      if (!material) return;
+      
+      const pbr = finishPBR[finishName];
+      if (!pbr) return;
+      
+      material.pbrMetallicRoughness.setBaseColorFactor(pbr.baseColor);
+      material.pbrMetallicRoughness.setRoughnessFactor(pbr.roughness);
+      material.pbrMetallicRoughness.setMetallicFactor(pbr.metallic);
+    }
+
     function setFinish(finishName) {
+      currentFinish = finishName;
+
       // Remove previous finishes
       virtualBox.classList.remove('finish-wood', 'finish-matte-black', 'finish-marble', 'finish-brass');
       virtualBox.classList.add(`finish-${finishName}`);
@@ -1876,10 +1925,21 @@
       document.querySelectorAll('.option-dot').forEach(dot => {
         dot.classList.remove('active');
       });
-      event.target.classList.add('active');
+      const activeDot = document.querySelector(`.dot-${finishName === 'matte-black' ? 'black' : finishName}`);
+      if (activeDot) activeDot.classList.add('active');
 
       // Update text
       finishTextText.innerText = finishDescriptions[finishName];
+
+      // Apply to 3D model
+      applyPBR(finishName);
+    }
+
+    // Apply material properties when 3D model loads
+    if (modelViewer) {
+      modelViewer.addEventListener('load', () => {
+        applyPBR(currentFinish);
+      });
     }
 
     function setLedMode(modeName, buttonElement) {
