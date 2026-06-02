@@ -8,7 +8,10 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Amiri:ital,wght@0,400;0,700;1,400;1,700&family=Outfit:wght@100..900&display=swap" rel="stylesheet">
-  <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.4.0/model-viewer.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/DRACOLoader.js"></script>
   
   <style>
     /* ─── BASE DESIGN SYSTEM ────────────────────────────────── */
@@ -454,78 +457,16 @@
 
     /* Virtual Box styles */
     .virtual-box {
-      width: 260px;
-      height: 260px;
-      border-radius: 36px;
+      width: 280px;
+      height: 280px;
       display: flex;
       align-items: center;
       justify-content: center;
       position: relative;
-      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.8), inset 0 2px 4px rgba(255, 255, 255, 0.1);
-      transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
-      overflow: hidden;
-    }
-
-    /* Finish styles */
-    .finish-wood {
-      background: linear-gradient(135deg, #7c2d12 0%, #3f1a0a 100%);
-      border: 5px solid #9a3412;
-    }
-    .finish-wood::after {
-      content: '';
-      position: absolute;
-      inset: 0;
-      opacity: 0.12;
-      background-image: repeating-linear-gradient(45deg, #000 0px, #000 2px, transparent 2px, transparent 12px);
-      pointer-events: none;
-    }
-
-    .finish-matte-black {
-      background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
-      border: 5px solid #334155;
-    }
-    .finish-matte-black::after {
-      content: '';
-      position: absolute;
-      inset: 0;
-      opacity: 0.06;
-      background: radial-gradient(circle, #fff 12%, transparent 13%);
-      background-size: 8px 8px;
-      pointer-events: none;
-    }
-
-    .finish-marble {
-      background: linear-gradient(135deg, #f8fafc 0%, #cbd5e1 100%);
-      border: 5px solid #e2e8f0;
-      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5), inset 0 2px 4px rgba(255, 255, 255, 0.6);
-    }
-    .finish-marble::after {
-      content: '';
-      position: absolute;
-      inset: 0;
-      opacity: 0.15;
-      background-image: linear-gradient(60deg, transparent 45%, #94a3b8 46%, #94a3b8 47%, transparent 48%),
-                        linear-gradient(-30deg, transparent 52%, #94a3b8 53%, #94a3b8 54%, transparent 55%);
-      pointer-events: none;
-    }
-
-    .finish-brass {
-      background: linear-gradient(135deg, #eab308 0%, #78350f 100%);
-      border: 5px solid #ca8a04;
-    }
-    .finish-brass::after {
-      content: '';
-      position: absolute;
-      inset: 0;
-      opacity: 0.15;
-      background: linear-gradient(to right, transparent, rgba(255,255,255,0.4), transparent);
-      animation: brass-shine 4s infinite linear;
-      pointer-events: none;
-    }
-
-    @keyframes brass-shine {
-      0% { transform: translateX(-120%) skewX(-30deg); }
-      100% { transform: translateX(200%) skewX(-30deg); }
+      background: transparent;
+      border: none;
+      box-shadow: none;
+      overflow: visible;
     }
 
     /* Speaker mesh and layout */
@@ -687,12 +628,12 @@
     .dot-marble { background: linear-gradient(135deg, #f8fafc, #cbd5e1); }
     .dot-brass { background: linear-gradient(135deg, #eab308, #ca8a04); }
 
-    .led-modes-grid {
+    .mandala-model-options {
       display: grid;
-      grid-template-columns: repeat(2, 1fr);
+      grid-template-columns: repeat(3, 1fr);
       gap: 0.8rem;
     }
-    .led-btn {
+    .mandala-btn {
       background: rgba(255, 255, 255, 0.03);
       border: 1px solid rgba(255, 255, 255, 0.05);
       border-radius: 12px;
@@ -704,14 +645,19 @@
       cursor: pointer;
       transition: all 0.2s ease;
     }
-    .led-btn:hover {
+    .mandala-btn:hover {
       background: rgba(255, 255, 255, 0.06);
       color: #FFF;
     }
-    .led-btn.active {
+    .mandala-btn.active {
       background: rgba(16, 185, 129, 0.1);
       border-color: var(--emerald);
       color: var(--emerald);
+    }
+    .mandala-color-options {
+      display: flex;
+      gap: 0.8rem;
+      margin-top: 0.5rem;
     }
 
     .audio-player-control {
@@ -1384,51 +1330,10 @@
         
         <!-- Left: Virtual Box Visualizer -->
         <div class="configurator-visual">
-          <div class="box-container">
-            <div class="virtual-box finish-wood" id="virtual-box">
-              <!-- 3D Model Viewer -->
-              <model-viewer 
-                id="adhanbox-3d" 
-                src="adhanbox.glb" 
-                camera-controls 
-                auto-rotate 
-                shadow-intensity="1"
-                ar
-                ar-modes="webxr scene-viewer quick-look"
-                interaction-prompt="none"
-                rotation-per-second="15deg"
-                style="width: 100%; height: 100%; background: transparent;">
-              </model-viewer>
-              
-              <!-- 16 LEDs Ring Overlay (absolute positioned on top of the 3D model) -->
-              <div class="led-ring led-mode-rainbow" id="led-ring" style="position: absolute; pointer-events: none; width: 140px; height: 140px; z-index: 10;">
-                <div class="led" style="--angle: 0deg; --idx: 0;"></div>
-                <div class="led" style="--angle: 22.5deg; --idx: 1;"></div>
-                <div class="led" style="--angle: 45deg; --idx: 2;"></div>
-                <div class="led" style="--angle: 67.5deg; --idx: 3;"></div>
-                <div class="led" style="--angle: 90deg; --idx: 4;"></div>
-                <div class="led" style="--angle: 112.5deg; --idx: 5;"></div>
-                <div class="led" style="--angle: 135deg; --idx: 6;"></div>
-                <div class="led" style="--angle: 157.5deg; --idx: 7;"></div>
-                <div class="led" style="--angle: 180deg; --idx: 8;"></div>
-                <div class="led" style="--angle: 202.5deg; --idx: 9;"></div>
-                <div class="led" style="--angle: 225deg; --idx: 10;"></div>
-                <div class="led" style="--angle: 247.5deg; --idx: 11;"></div>
-                <div class="led" style="--angle: 270deg; --idx: 12;"></div>
-                <div class="led" style="--angle: 292.5deg; --idx: 13;"></div>
-                <div class="led" style="--angle: 315deg; --idx: 14;"></div>
-                <div class="led" style="--angle: 337.5deg; --idx: 15;"></div>
-              </div>
+          <div class="box-container" style="background: transparent;">
+            <div class="virtual-box" id="virtual-box">
+              <div id="canvas3d-container" style="width: 100%; height: 100%; min-width: 260px; min-height: 260px; position: relative;"></div>
             </div>
-          </div>
-          
-          <!-- Audio Waves visual effect -->
-          <div class="audio-waves" id="audio-waves">
-            <div class="audio-bar"></div>
-            <div class="audio-bar"></div>
-            <div class="audio-bar"></div>
-            <div class="audio-bar"></div>
-            <div class="audio-bar"></div>
           </div>
         </div>
 
@@ -1446,31 +1351,28 @@
             <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.2rem;" id="finish-text">Bois Précieux : Finition organique et chaleureuse.</p>
           </div>
 
-          <!-- 2. LED Ring Mode -->
+          <!-- 2. Mandala Model Selection -->
           <div class="control-group">
-            <span class="control-label">Animation des 16 LEDs NeoPixel</span>
-            <div class="led-modes-grid">
-              <button class="led-btn active" onclick="setLedMode('rainbow', this)">Arc-en-ciel</button>
-              <button class="led-btn" onclick="setLedMode('breathing', this)">Respiration Dorée</button>
-              <button class="led-btn" onclick="setLedMode('medina', this)">Vert Médinois</button>
-              <button class="led-btn" onclick="setLedMode('candle', this)">Bougie Vacillante</button>
+            <span class="control-label">Modèle de Mandala</span>
+            <div class="mandala-model-options">
+              <button class="mandala-btn active" onclick="setMandalaModel(0, this)">Aucun</button>
+              <button class="mandala-btn" onclick="setMandalaModel(1, this)">Motif 1</button>
+              <button class="mandala-btn" onclick="setMandalaModel(2, this)">Motif 2</button>
+              <button class="mandala-btn" onclick="setMandalaModel(3, this)">Motif 3</button>
+              <button class="mandala-btn" onclick="setMandalaModel(4, this)">Motif 4</button>
+              <button class="mandala-btn" onclick="setMandalaModel(5, this)">Motif 5</button>
             </div>
           </div>
 
-          <!-- 3. Audio track testing -->
-          <div class="control-group">
-            <span class="control-label">Tester le Son de l'Adhan</span>
-            <div class="audio-player-control">
-              <select class="audio-select" id="track-select">
-                <option value="../0002.mp3">Adhan Standard - Mecque</option>
-                <option value="../0003.mp3">Adhan Doux - Médine</option>
-                <option value="../0001.mp3">Duaa de fin de prière</option>
-              </select>
-              <button class="play-btn" onclick="toggleAdhanPlay()" id="btn-play">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" id="play-icon-svg">
-                  <path d="M8 5v14l11-7z"/>
-                </svg>
-              </button>
+          <!-- 3. Mandala Color Selection -->
+          <div class="control-group" id="mandala-color-group" style="display: none;">
+            <span class="control-label">Couleur du Mandala</span>
+            <div class="mandala-color-options">
+              <div class="option-dot dot-mandala-gold active" onclick="setMandalaColor('gold', this)" title="Or" style="background: linear-gradient(135deg, #ffe066 0%, #d4af37 100%);"></div>
+              <div class="option-dot dot-mandala-silver" onclick="setMandalaColor('silver', this)" title="Argent" style="background: linear-gradient(135deg, #ffffff 0%, #a6a6a6 100%);"></div>
+              <div class="option-dot dot-mandala-copper" onclick="setMandalaColor('copper', this)" title="Cuivre / Bronze" style="background: linear-gradient(135deg, #f0a07a 0%, #b87333 100%);"></div>
+              <div class="option-dot dot-mandala-black" onclick="setMandalaColor('black', this)" title="Noir Mat" style="background: #111;"></div>
+              <div class="option-dot dot-mandala-white" onclick="setMandalaColor('white', this)" title="Blanc pur" style="background: #fff; border: 1px solid #ccc;"></div>
             </div>
           </div>
 
@@ -1858,14 +1760,9 @@
       }
     }
 
-    // ─── CONFIGURATEUR INTERACTION ──────────────────────────
-    const virtualBox = document.getElementById('virtual-box');
-    const ledRing = document.getElementById('led-ring');
-    const audioWaves = document.getElementById('audio-waves');
-    const playAudioElement = document.getElementById('playground-audio');
-    const playBtn = document.getElementById('btn-play');
-    const playIconSvg = document.getElementById('play-icon-svg');
+    // ─── CONFIGURATEUR INTERACTION (THREE.JS) ────────────────
     const finishTextText = document.getElementById('finish-text');
+    const container3d = document.getElementById('canvas3d-container');
 
     const finishDescriptions = {
       'wood': 'Bois Précieux : Finition organique et chaleureuse pour un style classique.',
@@ -1874,128 +1771,318 @@
       'brass': 'Laiton Brossé : Finition métallique dorée haut de gamme et brillante.'
     };
 
-    const modelViewer = document.getElementById('adhanbox-3d');
-
-    const finishPBR = {
+    // PBR Properties mapping for Three.js MeshStandardMaterial
+    const boxMaterials = {
       'wood': {
-        baseColor: [0.35, 0.15, 0.05, 1.0],
+        color: 0x5a2d13,
         roughness: 0.7,
-        metallic: 0.0
+        metalness: 0.0
       },
       'matte-black': {
-        baseColor: [0.08, 0.08, 0.1, 1.0],
-        roughness: 0.5,
-        metallic: 0.1
+        color: 0x151518,
+        roughness: 0.6,
+        metalness: 0.1
       },
       'marble': {
-        baseColor: [0.9, 0.9, 0.92, 1.0],
-        roughness: 0.2,
-        metallic: 0.1
+        color: 0xe5e7eb,
+        roughness: 0.25,
+        metalness: 0.1
       },
       'brass': {
-        baseColor: [0.85, 0.65, 0.15, 1.0],
+        color: 0xd4af37,
         roughness: 0.35,
-        metallic: 1.0
+        metalness: 0.9
       }
     };
 
-    let currentFinish = 'wood';
+    const mandalaMaterials = {
+      'gold': {
+        color: 0xd4af37,
+        roughness: 0.25,
+        metalness: 0.95
+      },
+      'silver': {
+        color: 0xcccccc,
+        roughness: 0.2,
+        metalness: 0.95
+      },
+      'copper': {
+        color: 0xb87333,
+        roughness: 0.3,
+        metalness: 0.9
+      },
+      'black': {
+        color: 0x111111,
+        roughness: 0.7,
+        metalness: 0.1
+      },
+      'white': {
+        color: 0xffffff,
+        roughness: 0.4,
+        metalness: 0.1
+      }
+    };
 
-    function applyPBR(finishName) {
-      if (!modelViewer || !modelViewer.model) return;
-      const material = modelViewer.model.materials[0];
-      if (!material) return;
-      
-      const pbr = finishPBR[finishName];
-      if (!pbr) return;
-      
-      material.pbrMetallicRoughness.setBaseColorFactor(pbr.baseColor);
-      material.pbrMetallicRoughness.setRoughnessFactor(pbr.roughness);
-      material.pbrMetallicRoughness.setMetallicFactor(pbr.metallic);
+    let currentBoxFinish = 'wood';
+    let currentMandalaModel = 0; // 0 = Aucun
+    let currentMandalaColor = 'gold';
+
+    // Three.js global variables
+    let scene, camera, renderer, controls;
+    let boxGroup; // Holds the box and the mandala
+    let boxMesh = null; // The loaded box model
+    let mandalaMesh = null; // The loaded mandala model
+    let boxSize = new THREE.Vector3(0.12, 0.12, 0.12); // Fallback size
+
+    function init3D() {
+      if (!container3d) return;
+
+      const width = container3d.clientWidth || 280;
+      const height = container3d.clientHeight || 280;
+
+      // 1. Scene
+      scene = new THREE.Scene();
+
+      // 2. Camera
+      camera = new THREE.PerspectiveCamera(45, width / height, 0.01, 10);
+      // Position camera at an angle showing top opening and back face (where mandala is placed)
+      camera.position.set(0.2, 0.18, -0.28);
+
+      // 3. Renderer
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+      renderer.setSize(width, height);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1.0;
+      container3d.appendChild(renderer.domElement);
+
+      // 4. Controls
+      controls = new THREE.OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.05;
+      controls.enablePan = false;
+      controls.minDistance = 0.15;
+      controls.maxDistance = 0.6;
+      controls.autoRotate = true;
+      controls.autoRotateSpeed = 1.5;
+
+      // Stop auto-rotating when the user starts interacting
+      controls.addEventListener('start', () => {
+        controls.autoRotate = false;
+      });
+
+      // 5. Lights
+      const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+      scene.add(ambientLight);
+
+      const dirLight1 = new THREE.DirectionalLight(0xffffff, 1.2);
+      dirLight1.position.set(2, 4, 3);
+      scene.add(dirLight1);
+
+      const dirLight2 = new THREE.DirectionalLight(0xffffff, 0.5);
+      dirLight2.position.set(-2, 2, -3);
+      scene.add(dirLight2);
+
+      // 6. Box Group Setup
+      boxGroup = new THREE.Group();
+      scene.add(boxGroup);
+
+      // 7. Load Box Model
+      const loader = new THREE.GLTFLoader();
+      const dracoLoader = new THREE.DRACOLoader();
+      dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.6/');
+      loader.setDRACOLoader(dracoLoader);
+
+      loader.load('adhanbox.glb', (gltf) => {
+        boxMesh = gltf.scene;
+
+        // Traverse to initialize materials
+        boxMesh.traverse((child) => {
+          if (child.isMesh) {
+            child.material = new THREE.MeshStandardMaterial();
+          }
+        });
+
+        // Compute bounding box & size to center boxMesh at (0,0,0)
+        const box3 = new THREE.Box3().setFromObject(boxMesh);
+        box3.getSize(boxSize);
+        const center = new THREE.Vector3();
+        box3.getCenter(center);
+        boxMesh.position.sub(center);
+
+        // Add to boxGroup
+        boxGroup.add(boxMesh);
+
+        // Apply initial finish
+        updateBoxMaterial();
+
+        // Rotate the group by 90 degrees around X-axis: "tourner de 90 degres, laisse la partie vide vers le haut"
+        boxGroup.rotation.x = Math.PI / 2;
+
+        // Start animation loop
+        animate();
+      }, undefined, (err) => {
+        console.error("Error loading box GLB:", err);
+      });
+
+      // Handle Resize
+      window.addEventListener('resize', onWindowResize);
+    }
+
+    function animate() {
+      requestAnimationFrame(animate);
+      if (controls) controls.update();
+      if (renderer && scene && camera) {
+        renderer.render(scene, camera);
+      }
+    }
+
+    function onWindowResize() {
+      if (!container3d || !camera || !renderer) return;
+      const width = container3d.clientWidth;
+      const height = container3d.clientHeight;
+      camera.aspect = width / height;
+      camera.updateProjectionMatrix();
+      renderer.setSize(width, height);
+    }
+
+    // ─── CONFIGURATION SETTERS ───────────────────────────────
+    
+    function updateBoxMaterial() {
+      if (!boxMesh) return;
+      const matConfig = boxMaterials[currentBoxFinish];
+      boxMesh.traverse((child) => {
+        if (child.isMesh) {
+          child.material.color.setHex(matConfig.color);
+          child.material.roughness = matConfig.roughness;
+          child.material.metalness = matConfig.metalness;
+          child.material.needsUpdate = true;
+        }
+      });
     }
 
     function setFinish(finishName) {
-      currentFinish = finishName;
+      currentBoxFinish = finishName;
 
-      // Remove previous finishes
-      virtualBox.classList.remove('finish-wood', 'finish-matte-black', 'finish-marble', 'finish-brass');
-      virtualBox.classList.add(`finish-${finishName}`);
-      
       // Update dots active state
-      document.querySelectorAll('.option-dot').forEach(dot => {
+      document.querySelectorAll('.finish-options .option-dot').forEach(dot => {
         dot.classList.remove('active');
       });
       const activeDot = document.querySelector(`.dot-${finishName === 'matte-black' ? 'black' : finishName}`);
       if (activeDot) activeDot.classList.add('active');
 
-      // Update text
+      // Update text description
       finishTextText.innerText = finishDescriptions[finishName];
 
       // Apply to 3D model
-      applyPBR(finishName);
+      updateBoxMaterial();
     }
 
-    // Apply material properties when 3D model loads
-    if (modelViewer) {
-      modelViewer.addEventListener('load', () => {
-        applyPBR(currentFinish);
-      });
-    }
-
-    function setLedMode(modeName, buttonElement) {
-      // Remove previous led modes from ring
-      ledRing.className = 'led-ring';
-      ledRing.classList.add(`led-mode-${modeName}`);
+    function setMandalaModel(modelIndex, buttonElement) {
+      currentMandalaModel = modelIndex;
 
       // Update button active state
-      document.querySelectorAll('.led-btn').forEach(btn => {
+      document.querySelectorAll('.mandala-btn').forEach(btn => {
         btn.classList.remove('active');
       });
-      buttonElement.classList.add('active');
-    }
+      if (buttonElement) buttonElement.classList.add('active');
 
-    // Play/Pause Playground Audio
-    let isPlaying = false;
-
-    function toggleAdhanPlay() {
-      const selectTrack = document.getElementById('track-select');
-      const trackSrc = selectTrack.value;
-
-      if (isPlaying) {
-        playAudioElement.pause();
-        stopVisualPlayback();
-      } else {
-        playAudioElement.src = trackSrc;
-        playAudioElement.play()
-          .then(() => {
-            startVisualPlayback();
-          })
-          .catch(err => {
-            console.warn("L'audio n'a pas pu être chargé (chemin local inexistant sur le serveur web statique)", err);
-            // Simulate playing anyway if local files are missing
-            startVisualPlayback();
-            setTimeout(() => {
-              stopVisualPlayback();
-            }, 6000);
-          });
+      // Remove existing mandala mesh if any
+      if (mandalaMesh && boxGroup) {
+        boxGroup.remove(mandalaMesh);
+        mandalaMesh = null;
       }
+
+      const colorGroup = document.getElementById('mandala-color-group');
+      if (modelIndex === 0) {
+        colorGroup.style.display = 'none';
+        return;
+      }
+
+      colorGroup.style.display = 'block';
+
+      // Load mandala GLB
+      const url = `mandala${modelIndex}.glb`;
+      const loader = new THREE.GLTFLoader();
+      const dracoLoader = new THREE.DRACOLoader();
+      dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.6/');
+      loader.setDRACOLoader(dracoLoader);
+
+      loader.load(url, (gltf) => {
+        const model = gltf.scene;
+
+        // Traverse to apply standard materials
+        model.traverse((child) => {
+          if (child.isMesh) {
+            child.material = new THREE.MeshStandardMaterial();
+          }
+        });
+
+        // Compute size & center of mandala
+        const box3 = new THREE.Box3().setFromObject(model);
+        const size = new THREE.Vector3();
+        box3.getSize(size);
+        const center = new THREE.Vector3();
+        box3.getCenter(center);
+        
+        // Center the mandala model geometry at (0,0,0)
+        model.position.sub(center);
+
+        // Create a wrapper to manage scale and rotation
+        const wrapper = new THREE.Group();
+        wrapper.add(model);
+
+        // Scale to fit 70% of the box dimension
+        const targetScale = (boxSize.x * 0.7) / Math.max(size.x, size.y, size.z);
+        wrapper.scale.set(targetScale, targetScale, targetScale);
+
+        // Position on the flat back face (Z = -boxSize.z / 2) with a 1.5mm offset to prevent z-fighting
+        wrapper.position.set(0, 0, -boxSize.z / 2 - 0.0015);
+        
+        // Rotate 180 degrees (Math.PI) on Y axis to orient it facing outwards from the back
+        wrapper.rotation.y = Math.PI;
+
+        // Store reference and add to box group
+        mandalaMesh = wrapper;
+        boxGroup.add(mandalaMesh);
+
+        // Apply color
+        updateMandalaMaterial();
+      }, undefined, (err) => {
+        console.error("Error loading mandala GLB:", err);
+      });
     }
 
-    playAudioElement.addEventListener('ended', () => {
-      stopVisualPlayback();
+    function updateMandalaMaterial() {
+      if (!mandalaMesh) return;
+      const matConfig = mandalaMaterials[currentMandalaColor];
+      mandalaMesh.traverse((child) => {
+        if (child.isMesh) {
+          child.material.color.setHex(matConfig.color);
+          child.material.roughness = matConfig.roughness;
+          child.material.metalness = matConfig.metalness;
+          child.material.needsUpdate = true;
+        }
+      });
+    }
+
+    function setMandalaColor(colorName, dotElement) {
+      currentMandalaColor = colorName;
+
+      // Update dots active state
+      document.querySelectorAll('.mandala-color-options .option-dot').forEach(dot => {
+        dot.classList.remove('active');
+      });
+      if (dotElement) dotElement.classList.add('active');
+
+      // Apply to 3D model
+      updateMandalaMaterial();
+    }
+
+    // Initialize 3D Scene when DOM is loaded
+    document.addEventListener('DOMContentLoaded', () => {
+      init3D();
     });
-
-    function startVisualPlayback() {
-      isPlaying = true;
-      audioWaves.classList.add('active');
-      playIconSvg.innerHTML = '<path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>'; // Pause SVG icon
-    }
-
-    function stopVisualPlayback() {
-      isPlaying = false;
-      audioWaves.classList.remove('active');
-      playIconSvg.innerHTML = '<path d="M8 5v14l11-7z"/>'; // Play SVG icon
-    }
 
     // ─── APPLICATION MOBILE SIMULATION ───────────────────────
     function simulateAppSync() {
