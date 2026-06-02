@@ -2036,11 +2036,11 @@
         const targetScale = (boxSize.x * 0.7) / Math.max(size.x, size.y, size.z);
         wrapper.scale.set(targetScale, targetScale, targetScale);
 
-        // Position on the flat back face (Z = -boxSize.z / 2) with a 1.5mm offset to prevent z-fighting
-        wrapper.position.set(0, 0, -boxSize.z / 2 - 0.0015);
+        // Position on the flat back face of the standing box (local +Y is facing back when boxGroup.rotation.x = -Math.PI / 2)
+        wrapper.position.set(0, boxSize.y / 2 + 0.0015, 0);
         
-        // Rotate 180 degrees (Math.PI) on Y axis to orient it facing outwards from the back
-        wrapper.rotation.y = Math.PI;
+        // Rotate -90 degrees on X axis to make it lay flat on local Y plane, facing outwards
+        wrapper.rotation.set(-Math.PI / 2, 0, 0);
 
         // Store reference and add to box group
         mandalaMesh = wrapper;
