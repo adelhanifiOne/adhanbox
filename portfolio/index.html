@@ -1774,8 +1774,8 @@
     }
 
     // ─── CONFIGURATEUR INTERACTION (THREE.JS) ────────────────
-    const finishTextText = document.getElementById('finish-text');
-    const container3d = document.getElementById('canvas3d-container');
+    let finishTextText;
+    let container3d;
 
     const finishDescriptions = {
       'wood': 'Bois Précieux : Finition organique et chaleureuse pour un style classique.',
@@ -1893,6 +1893,8 @@
     let boxSize = new THREE.Vector3(0.12, 0.12, 0.12); // Fallback size
 
     function init3D() {
+      container3d = document.getElementById('canvas3d-container');
+      finishTextText = document.getElementById('finish-text');
       if (!container3d) return;
 
       const width = container3d.clientWidth || 280;
@@ -2161,9 +2163,13 @@
     }
 
     // Initialize 3D Scene when DOM is loaded
-    document.addEventListener('DOMContentLoaded', () => {
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', () => {
+        init3D();
+      });
+    } else {
       init3D();
-    });
+    }
 
     // ─── APPLICATION MOBILE SIMULATION ───────────────────────
     function simulateAppSync() {
