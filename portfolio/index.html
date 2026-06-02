@@ -1847,7 +1847,7 @@
     // 'local-negY' (bottom)
     // 'local-posX' (right)
     // 'local-negX' (left)
-    const mandalaFace = 'local-posY';
+    let mandalaFace = 'local-posY';
 
     function getMandalaPlacement(faceName) {
       const offset = 0.0015;
@@ -2143,7 +2143,6 @@
       updateMandalaMaterial();
     }
 
-    let mandalaFace = 'local-posY'; // default face
 
     function setMandalaFace(faceName, buttonElement) {
       mandalaFace = faceName;
