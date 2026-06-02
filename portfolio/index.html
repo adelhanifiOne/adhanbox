@@ -2011,10 +2011,12 @@
       loader.load(url, (gltf) => {
         const model = gltf.scene;
 
-        // Traverse to apply standard materials
+        // Traverse to apply standard materials and ensure double-sided rendering
         model.traverse((child) => {
           if (child.isMesh) {
-            child.material = new THREE.MeshStandardMaterial();
+            child.material = new THREE.MeshStandardMaterial({
+              side: THREE.DoubleSide
+            });
           }
         });
 
@@ -2036,11 +2038,11 @@
         const targetScale = (boxSize.x * 0.7) / Math.max(size.x, size.y, size.z);
         wrapper.scale.set(targetScale, targetScale, targetScale);
 
-        // Position on the flat back face of the standing box (local +Y is facing back when boxGroup.rotation.x = -Math.PI / 2)
-        wrapper.position.set(0, boxSize.y / 2 + 0.0015, 0);
+        // Position on the local +Z face (which points UP when boxGroup.rotation.x = -Math.PI / 2)
+        wrapper.position.set(0, 0, boxSize.z / 2 + 0.0015);
         
-        // Rotate -90 degrees on X axis to make it lay flat on local Y plane, facing outwards
-        wrapper.rotation.set(-Math.PI / 2, 0, 0);
+        // Face outwards on +Z plane
+        wrapper.rotation.set(0, 0, 0);
 
         // Store reference and add to box group
         mandalaMesh = wrapper;
