@@ -1831,6 +1831,81 @@ String urlEncode(const String &str) {
   return encoded;
 }
 
+bool parseMawaqitTimesFromStream(Stream &stream, const String &uuid, const String &slug, String times[6]) {
+  int braceCount = 0;
+  String buffer = "";
+  buffer.reserve(3000); // Pre-allocate to avoid memory fragmentation
+
+  unsigned long startTime = millis();
+  while (millis() - startTime < 20000) { // 20 seconds timeout for reading the stream
+    if (!stream.available()) {
+      delay(10);
+      continue;
+    }
+    char c = stream.read();
+    
+    if (braceCount == 0) {
+      if (c == '{') {
+        braceCount = 1;
+        buffer = "{";
+      }
+    } else {
+      buffer += c;
+      if (c == '{') {
+        braceCount++;
+      } else if (c == '}') {
+        braceCount--;
+        if (braceCount == 0) {
+          // We have a complete mosque object!
+          bool match = false;
+          if (uuid.length() > 0 && buffer.indexOf(uuid) >= 0) {
+            match = true;
+          }
+          if (!match && slug.length() > 0 && buffer.indexOf(slug) >= 0) {
+            match = true;
+          }
+          
+          if (match) {
+            // Parse times from this buffer
+            int timesPos = buffer.indexOf("\"times\"");
+            if (timesPos >= 0) {
+              int curPos = buffer.indexOf("[", timesPos);
+              bool allParsed = true;
+              const char *timeNames[6] = { "fajr", "sunrise", "dhuhr", "asr", "maghrib", "isha" };
+              for (int i = 0; i < 6; i++) {
+                int q1 = buffer.indexOf('"', curPos + 1);
+                int q2 = buffer.indexOf('"', q1 + 1);
+                if (q1 >= 0 && q2 > q1) {
+                  times[i] = buffer.substring(q1 + 1, q2);
+                  if (times[i].length() > 5 && times[i].charAt(5) == ':') {
+                    times[i] = times[i].substring(0, 5);
+                  }
+                  curPos = q2;
+                  Serial.printf("  parsed stream %s = %s\n", timeNames[i], times[i].c_str());
+                } else {
+                  allParsed = false;
+                }
+              }
+              if (allParsed) {
+                return true;
+              }
+            }
+          }
+          // Clear buffer for the next mosque
+          buffer = "";
+        }
+      }
+      
+      // Guard against runaway buffer size (if a mosque object exceeds 4KB)
+      if (buffer.length() > 4000) {
+        buffer = "";
+        braceCount = 0;
+      }
+    }
+  }
+  return false;
+}
+
 // Trigger a sync placeholder (keeps API compatibility with app)
 bool performMawaqitSync(String &errorMsg) {
   prefs.begin("adhancfg", true);
@@ -1869,121 +1944,37 @@ bool performMawaqitSync(String &errorMsg) {
   bool anyValid = false;
 
   for (int attempt = 0; attempt < attempts && !anyValid; attempt++) {
+    HTTPClient http;
     WiFiClientSecure client;
     client.setInsecure();
 
-    String url = urls[attempt];
-    Serial.printf("Mawaqit request [%d/%d]: https://%s%s\n", attempt + 1, attempts, host.c_str(), url.c_str());
+    String url = "https://" + host + urls[attempt];
+    Serial.printf("Mawaqit request [%d/%d]: %s\n", attempt + 1, attempts, url.c_str());
 
-    if (!client.connect(host.c_str(), 443)) {
-      Serial.println("Connection to Mawaqit API failed");
-      continue;
-    }
+    http.begin(client, url);
+    http.addHeader("User-Agent", "AdhanBox/1.0");
+    http.addHeader("Accept", "application/json");
+    http.setTimeout(15000);
 
-    client.print("GET " + url + " HTTP/1.1\r\n");
-    client.print("Host: " + host + "\r\n");
-    client.print("User-Agent: AdhanBox/1.0\r\n");
-    client.print("Accept: application/json\r\n");
-    client.print("Connection: close\r\n");
-    client.print("\r\n");
-
-    String response = "";
-    unsigned long startTime = millis();
-    while ((millis() - startTime < 15000) && (client.connected() || client.available())) {
-      if (client.available()) {
-        response += (char)client.read();
-      }
-    }
-    client.stop();
-
-    int bodyStart = response.indexOf("\r\n\r\n");
-    int skipLen = 4;
-    if (bodyStart < 0) {
-      bodyStart = response.indexOf("\n\n");
-      skipLen = 2;
-    }
-    if (bodyStart < 0) {
-      Serial.println("No response body found");
-      continue;
-    }
-
-    String jsonBody = response.substring(bodyStart + skipLen);
-    jsonBody.trim();
-
-    // Handle possible chunked body beginning with hex chunk-size (e.g. "7b")
-    int firstNl = jsonBody.indexOf('\n');
-    if (firstNl > 0) {
-      String firstLine = jsonBody.substring(0, firstNl);
-      firstLine.trim();
-      bool looksHex = firstLine.length() > 0 && firstLine.length() <= 8;
-      for (size_t i = 0; i < firstLine.length(); i++) {
-        char c = firstLine.charAt(i);
-        bool isHexChar = (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
-        if (!isHexChar) {
-          looksHex = false;
-          break;
-        }
-      }
-      if (looksHex) {
-        String dechunked = jsonBody.substring(firstNl + 1);
-        int endChunk = dechunked.lastIndexOf("\n0");
-        if (endChunk > 0) {
-          dechunked = dechunked.substring(0, endChunk);
-        }
-        dechunked.trim();
-        jsonBody = dechunked;
-      }
-    }
-
-    Serial.printf("Response body (first 500 chars): %.500s\n", jsonBody.c_str());
-
-    if (jsonBody.indexOf("<!DOCTYPE") >= 0 || jsonBody.indexOf("<html") >= 0) {
-      Serial.println("ERROR: Received HTML instead of JSON");
-      continue;
-    }
-
-    int matchPos = -1;
-    if (uuid.length() > 0) {
-      matchPos = jsonBody.indexOf(uuid);
-    }
-    if (matchPos < 0 && slug.length() > 0) {
-      matchPos = jsonBody.indexOf(slug);
-    }
-    if (matchPos < 0 && jsonBody.indexOf("\"uuid\"") >= 0) {
-      matchPos = jsonBody.indexOf("\"uuid\"");
-    }
-
-    if (matchPos >= 0) {
-      int timesPos = jsonBody.indexOf("\"times\"", matchPos);
-      if (timesPos >= 0) {
-        int curPos = jsonBody.indexOf("[", timesPos);
-        for (int i = 0; i < 6; i++) {
-          int q1 = jsonBody.indexOf('"', curPos + 1);
-          int q2 = jsonBody.indexOf('"', q1 + 1);
-          if (q1 >= 0 && q2 > q1) {
-            times[i] = jsonBody.substring(q1 + 1, q2);
-            if (times[i].length() > 5 && times[i].charAt(5) == ':') {
-              times[i] = times[i].substring(0, 5);
-            }
-            curPos = q2;
-            Serial.printf("  parsed %s = %s\n", timeNames[i], times[i].c_str());
-          }
-        }
-      }
-    }
-
-    for (int i = 0; i < 6; i++) {
-      if (times[i].length() >= 5) {
+    int httpCode = http.GET();
+    if (httpCode == 200) {
+      WiFiClient* streamPtr = http.getStreamPtr();
+      if (streamPtr && parseMawaqitTimesFromStream(*streamPtr, uuid, slug, times)) {
         anyValid = true;
-        break;
+      } else {
+        Serial.println("Failed to parse times from Mawaqit stream");
       }
+    } else {
+      Serial.printf("Mawaqit HTTP error: %d\n", httpCode);
     }
+    http.end();
 
     if (!anyValid) {
-      Serial.println("No valid times parsed from this endpoint, trying fallback...");
       for (int i = 0; i < 6; i++) times[i] = "";
     }
   }
+
+  bool mawaqitSyncSuccess = anyValid;
 
   if (!anyValid) {
     Serial.println("No valid times parsed from Mawaqit endpoints, trying coordinate fallback (Aladhan)...");
@@ -2083,6 +2074,12 @@ bool performMawaqitSync(String &errorMsg) {
 
   Serial.printf("Mawaqit times synced successfully at epoch %lu\n", now_epoch);
   Serial.printf("  Fajr: %s  Dhuhr: %s  Maghrib: %s  Isha: %s\n", times[0].c_str(), times[2].c_str(), times[4].c_str(), times[5].c_str());
+
+  if (!mawaqitSyncSuccess) {
+    errorMsg = "Mawaqit sync failed (using calculated times fallback)";
+    return false;
+  }
+
   return true;
 }
 
