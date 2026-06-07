@@ -1,8 +1,34 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
 import '../providers/adhanbox_provider.dart';
+import '../theme/app_theme.dart';
+
+const _trackNames = {
+  2:  'Adhan 1',
+  3:  'Adhan 2',
+  4:  'Adhan 1',
+  5:  'Adhan 2',
+  6:  'Adhan 3',
+  7:  'Adhan 4',
+  8:  'Adhan 5',
+  9:  'Adhan 6',
+  10: 'Adhan 7',
+  11: 'Adhan 8',
+  12: 'Adhan 9',
+  13: 'Adhan 10',
+  14: 'Adhan 11',
+  15: 'Adhan 12',
+  16: 'Adhan 13',
+  17: 'Adhan 14',
+  18: 'Adhan 15',
+  19: 'Adhan 16',
+  20: 'Adhan 17',
+  21: 'Adhan 18',
+};
 
 class AdhanConfigScreen extends ConsumerStatefulWidget {
   const AdhanConfigScreen({Key? key}) : super(key: key);
@@ -17,334 +43,443 @@ class _AdhanConfigScreenState extends ConsumerState<AdhanConfigScreen> {
   String? _errorMessage;
   String? _deviceIp;
 
-  // Configuration des adhans par prière
   final Map<String, int> _selectedTracks = {
-    'fajr': 2,
-    'dhuhr': 2,
-    'asr': 2,
-    'maghrib': 2,
-    'isha': 2,
+    'fajr': 2, 'dhuhr': 4, 'asr': 4, 'maghrib': 4, 'isha': 4,
   };
 
-  // Configuration du duaa
   final Map<String, bool> _playDuaa = {
-    'fajr': true,
-    'dhuhr': true,
-    'asr': true,
-    'maghrib': true,
-    'isha': true,
+    'fajr': true, 'dhuhr': true, 'asr': true, 'maghrib': true, 'isha': true,
   };
 
-  final Map<String, String> _prayerNames = {
-    'fajr': 'Fajr',
-    'dhuhr': 'Dhuhr',
-    'asr': 'Asr',
-    'maghrib': 'Maghrib',
-    'isha': 'Isha',
+  final Map<String, bool> _enabledPrayers = {
+    'fajr': true, 'dhuhr': true, 'asr': true, 'maghrib': true, 'isha': true,
   };
 
-  String _getTrackLabel(int trackNumber) {
-    if (trackNumber == 2 || trackNumber == 3) {
-      return 'Adhan Sobh';
-    }
-    return 'Adhan';
-  }
+  final Map<String, int> _selectedVolumes = {
+    'fajr': 20, 'dhuhr': 20, 'asr': 20, 'maghrib': 20, 'isha': 20,
+  };
+
+  static const _prayerMeta = {
+    'fajr':    _PrayerMeta('Fajr',    Icons.wb_twilight_rounded),
+    'dhuhr':   _PrayerMeta('Dhuhr',   Icons.wb_sunny_rounded),
+    'asr':     _PrayerMeta('Asr',     Icons.light_mode_rounded),
+    'maghrib': _PrayerMeta('Maghrib', Icons.nightlight_round),
+    'isha':    _PrayerMeta('Isha',    Icons.dark_mode_rounded),
+  };
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _loadConfiguration();
-    });
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadConfiguration());
   }
 
   Future<void> _loadConfiguration() async {
-    try {
-      final deviceIpAsync = ref.read(currentDeviceIpProvider);
-      if (deviceIpAsync == null) {
-        setState(() {
-          _errorMessage = 'Aucun appareil configuré';
-          _isLoading = false;
-        });
-        return;
-      }
-
-      setState(() => _deviceIp = deviceIpAsync);
-
-      // Charger la configuration actuelle (optionnel, par défaut tous les sliders à 1)
-      try {
-        final configUrl = Uri.parse('http://$_deviceIp/api/adhan/config');
-        final response = await http.get(configUrl).timeout(
-          const Duration(seconds: 5),
-        );
-
-        if (response.statusCode == 200) {
-          final data = jsonDecode(response.body);
-          setState(() {
-            _selectedTracks['fajr'] = (data['fajr_track'] == 1) ? 2 : (data['fajr_track'] ?? 2);
-            _selectedTracks['dhuhr'] = (data['dhuhr_track'] == 1) ? 2 : (data['dhuhr_track'] ?? 2);
-            _selectedTracks['asr'] = (data['asr_track'] == 1) ? 2 : (data['asr_track'] ?? 2);
-            _selectedTracks['maghrib'] = (data['maghrib_track'] == 1) ? 2 : (data['maghrib_track'] ?? 2);
-            _selectedTracks['isha'] = (data['isha_track'] == 1) ? 2 : (data['isha_track'] ?? 2);
-
-            _playDuaa['fajr'] = data['fajr_duaa'] ?? true;
-            _playDuaa['dhuhr'] = data['dhuhr_duaa'] ?? true;
-            _playDuaa['asr'] = data['asr_duaa'] ?? true;
-            _playDuaa['maghrib'] = data['maghrib_duaa'] ?? true;
-            _playDuaa['isha'] = data['isha_duaa'] ?? true;
-          });
-        }
-      } catch (e) {
-        debugPrint('Config load error: $e (using defaults)');
-      }
-
-      setState(() => _isLoading = false);
-    } catch (e) {
-      debugPrint('IP loading error: $e');
-      setState(() {
-        _errorMessage = 'Erreur au chargement de l\'IP: $e';
-        _isLoading = false;
-      });
+    final ip = ref.read(currentDeviceIpProvider);
+    if (ip == null) {
+      setState(() { _errorMessage = 'Aucun appareil configuré'; _isLoading = false; });
+      return;
     }
+    setState(() => _deviceIp = ip);
+    try {
+      final r = await http.get(Uri.parse('http://$ip/api/adhan/config'))
+          .timeout(const Duration(seconds: 5));
+      if (r.statusCode == 200) {
+        final d = jsonDecode(r.body);
+        setState(() {
+          for (final k in _selectedTracks.keys) {
+            int raw = d['${k}_track'] as int? ?? (k == 'fajr' ? 2 : 4);
+            if (k == 'fajr') {
+              if (raw != 2 && raw != 3) raw = 2;
+            } else {
+              if (raw < 4 || raw > 21) raw = 4;
+            }
+            _selectedTracks[k] = raw;
+          }
+          for (final k in _playDuaa.keys) {
+            _playDuaa[k] = d['${k}_duaa'] as bool? ?? true;
+          }
+          for (final k in _enabledPrayers.keys) {
+            _enabledPrayers[k] = d['${k}_enabled'] as bool? ?? true;
+          }
+          for (final k in _selectedVolumes.keys) {
+            _selectedVolumes[k] = (d['${k}_volume'] as num?)?.toInt() ?? 20;
+          }
+        });
+      }
+    } catch (_) {}
+    if (mounted) setState(() => _isLoading = false);
   }
 
-  Future<void> _saveConfiguration() async {
-    setState(() {
-      _isSaving = true;
-      _errorMessage = null;
-    });
-
+  Future<void> _save() async {
+    setState(() { _isSaving = true; _errorMessage = null; });
     try {
-      if (_deviceIp == null) {
-        throw Exception('Aucun appareil connecté');
-      }
-
-      final configUrl = Uri.parse('http://$_deviceIp/api/adhan/config');
+      if (_deviceIp == null) throw Exception('Aucun appareil connecté');
       final payload = {
-        'fajr_track': _selectedTracks['fajr'],
-        'fajr_duaa': _playDuaa['fajr'],
-        'dhuhr_track': _selectedTracks['dhuhr'],
-        'dhuhr_duaa': _playDuaa['dhuhr'],
-        'asr_track': _selectedTracks['asr'],
-        'asr_duaa': _playDuaa['asr'],
-        'maghrib_track': _selectedTracks['maghrib'],
-        'maghrib_duaa': _playDuaa['maghrib'],
-        'isha_track': _selectedTracks['isha'],
-        'isha_duaa': _playDuaa['isha'],
+        for (final k in _selectedTracks.keys) '${k}_track': _selectedTracks[k],
+        for (final k in _playDuaa.keys) '${k}_duaa': _playDuaa[k],
+        for (final k in _enabledPrayers.keys) '${k}_enabled': _enabledPrayers[k],
+        for (final k in _selectedVolumes.keys) '${k}_volume': _selectedVolumes[k],
       };
-
-      final response = await http.post(
-        configUrl,
+      final r = await http.post(
+        Uri.parse('http://$_deviceIp/api/adhan/config'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode(payload),
       ).timeout(const Duration(seconds: 10));
-
-      if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw Exception('Échec sauvegarde (HTTP ${response.statusCode})');
+      if (r.statusCode < 200 || r.statusCode >= 300) {
+        throw Exception('Échec (HTTP ${r.statusCode})');
       }
-
-      setState(() => _isSaving = false);
-
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('✓ Configuration des adhans enregistrée'),
-            backgroundColor: Colors.green,
-            duration: Duration(seconds: 2),
+            content: Text('Configuration enregistrée'),
+            backgroundColor: AppTheme.emerald,
           ),
         );
       }
     } catch (e) {
-      setState(() {
-        _errorMessage = 'Impossible de sauvegarder: $e';
-        _isSaving = false;
-      });
+      setState(() => _errorMessage = 'Impossible de sauvegarder: $e');
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
     }
   }
 
-  Future<void> _playTestAdhan(int track) async {
+  Future<void> _playPreview(int track) async {
+    if (_deviceIp == null) return;
     try {
-      if (_deviceIp == null) return;
-
-      final url = Uri.parse('http://$_deviceIp/play?track=$track');
-      final response = await http.get(url).timeout(const Duration(seconds: 5));
-
-      if (response.statusCode == 200) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('▶️ Lecture track ${track.toString().padLeft(4, '0')}.mp3'),
-            duration: const Duration(seconds: 2),
-            backgroundColor: Colors.green,
-          ),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Erreur ${response.statusCode}: ${response.body}'),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 3),
-          ),
-        );
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Erreur connexion: $e'),
-          backgroundColor: Colors.red,
-          duration: const Duration(seconds: 3),
-        ),
-      );
-    }
+      await http.get(Uri.parse('http://$_deviceIp/play?track=$track'))
+          .timeout(const Duration(seconds: 5));
+    } catch (_) {}
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[50],
-      appBar: AppBar(
-        elevation: 0,
-        title: const Text(
-          'Configuration des Adhans',
-          style: TextStyle(fontWeight: FontWeight.w600),
-        ),
-        backgroundColor: const Color(0xFF1B5E20),
-      ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _errorMessage != null
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Text(
-                      'Erreur: $_errorMessage',
-                      style: const TextStyle(color: Colors.red),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                )
-              : ListView(
-                  padding: const EdgeInsets.all(16),
-                  children: [
-                    Card(
-                      elevation: 2,
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              '🎵 Sélectionner un adhan par prière',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                            ..._prayerNames.entries.map((entry) {
-                              final prayerKey = entry.key;
-                              final prayerName = entry.value;
-                              final selectedTrack = _selectedTracks[prayerKey]!;
-                              final playDuaa = _playDuaa[prayerKey]!;
+      body: CustomScrollView(
+        slivers: [
+          SliverAppBar(
+            pinned: true,
+            backgroundColor: AppTheme.emeraldDeep,
+            title: Text(
+              'Appel à la prière',
+              style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 20),
+            ),
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+              onPressed: () => Navigator.pop(context),
+            ),
+          ),
+          if (_isLoading)
+            const SliverFillRemaining(
+              child: Center(child: CircularProgressIndicator(color: AppTheme.emerald)),
+            )
+          else
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
+              sliver: SliverList(
+                delegate: SliverChildListDelegate([
+                  if (_errorMessage != null) ...[
+                    _ErrorBanner(message: _errorMessage!),
+                    const SizedBox(height: 16),
+                  ],
 
-                              return Padding(
-                                padding: const EdgeInsets.only(bottom: 16),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      prayerName,
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.w600,
-                                        fontSize: 14,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 8),
-                                    Row(
-                                      children: [
-                                        Expanded(
-                                          child: DropdownButton<int>(
-                                            isExpanded: true,
-                                            value: selectedTrack,
-                                            items: List.generate(
-                                              10, // Max track 11 -> so 10 items starting at 2
-                                              (index) {
-                                                final trackNum = index + 2;
-                                                return DropdownMenuItem(
-                                                value: trackNum, // Starts at track 2
-                                                child: Text(
-                                                  'Track ${trackNum.toString().padLeft(4, '0')}.mp3 (${_getTrackLabel(trackNum)})',
-                                                ),
-                                              );
-                                              },
-                                            ),
-                                            onChanged: (value) {
-                                              if (value != null) {
-                                                setState(() {
-                                                  _selectedTracks[prayerKey] =
-                                                      value;
-                                                });
-                                              }
-                                            },
-                                          ),
-                                        ),
-                                        const SizedBox(width: 8),
-                                        IconButton(
-                                          icon: const Icon(Icons.play_circle),
-                                          color: Colors.green,
-                                          onPressed: () =>
-                                              _playTestAdhan(selectedTrack),
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 8),
-                                    CheckboxListTile(
-                                      dense: true,
-                                      contentPadding: EdgeInsets.zero,
-                                      title: Text(
-                                        'Jouer le duaa après l\'adhan (track 1)',
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          color: Colors.grey[700],
-                                        ),
-                                      ),
-                                      value: playDuaa,
-                                      onChanged: (value) {
-                                        if (value != null) {
-                                          setState(() {
-                                            _playDuaa[prayerKey] = value;
-                                          });
-                                        }
-                                      },
-                                    ),
-                                    if (entry.key !=
-                                        _prayerNames.keys.last)
-                                      Divider(
-                                        color: Colors.grey[300],
-                                        height: 24,
-                                      ),
-                                  ],
-                                ),
-                              );
-                            }).toList(),
-                          ],
+                  Text(
+                    'Choisissez l\'appel à la prière joué pour chaque prière.',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                  const SizedBox(height: 20),
+
+                  ..._prayerMeta.entries.indexed.map((e) {
+                    final (i, entry) = e;
+                    final key = entry.key;
+                    final meta = entry.value;
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: _PrayerAdhanCard(
+                        prayerKey: key,
+                        meta: meta,
+                        selectedTrack: _selectedTracks[key]!,
+                        playDuaa: _playDuaa[key]!,
+                        enabled: _enabledPrayers[key]!,
+                        volume: _selectedVolumes[key]!,
+                        onTrackChanged: (v) => setState(() => _selectedTracks[key] = v),
+                        onDuaaChanged: (v) => setState(() => _playDuaa[key] = v),
+                        onEnabledChanged: (v) => setState(() => _enabledPrayers[key] = v),
+                        onVolumeChanged: (v) => setState(() => _selectedVolumes[key] = v),
+                        onPreview: () => _playPreview(_selectedTracks[key]!),
+                      ).animate().fadeIn(delay: Duration(milliseconds: 60 * i)).slideY(begin: 0.06),
+                    );
+                  }),
+
+                  const SizedBox(height: 24),
+
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: _isSaving ? null : _save,
+                      style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16)),
+                      child: _isSaving
+                          ? const SizedBox(
+                              width: 20, height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                            )
+                          : const Text('Enregistrer'),
+                    ),
+                  ).animate().fadeIn(delay: 350.ms),
+                ]),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────── PRAYER ADHAN CARD ───────────────────────────
+class _PrayerAdhanCard extends StatelessWidget {
+  final String prayerKey;
+  final _PrayerMeta meta;
+  final int selectedTrack;
+  final bool playDuaa;
+  final bool enabled;
+  final int volume;
+  final ValueChanged<int> onTrackChanged;
+  final ValueChanged<bool> onDuaaChanged;
+  final ValueChanged<bool> onEnabledChanged;
+  final ValueChanged<int> onVolumeChanged;
+  final VoidCallback onPreview;
+
+  const _PrayerAdhanCard({
+    required this.prayerKey,
+    required this.meta,
+    required this.selectedTrack,
+    required this.playDuaa,
+    required this.enabled,
+    required this.volume,
+    required this.onTrackChanged,
+    required this.onDuaaChanged,
+    required this.onEnabledChanged,
+    required this.onVolumeChanged,
+    required this.onPreview,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final color = AppTheme.prayerColor(meta.name);
+
+    return Container(
+      decoration: BoxDecoration(
+        color: isDark ? AppTheme.darkCard : AppTheme.lightCard,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: isDark ? AppTheme.darkBorder : AppTheme.lightBorder),
+      ),
+      child: Column(
+        children: [
+          // Header
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+            child: Row(
+              children: [
+                GestureDetector(
+                  onTap: () => onEnabledChanged(!enabled),
+                  behavior: HitTestBehavior.opaque,
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 40, height: 40,
+                        decoration: BoxDecoration(
+                          color: enabled
+                              ? color.withOpacity(isDark ? 0.18 : 0.1)
+                              : Colors.grey.withOpacity(isDark ? 0.15 : 0.08),
+                          borderRadius: BorderRadius.circular(11),
+                        ),
+                        child: Icon(
+                          meta.icon,
+                          color: enabled ? color : (isDark ? Colors.grey[500] : Colors.grey[400]),
+                          size: 20,
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 20),
-                    ElevatedButton.icon(
-                      onPressed: _isSaving ? null : _saveConfiguration,
-                      icon: const Icon(Icons.save),
-                      label: _isSaving
-                          ? const Text('Enregistrement...')
-                          : const Text('Enregistrer la configuration'),
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.all(16),
-                        backgroundColor: const Color(0xFF1B5E20),
-                        disabledBackgroundColor: Colors.grey[400],
+                      const SizedBox(width: 12),
+                      Text(
+                        meta.name,
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                          color: enabled ? null : (isDark ? Colors.grey[500] : Colors.grey[400]),
+                          decoration: enabled ? null : TextDecoration.lineThrough,
+                        ),
                       ),
+                    ],
+                  ),
+                ),
+                const Spacer(),
+                // Actions: Preview + Enable switch
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (enabled)
+                      IconButton(
+                        icon: const Icon(Icons.play_circle_rounded, size: 28),
+                        color: AppTheme.emerald,
+                        tooltip: 'Écouter',
+                        onPressed: onPreview,
+                      ),
+                    Switch.adaptive(
+                      value: enabled,
+                      activeColor: AppTheme.emerald,
+                      onChanged: onEnabledChanged,
                     ),
                   ],
                 ),
+              ],
+            ),
+          ),
+
+          Divider(height: 1, color: isDark ? AppTheme.darkBorder : AppTheme.lightBorder),
+
+          // Card contents (grayed out and disabled when not enabled)
+          Opacity(
+            opacity: enabled ? 1.0 : 0.45,
+            child: IgnorePointer(
+              ignoring: !enabled,
+              child: Column(
+                children: [
+                  // Track selector
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Adhan', style: Theme.of(context).textTheme.bodySmall),
+                        const SizedBox(height: 6),
+                        DropdownButtonFormField<int>(
+                          value: selectedTrack,
+                          decoration: InputDecoration(
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide: BorderSide(color: isDark ? AppTheme.darkBorder : AppTheme.lightBorder),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide: BorderSide(color: isDark ? AppTheme.darkBorder : AppTheme.lightBorder),
+                            ),
+                            filled: true,
+                            fillColor: isDark ? AppTheme.darkSurface : AppTheme.lightBg,
+                          ),
+                          items: _trackNames.entries
+                              .where((e) {
+                                if (prayerKey == 'fajr') {
+                                  return e.key == 2 || e.key == 3;
+                                } else {
+                                  return e.key >= 4 && e.key <= 21;
+                                }
+                              })
+                              .map((e) => DropdownMenuItem(
+                                value: e.key,
+                                child: Text(
+                                  e.value,
+                                  style: Theme.of(context).textTheme.bodyMedium,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ))
+                              .toList(),
+                          onChanged: (v) { if (v != null) onTrackChanged(v); },
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // Duaa toggle
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(4, 0, 16, 0),
+                    child: Row(
+                      children: [
+                        Checkbox(
+                          value: playDuaa,
+                          activeColor: AppTheme.emerald,
+                          onChanged: (v) { if (v != null) onDuaaChanged(v); },
+                        ),
+                        Expanded(
+                          child: Text(
+                            'Jouer la Doua après l\'adhan',
+                            style: Theme.of(context).textTheme.bodyMedium,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // Volume slider
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text('Volume de l\'Adhan', style: Theme.of(context).textTheme.bodySmall),
+                            Text('$volume / 30', style: Theme.of(context).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.bold)),
+                          ],
+                        ),
+                        const SizedBox(height: 2),
+                        Row(
+                          children: [
+                            Icon(Icons.volume_mute_rounded, size: 18, color: isDark ? Colors.grey[600] : Colors.grey[400]),
+                            Expanded(
+                              child: Slider(
+                                value: volume.toDouble(),
+                                min: 0,
+                                max: 30,
+                                divisions: 30,
+                                activeColor: color,
+                                inactiveColor: color.withOpacity(0.15),
+                                onChanged: (v) => onVolumeChanged(v.toInt()),
+                              ),
+                            ),
+                            Icon(Icons.volume_up_rounded, size: 18, color: color),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────── HELPERS ───────────────────────────
+class _PrayerMeta {
+  final String name;
+  final IconData icon;
+  const _PrayerMeta(this.name, this.icon);
+}
+
+class _ErrorBanner extends StatelessWidget {
+  final String message;
+  const _ErrorBanner({required this.message});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.red.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.red.withOpacity(0.25)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.error_outline_rounded, color: Colors.red, size: 18),
+          const SizedBox(width: 10),
+          Expanded(child: Text(message, style: const TextStyle(color: Colors.red, fontSize: 13))),
+        ],
+      ),
     );
   }
 }
