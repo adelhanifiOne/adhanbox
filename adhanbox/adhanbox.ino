@@ -1584,6 +1584,58 @@ void handleOtaUpload() {
   }
 }
 
+void handleUpdatePage() {
+  String html = R"HTML(
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Mise à jour AdhanBox</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body { font-family: sans-serif; background: #121212; color: #e0e0e0; text-align: center; padding: 30px; margin: 0; }
+    .card { background: #1e1e1e; max-width: 400px; margin: 50px auto; padding: 30px; border-radius: 12px; border: 1px solid #333; box-shadow: 0 4px 12px rgba(0,0,0,0.5); }
+    h2 { color: #059669; margin-top: 0; }
+    p { font-size: 14px; color: #a0a0a0; line-height: 1.5; }
+    input[type=file], input[type=text], input[type=submit] { display: block; width: 100%; margin: 15px 0; padding: 12px; box-sizing: border-box; border-radius: 8px; font-size: 14px; }
+    input[type=text] { background: #2a2a2a; border: 1px solid #444; color: #fff; }
+    input[type=file] { background: #1a1a1a; border: 1px dashed #555; color: #ccc; cursor: pointer; }
+    input[type=submit] { background: #059669; border: none; color: #fff; font-weight: bold; cursor: pointer; transition: background 0.2s; }
+    input[type=submit]:hover { background: #047857; }
+    .footer { font-size: 11px; color: #555; margin-top: 20px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>Mise à jour Firmware</h2>
+    <p>Sélectionnez le fichier <code>adhanbox.ino.bin</code> compilé pour mettre à jour le logiciel de l'AdhanBox.</p>
+    <form method="POST" action="/ota/upload" enctype="multipart/form-data" id="upForm">
+      <input type="text" name="token" id="tokenField" placeholder="Clé d'API (Token)">
+      <input type="file" name="update" accept=".bin" required>
+      <input type="submit" value="Démarrer la mise à jour">
+    </form>
+    <div class="footer">AdhanBox OTA Manager</div>
+    <script>
+      fetch('/api/device/info')
+        .then(r => r.json())
+        .then(j => {
+          if (j.token) {
+            document.getElementById('tokenField').value = j.token;
+          }
+        }).catch(() => {});
+      
+      document.getElementById('upForm').onsubmit = function() {
+        var t = document.getElementById('tokenField').value;
+        this.action = '/ota/upload?token=' + encodeURIComponent(t);
+      };
+    </script>
+  </div>
+</body>
+</html>
+)HTML";
+  server.send(200, "text/html", html);
+}
+
 void handleOtaUploadComplete() {
   if (!requireApiKey()) { return; }
   if (Update.hasError()) {
@@ -1607,6 +1659,9 @@ bool requireApiKey() {
   if (_apiToken.length() == 0) return true;  // not yet initialized
   if (apRunning) return true;                // AP mode: réseau isolé, pas d'auth nécessaire
   String key = server.header("X-API-Key");
+  if (key.length() == 0) {
+    key = server.arg("token");
+  }
   if (key == _apiToken) return true;
   server.send(401, "application/json", "{\"error\":\"Unauthorized — missing or invalid X-API-Key\"}");
   return false;
@@ -2743,6 +2798,7 @@ void setupServerRoutes() {
   server.on("/api/firmware/version", HTTP_GET, handleFirmwareVersion);
   server.on("/api/device/info", HTTP_GET, handleDeviceInfo);
   server.on("/ota/upload", HTTP_POST, handleOtaUploadComplete, handleOtaUpload);
+  server.on("/update", HTTP_GET, handleUpdatePage);
 #if ENABLE_BLE
   server.on("/api/start_ble", HTTP_GET, []() {
     if (!_bleActive) {
