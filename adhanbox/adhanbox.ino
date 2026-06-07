@@ -1565,6 +1565,22 @@ void handleScanWifi() {
 
 // OTA update via HTTP multipart upload (POST /ota/upload)
 void handleOtaUpload() {
+  // Verify authorization at the start of the upload to prevent writing unauthorized chunks
+  bool auth = true;
+  if (_apiToken.length() > 0 && !apRunning) {
+    String key = server.header("X-API-Key");
+    if (key.length() == 0) {
+      key = server.arg("token");
+    }
+    if (key != _apiToken) {
+      auth = false;
+    }
+  }
+
+  if (!auth) {
+    return;
+  }
+
   HTTPUpload &upload = server.upload();
   if (upload.status == UPLOAD_FILE_START) {
     Serial.printf("OTA upload start: %s (%u bytes)\n", upload.filename.c_str(), upload.totalSize);
