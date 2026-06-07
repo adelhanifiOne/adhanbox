@@ -10,11 +10,19 @@ import '../models/prayer_time.dart';
 class AdhanBoxAPI {
   final String baseUrl;
   final Duration timeout;
+  final String? apiKey;
 
   AdhanBoxAPI({
     required this.baseUrl,
     this.timeout = const Duration(seconds: 10),
+    this.apiKey,
   });
+
+  /// Headers for mutating (POST/PUT) requests — includes API key when set.
+  Map<String, String> get _authHeaders => {
+    'Content-Type': 'application/json',
+    if (apiKey != null && apiKey!.isNotEmpty) 'X-API-Key': apiKey!,
+  };
 
   Map<String, dynamic>? _asMap(dynamic value) {
     if (value is Map<String, dynamic>) return value;
@@ -27,24 +35,17 @@ class AdhanBoxAPI {
   // ===== STATUS =====
   Future<Map<String, dynamic>> getStatus() async {
     try {
-      print('DEBUG: Tentative GET $baseUrl/dump_status (timeout: ${timeout.inSeconds}s)');
       final response =
           await http.get(Uri.parse('$baseUrl/dump_status')).timeout(timeout);
-      print('DEBUG: Réponse reçue - Code: ${response.statusCode}');
       if (response.statusCode == 200) {
-        print('DEBUG: Status OK - Body length: ${response.body.length}');
         return jsonDecode(response.body) as Map<String, dynamic>;
       }
-      print('DEBUG: Erreur HTTP ${response.statusCode}');
-      throw Exception('Failed to load status: ${response.statusCode}');
-    } on SocketException catch (e) {
-      print('DEBUG: Erreur réseau: $e - Vérifiez la connexion WiFi et l\'IP');
-      throw Exception('Erreur réseau: Impossible de joindre $baseUrl\n$e');
-    } on TimeoutException catch (e) {
-      print('DEBUG: Timeout après ${timeout.inSeconds}s');
+      throw Exception('HTTP ${response.statusCode}');
+    } on SocketException {
+      throw Exception('Erreur réseau: Impossible de joindre $baseUrl');
+    } on TimeoutException {
       throw Exception('Timeout: L\'ESP32 à $baseUrl ne répond pas');
     } catch (e) {
-      print('DEBUG: Erreur API: $e');
       throw Exception('Erreur API: $e');
     }
   }
@@ -85,20 +86,19 @@ class AdhanBoxAPI {
       if (response.statusCode == 200) {
         final decoded = jsonDecode(response.body);
         final map = _asMap(decoded);
-        if (map != null) {
-          final normalized = {
-            'times': {
-              'fajr': map['fajr']?.toString() ?? '--:--',
-              'dhuhr': map['dhuhr']?.toString() ?? '--:--',
-              'asr': map['asr']?.toString() ?? '--:--',
-              'maghreb': (map['maghreb'] ?? map['maghrib'])?.toString() ?? '--:--',
-              'isha': map['isha']?.toString() ?? '--:--',
-            },
-            'next_index': map['next_index'],
-            'date': DateTime.now().toIso8601String().split('T').first,
-          };
-          return PrayerTimes.fromJson(normalized);
-        }
+        if (map == null) throw const FormatException('Invalid JSON: expected object');
+        final normalized = {
+          'times': {
+            'fajr': map['fajr']?.toString() ?? '--:--',
+            'dhuhr': map['dhuhr']?.toString() ?? '--:--',
+            'asr': map['asr']?.toString() ?? '--:--',
+            'maghreb': (map['maghreb'] ?? map['maghrib'])?.toString() ?? '--:--',
+            'isha': map['isha']?.toString() ?? '--:--',
+          },
+          'next_index': map['next_index'],
+          'date': DateTime.now().toIso8601String().split('T').first,
+        };
+        return PrayerTimes.fromJson(normalized);
       }
 
       throw Exception('Failed to load prayer times: ${response.statusCode}');
@@ -145,7 +145,7 @@ class AdhanBoxAPI {
       final response = await http
           .post(
             Uri.parse('$baseUrl/api/prayer/config'),
-            headers: {'Content-Type': 'application/json'},
+            headers: _authHeaders,
             body: jsonEncode({
               'prayer_index': prayerIndex,
               'enabled': enabled,
@@ -168,7 +168,7 @@ class AdhanBoxAPI {
       final response = await http
           .post(
             Uri.parse('$baseUrl/api/prayer/test'),
-            headers: {'Content-Type': 'application/json'},
+            headers: _authHeaders,
             body: jsonEncode({
               'prayer_index': prayerIndex,
               'track': track,
@@ -182,6 +182,12 @@ class AdhanBoxAPI {
     } catch (e) {
       throw Exception('API Error: $e');
     }
+  }
+
+  Future<void> stopAudio() async {
+    try {
+      await http.get(Uri.parse('$baseUrl/stopplay')).timeout(timeout);
+    } catch (_) {}
   }
 
   // ===== MAWAQIT =====
@@ -277,7 +283,7 @@ class AdhanBoxAPI {
       final response = await http
           .post(
             Uri.parse('$baseUrl/api/calculation/config'),
-            headers: {'Content-Type': 'application/json'},
+            headers: _authHeaders,
             body: jsonEncode(payload),
           )
           .timeout(timeout);
@@ -336,7 +342,7 @@ class AdhanBoxAPI {
       final response = await http
           .post(
             Uri.parse('$baseUrl/set_location'),
-            headers: {'Content-Type': 'application/json'},
+            headers: _authHeaders,
             body: jsonEncode({
               'lat': lat,
               'lon': lon,
@@ -374,7 +380,7 @@ class AdhanBoxAPI {
       final response = await http
           .post(
             Uri.parse('$baseUrl/set_tz'),
-            headers: {'Content-Type': 'application/json'},
+            headers: _authHeaders,
             body: jsonEncode({'tz_min': offsetMin}),
           )
           .timeout(timeout);
@@ -396,7 +402,7 @@ class AdhanBoxAPI {
       final response = await http
           .post(
             Uri.parse('$baseUrl/set_rtc_manual'),
-            headers: {'Content-Type': 'application/json'},
+            headers: _authHeaders,
             body: jsonEncode({
               'date': dateStr,
               'time': timeStr,
@@ -407,9 +413,7 @@ class AdhanBoxAPI {
       if (response.statusCode != 200) {
         throw Exception('Failed to set RTC time: ${response.statusCode}');
       }
-      print('DEBUG: ✓ RTC synchronisé avec l\'heure du smartphone: $dateStr $timeStr');
     } catch (e) {
-      print('DEBUG: ✗ Échec sync RTC: $e');
       throw Exception('API Error: $e');
     }
   }
@@ -433,7 +437,7 @@ class AdhanBoxAPI {
       final response = await http
           .post(
             Uri.parse('$baseUrl/api/led/scenario'),
-            headers: {'Content-Type': 'application/json'},
+            headers: _authHeaders,
             body: jsonEncode({'scenario': scenario}),
           )
           .timeout(timeout);
@@ -451,7 +455,7 @@ class AdhanBoxAPI {
       final response = await http
           .post(
             Uri.parse('$baseUrl/set_brightness'),
-            headers: {'Content-Type': 'application/json'},
+            headers: _authHeaders,
             body: jsonEncode({'bright': brightness}),
           )
           .timeout(timeout);
@@ -502,7 +506,7 @@ class AdhanBoxAPI {
       final response = await http
           .post(
             Uri.parse('$baseUrl/set_volume'),
-            headers: {'Content-Type': 'application/json'},
+            headers: _authHeaders,
             body: jsonEncode({'vol': volume}),
           )
           .timeout(timeout);
@@ -535,7 +539,7 @@ class AdhanBoxAPI {
       final response = await http
           .post(
             Uri.parse('$baseUrl/api/audio/volume'),
-            headers: {'Content-Type': 'application/json'},
+            headers: _authHeaders,
             body: jsonEncode({'level': level}),
           )
           .timeout(timeout);
@@ -610,17 +614,15 @@ class AdhanBoxAPI {
     }
   }
 
-  /// Scanner les réseaux WiFi disponibles (visibles par l'ESP32)
-  Future<Map<String, dynamic>> scanWifiNetworks() async {
+  Future<Map<String, dynamic>> checkWifiStatus() async {
     try {
       final response = await http
-          .get(Uri.parse('$baseUrl/api/wifi/scan'))
-          .timeout(const Duration(seconds: 15)); // Scan prend du temps
-
+          .get(Uri.parse('$baseUrl/api/wifi/status'))
+          .timeout(const Duration(seconds: 5));
       if (response.statusCode == 200) {
         return jsonDecode(response.body) as Map<String, dynamic>;
       }
-      throw Exception('Failed to scan WiFi networks: ${response.statusCode}');
+      throw Exception('${response.statusCode}');
     } catch (e) {
       throw Exception('API Error: $e');
     }
@@ -630,28 +632,90 @@ class AdhanBoxAPI {
     try {
       final response = await http
           .post(
-            Uri.parse('$baseUrl/api/wifi/connect'),
-            headers: {'Content-Type': 'application/json'},
-            body: jsonEncode({'ssid': ssid, 'password': password}),
+            Uri.parse('$baseUrl/connect_wifi'),
+            headers: _authHeaders,
+            body: jsonEncode({'ssid': ssid, 'pass': password}),
           )
-          .timeout(timeout);
+          .timeout(const Duration(seconds: 8));
 
-      if (response.statusCode != 200) {
-        // Fallback to legacy endpoint
-        final fallback = await http
-            .post(
-              Uri.parse('$baseUrl/connect_wifi'),
-              headers: {'Content-Type': 'application/json'},
-              body: jsonEncode({'ssid': ssid, 'pass': password}),
-            )
-            .timeout(const Duration(seconds: 30));
+      if (response.statusCode == 200) return; // already connected
 
-        if (fallback.statusCode != 200) {
-          throw Exception('Failed to connect WiFi: ${response.statusCode}');
+      if (response.statusCode == 202) {
+        // Async connect — poll until done
+        final deadline = DateTime.now().add(const Duration(seconds: 25));
+        while (DateTime.now().isBefore(deadline)) {
+          await Future.delayed(const Duration(seconds: 2));
+          try {
+            final status = await checkWifiStatus();
+            final st = status['status'] as String? ?? '';
+            if (st == 'connected') return;
+            if (st == 'failed') throw Exception('WiFi connection failed');
+          } catch (pollErr) {
+            // ESP may be switching networks; keep polling
+          }
         }
+        throw Exception('WiFi connection timed out');
       }
+
+      throw Exception('Failed to connect WiFi: ${response.statusCode}');
     } catch (e) {
       throw Exception('API Error: $e');
+    }
+  }
+
+  /// Returns device info including API token (unauthenticated bootstrap).
+  Future<Map<String, dynamic>> getDeviceInfo() async {
+    try {
+      final response = await http
+          .get(Uri.parse('$baseUrl/api/device/info'))
+          .timeout(const Duration(seconds: 5));
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body) as Map<String, dynamic>;
+      }
+      throw Exception('HTTP ${response.statusCode}');
+    } catch (e) {
+      throw Exception('API Error: $e');
+    }
+  }
+
+  Future<Map<String, dynamic>> getFirmwareVersion() async {
+    try {
+      final response = await http
+          .get(Uri.parse('$baseUrl/api/firmware/version'))
+          .timeout(timeout);
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body) as Map<String, dynamic>;
+      }
+      throw Exception('${response.statusCode}');
+    } catch (e) {
+      throw Exception('API Error: $e');
+    }
+  }
+
+  Future<void> uploadFirmware(List<int> bytes) async {
+    try {
+      final uri = Uri.parse('$baseUrl/ota/upload?token=${apiKey ?? ""}');
+      final request = http.MultipartRequest('POST', uri);
+      
+      request.files.add(http.MultipartFile.fromBytes(
+        'update',
+        bytes,
+        filename: 'update.bin',
+      ));
+      
+      final streamedResponse = await request.send().timeout(const Duration(minutes: 5));
+      final response = await http.Response.fromStream(streamedResponse);
+      
+      if (response.statusCode != 200) {
+        String msg = 'HTTP ${response.statusCode}';
+        try {
+          final d = jsonDecode(response.body);
+          if (d is Map && d['error'] != null) msg = d['error'].toString();
+        } catch (_) {}
+        throw Exception(msg);
+      }
+    } catch (e) {
+      throw Exception('Erreur de flashage : $e');
     }
   }
 }

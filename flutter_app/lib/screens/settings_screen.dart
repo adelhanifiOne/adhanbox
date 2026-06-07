@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:http/http.dart' as http;
 import '../providers/adhanbox_provider.dart';
 import '../services/location_service.dart';
 import '../services/wifi_service.dart';
@@ -85,6 +86,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final themeMode = ref.watch(themeModeProvider);
     final deviceIp = ref.watch(currentDeviceIpProvider) ?? '';
     final api = ref.read(adhanboxApiProvider);
+    final localVersionAsync = ref.watch(deviceFirmwareVersionProvider);
+    final latestVersionAsync = ref.watch(latestFirmwareVersionProvider);
 
     return Scaffold(
       body: CustomScrollView(
@@ -139,6 +142,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         ],
                       ),
                     ),
+                    if (deviceIp.isNotEmpty) ...[
+                      const Divider(height: 1, indent: 16, endIndent: 16),
+                      _FirmwareUpdateTile(
+                        localVersionAsync: localVersionAsync,
+                        latestVersionAsync: latestVersionAsync,
+                        onUpdatePressed: (latestVersion, url) => _runFirmwareUpdate(latestVersion, url),
+                      ),
+                    ],
                   ],
                 ).animate().fadeIn(delay: 50.ms).slideY(begin: 0.06),
 
@@ -429,6 +440,62 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       ),
     );
   }
+
+  Future<void> _runFirmwareUpdate(String latestVersion, String url) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text('Mise à jour v$latestVersion'),
+        content: Text(
+          'Voulez-vous télécharger et installer la version $latestVersion sur votre AdhanBox ?\n\n'
+          'Ne débranchez pas le boîtier pendant l\'opération. L\'appareil redémarrera automatiquement.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Annuler'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.emerald),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Démarrer'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    _showLoading('Téléchargement du logiciel…');
+    try {
+      final res = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 30));
+      if (res.statusCode != 200) {
+        throw Exception('Impossible de télécharger le fichier (HTTP ${res.statusCode})');
+      }
+      final bytes = res.bodyBytes;
+
+      if (!mounted) return;
+      Navigator.pop(context); // Close download dialog
+
+      _showLoading('Installation sur l\'AdhanBox (1 à 2 minutes)…');
+
+      final api = ref.read(adhanboxApiProvider);
+      if (api == null) throw Exception('Appareil déconnecté');
+      
+      await api.uploadFirmware(bytes);
+
+      if (mounted) {
+        Navigator.pop(context); // Close install loading dialog
+        _showSuccess('Mise à jour réussie ! Votre AdhanBox redémarre.');
+        ref.invalidate(deviceFirmwareVersionProvider);
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context); // Close loading dialog
+        _showError('Échec de la mise à jour : $e');
+      }
+    }
+  }
 }
 
 // ─── UI COMPONENTS ───
@@ -646,5 +713,151 @@ class _StatusBadge extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+class _FirmwareUpdateTile extends ConsumerWidget {
+  final AsyncValue<Map<String, dynamic>> localVersionAsync;
+  final AsyncValue<Map<String, dynamic>> latestVersionAsync;
+  final Function(String version, String url) onUpdatePressed;
+
+  const _FirmwareUpdateTile({
+    required this.localVersionAsync,
+    required this.latestVersionAsync,
+    required this.onUpdatePressed,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return localVersionAsync.when(
+      loading: () => const Padding(
+        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 16, height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.emerald),
+            ),
+            SizedBox(width: 12),
+            Text('Vérification du logiciel...', style: TextStyle(fontSize: 13)),
+          ],
+        ),
+      ),
+      error: (err, _) => Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          children: [
+            const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 18),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'Impossible de lire la version : $err',
+                style: const TextStyle(fontSize: 13, color: Colors.orange),
+              ),
+            ),
+          ],
+        ),
+      ),
+      data: (localData) {
+        final currentVer = localData['version']?.toString() ?? '1.0.0';
+        
+        return latestVersionAsync.when(
+          loading: () => Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Logiciel : v$currentVer', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+                const SizedBox(
+                  width: 14, height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 1.5, color: AppTheme.emerald),
+                ),
+              ],
+            ),
+          ),
+          error: (err, _) => Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Logiciel : v$currentVer', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+                Text(
+                  'Mise à jour indisponible',
+                  style: TextStyle(fontSize: 11, color: isDark ? Colors.grey[600] : Colors.grey[400]),
+                ),
+              ],
+            ),
+          ),
+          data: (latestData) {
+            final latestVer = latestData['version']?.toString() ?? '1.0.0';
+            final updateUrl = latestData['url']?.toString() ?? '';
+            
+            final hasUpdate = _isNewerVersion(currentVer, latestVer);
+            
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Logiciel : v$currentVer',
+                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                      ),
+                      if (hasUpdate)
+                        const Padding(
+                          padding: EdgeInsets.only(top: 2),
+                          child: Text(
+                            'Mise à jour disponible !',
+                            style: TextStyle(fontSize: 11, color: AppTheme.emerald, fontWeight: FontWeight.bold),
+                          ),
+                        )
+                      else
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: Text(
+                            'À jour',
+                            style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                          ),
+                        ),
+                    ],
+                  ),
+                  if (hasUpdate && updateUrl.isNotEmpty)
+                    TextButton.icon(
+                      style: TextButton.styleFrom(
+                        foregroundColor: Colors.white,
+                        backgroundColor: AppTheme.emerald,
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                      ),
+                      onPressed: () => onUpdatePressed(latestVer, updateUrl),
+                      icon: const Icon(Icons.system_update_alt_rounded, size: 14),
+                      label: Text('Installer v$latestVer', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  bool _isNewerVersion(String current, String latest) {
+    try {
+      final curParts = current.split('.').map(int.parse).toList();
+      final latParts = latest.split('.').map(int.parse).toList();
+      for (int i = 0; i < 3; i++) {
+        final curV = i < curParts.length ? curParts[i] : 0;
+        final latV = i < latParts.length ? latParts[i] : 0;
+        if (latV > curV) return true;
+        if (curV > latV) return false;
+      }
+    } catch (_) {}
+    return false;
   }
 }

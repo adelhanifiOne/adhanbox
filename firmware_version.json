@@ -1,0 +1,5 @@
+{
+  "version": "1.4.0",
+  "url": "https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/build_temp/adhanbox.ino.bin",
+  "changelog": "Initial public release with Mawaqit sync fix and per-prayer volume control."
+}

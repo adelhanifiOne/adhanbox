@@ -4,14 +4,21 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:http/http.dart' as http;
 import '../services/adhanbox_api.dart';
 import '../services/esp32_discovery_service.dart';
 import '../models/prayer_time.dart';
 
-// Provider pour l'instance API
+/// Stocke le token API récupéré depuis le device après la première connexion.
+final adhanboxApiKeyProvider = StateProvider<String?>((ref) => null);
+
+/// Provider pour l'instance API — inclut la clé d'auth si disponible.
 final adhanboxApiProvider = Provider<AdhanBoxAPI?>((ref) {
   final deviceIp = ref.watch(currentDeviceIpProvider);
-  return deviceIp != null ? AdhanBoxAPI(baseUrl: 'http://$deviceIp') : null;
+  final apiKey = ref.watch(adhanboxApiKeyProvider);
+  return deviceIp != null
+      ? AdhanBoxAPI(baseUrl: 'http://$deviceIp', apiKey: apiKey)
+      : null;
 });
 
 class SavedDevice {
@@ -62,83 +69,88 @@ final currentDeviceIpProvider = StateProvider<String?>((ref) {
 final autoReconnectProvider = FutureProvider<String?>((ref) async {
   final prefs = await SharedPreferences.getInstance();
   final savedIp = prefs.getString('deviceIp');
-  
-  // Helper: synchroniser l'heure du RTC après connexion
-  Future<void> syncRtcTime(String deviceIp) async {
+
+  // Helper: charger le token API depuis prefs ou le device, et l'activer
+  Future<void> loadApiToken(String ip) async {
     try {
-      final api = AdhanBoxAPI(baseUrl: 'http://$deviceIp', timeout: const Duration(seconds: 5));
-      final now = DateTime.now();
-      await api.setRtcTime(now);
-      print('DEBUG: ✓ Heure RTC synchronisée automatiquement');
-    } catch (e) {
-      print('DEBUG: ✗ Échec sync RTC automatique: $e (peut être fait manuellement)');
-    }
+      String? token = prefs.getString('api_token_$ip');
+      if (token == null || token.isEmpty) {
+        final devApi = AdhanBoxAPI(baseUrl: 'http://$ip', timeout: const Duration(seconds: 3));
+        final info = await devApi.getDeviceInfo();
+        token = info['token'] as String?;
+        if (token != null && token.isNotEmpty) {
+          await prefs.setString('api_token_$ip', token);
+        }
+      }
+      if (token != null && token.isNotEmpty) {
+        ref.read(adhanboxApiKeyProvider.notifier).state = token;
+      }
+    } catch (_) {} // Token optionnel — ne bloque pas la connexion
   }
-  
-  // 1. Essayer l'IP sauvegardée D'ABORD (Sinon on casse le mode multi-appareil)
+
+  // Helper: synchroniser l'heure du RTC après connexion
+  Future<void> syncRtcTime(String ip) async {
+    try {
+      final token = prefs.getString('api_token_$ip');
+      final api = AdhanBoxAPI(
+        baseUrl: 'http://$ip',
+        timeout: const Duration(seconds: 5),
+        apiKey: token,
+      );
+      await api.setRtcTime(DateTime.now());
+    } catch (_) {}
+  }
+
+  // 1. Essayer l'IP sauvegardée D'ABORD
   if (savedIp != null && savedIp.isNotEmpty) {
-    print('DEBUG: Tentative de connexion à IP sélectionnée: $savedIp');
     try {
       final api = AdhanBoxAPI(baseUrl: 'http://$savedIp', timeout: const Duration(seconds: 3));
       await api.getStatus().timeout(const Duration(seconds: 3));
-      print('DEBUG: ✓ ESP32 accessible à $savedIp');
       ref.read(currentDeviceIpProvider.notifier).state = savedIp;
+      await loadApiToken(savedIp);
       await syncRtcTime(savedIp);
       return savedIp;
     } catch (e) {
-      print('DEBUG: ✗ IP $savedIp indisponible: $e');
-      // On conserve l'état sur l'IP pour éviter de rediriger vers l'écran d'accueil
+      if (kDebugMode) debugPrint('autoReconnect: $savedIp indisponible — $e');
       ref.read(currentDeviceIpProvider.notifier).state = savedIp;
       throw Exception('Appareil hors ligne');
     }
   }
 
-  // 2. Si aucune IP n'est sélectionnée, tenter adhanbox.local par défaut
-  print('DEBUG: Tentative de connexion via mDNS (adhanbox.local)...');
+  // 2. Tenter adhanbox.local par mDNS
   try {
     final api = AdhanBoxAPI(baseUrl: 'http://adhanbox.local', timeout: const Duration(seconds: 3));
     await api.getStatus().timeout(const Duration(seconds: 3));
-    print('DEBUG: ✓ ESP32 accessible via adhanbox.local');
     await prefs.setString('deviceIp', 'adhanbox.local');
-    
-    final currList = prefs.getString('savedDevices');
-    if (currList == null) {
-       final newDev = SavedDevice(name: 'AdhanBox', ip: 'adhanbox.local');
-       await prefs.setString('savedDevices', jsonEncode([newDev.toJson()]));
+    if (prefs.getString('savedDevices') == null) {
+      await prefs.setString('savedDevices',
+          jsonEncode([SavedDevice(name: 'AdhanBox', ip: 'adhanbox.local').toJson()]));
     }
-    
     ref.read(currentDeviceIpProvider.notifier).state = 'adhanbox.local';
+    await loadApiToken('adhanbox.local');
     await syncRtcTime('adhanbox.local');
     return 'adhanbox.local';
-  } catch (e) {
-    print('DEBUG: ✗ mDNS échoué: $e');
-  }
+  } catch (_) {}
 
-  // 3. Essayer scan réseau en dernier recours
-  print('DEBUG: Recherche sur le réseau local...');
+  // 3. Scan réseau en dernier recours
   try {
     final discovery = ESP32DiscoveryService();
-    final device = await discovery.findAdhanBox(timeout: const Duration(seconds: 10)).timeout(
-      const Duration(seconds: 12),
-      onTimeout: () => null,
-    );
-
+    final device = await discovery
+        .findAdhanBox(timeout: const Duration(seconds: 10))
+        .timeout(const Duration(seconds: 12), onTimeout: () => null);
     if (device != null) {
-      print('DEBUG: ✓ ESP32 trouvé à ${device.host}');
       await prefs.setString('deviceIp', device.host);
-      
-      final listStr = prefs.getString('savedDevices');
-      if (listStr == null) {
-          final d = SavedDevice(name: 'AdhanBox', ip: device.host);
-          await prefs.setString('savedDevices', jsonEncode([d.toJson()]));
+      if (prefs.getString('savedDevices') == null) {
+        await prefs.setString('savedDevices',
+            jsonEncode([SavedDevice(name: 'AdhanBox', ip: device.host).toJson()]));
       }
-      
       ref.read(currentDeviceIpProvider.notifier).state = device.host;
+      await loadApiToken(device.host);
       await syncRtcTime(device.host);
       return device.host;
     }
   } catch (e) {
-    print('DEBUG: ✗ Découverte réseau échouée: $e');
+    if (kDebugMode) debugPrint('autoReconnect: scan échoué — $e');
   }
 
   return null;
@@ -344,4 +356,22 @@ final phoneLocationProvider = FutureProvider<Map<String, dynamic>>((ref) async {
 // Provider pour les paramètres persistés
 final prefsProvider = FutureProvider<SharedPreferences>((ref) async {
   return SharedPreferences.getInstance();
+});
+
+// Provider pour récupérer la version locale de l'AdhanBox
+final deviceFirmwareVersionProvider = FutureProvider<Map<String, dynamic>>((ref) async {
+  final api = ref.watch(adhanboxApiProvider);
+  if (api == null) throw Exception('Aucun appareil connecté');
+  return await api.getFirmwareVersion();
+});
+
+// Provider pour récupérer la dernière version disponible en ligne
+final latestFirmwareVersionProvider = FutureProvider<Map<String, dynamic>>((ref) async {
+  final response = await http.get(Uri.parse(
+      'https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/firmware_version.json'))
+      .timeout(const Duration(seconds: 8));
+  if (response.statusCode == 200) {
+    return jsonDecode(response.body) as Map<String, dynamic>;
+  }
+  throw Exception('Impossible de vérifier les mises à jour');
 });
