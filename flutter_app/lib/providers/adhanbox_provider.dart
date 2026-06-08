@@ -362,7 +362,16 @@ final prefsProvider = FutureProvider<SharedPreferences>((ref) async {
 final deviceFirmwareVersionProvider = FutureProvider<Map<String, dynamic>>((ref) async {
   final api = ref.watch(adhanboxApiProvider);
   if (api == null) throw Exception('Aucun appareil connecté');
-  return await api.getFirmwareVersion();
+  try {
+    return await api.getFirmwareVersion().timeout(const Duration(seconds: 4));
+  } catch (e) {
+    // Si l'ancien firmware ne supporte pas cette route ou qu'il y a un timeout,
+    // on renvoie une version par défaut 1.0.0 pour permettre le flashage.
+    return {
+      'version': '1.0.0',
+      'isLegacy': true,
+    };
+  }
 });
 
 // Provider pour récupérer la dernière version disponible en ligne

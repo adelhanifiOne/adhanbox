@@ -762,6 +762,8 @@ class _FirmwareUpdateTile extends ConsumerWidget {
       ),
       data: (localData) {
         final currentVer = localData['version']?.toString() ?? '1.0.0';
+        final isLegacy = localData['isLegacy'] == true;
+        final displayVer = isLegacy ? 'Ancienne version' : 'v$currentVer';
         
         return latestVersionAsync.when(
           loading: () => Padding(
@@ -769,7 +771,7 @@ class _FirmwareUpdateTile extends ConsumerWidget {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('Logiciel : v$currentVer', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+                Text('Logiciel : $displayVer', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
                 const SizedBox(
                   width: 14, height: 14,
                   child: CircularProgressIndicator(strokeWidth: 1.5, color: AppTheme.emerald),
@@ -782,7 +784,7 @@ class _FirmwareUpdateTile extends ConsumerWidget {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('Logiciel : v$currentVer', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+                Text('Logiciel : $displayVer', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
                 Text(
                   'Mise à jour indisponible',
                   style: TextStyle(fontSize: 11, color: isDark ? Colors.grey[600] : Colors.grey[400]),
@@ -805,7 +807,7 @@ class _FirmwareUpdateTile extends ConsumerWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Logiciel : v$currentVer',
+                        'Logiciel : $displayVer',
                         style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
                       ),
                       if (hasUpdate)
