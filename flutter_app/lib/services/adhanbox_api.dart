@@ -697,6 +697,10 @@ class AdhanBoxAPI {
       final uri = Uri.parse('$baseUrl/ota/upload?token=${apiKey ?? ""}');
       final request = http.MultipartRequest('POST', uri);
       
+      if (apiKey != null && apiKey!.isNotEmpty) {
+        request.headers['X-API-Key'] = apiKey!;
+      }
+      
       request.files.add(http.MultipartFile.fromBytes(
         'update',
         bytes,
