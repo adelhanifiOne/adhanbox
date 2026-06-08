@@ -367,8 +367,9 @@ final deviceFirmwareVersionProvider = FutureProvider<Map<String, dynamic>>((ref)
 
 // Provider pour récupérer la dernière version disponible en ligne
 final latestFirmwareVersionProvider = FutureProvider<Map<String, dynamic>>((ref) async {
+  final timestamp = DateTime.now().millisecondsSinceEpoch;
   final response = await http.get(Uri.parse(
-      'https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/firmware_version.json'))
+      'https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/firmware_version.json?t=$timestamp'))
       .timeout(const Duration(seconds: 8));
   if (response.statusCode == 200) {
     return jsonDecode(response.body) as Map<String, dynamic>;
