@@ -156,7 +156,9 @@ def main():
     # 6. Git commit et push
     print("\nEnvoi de la mise à jour sur GitHub...")
     try:
-        subprocess.run(['git', 'add', 'build_temp/adhanbox.ino.bin', 'firmware_version.json', ino_path], check=True)
+        # On force l'ajout du fichier binaire car *.bin est présent dans le .gitignore
+        subprocess.run(['git', 'add', '-f', 'build_temp/adhanbox.ino.bin'], check=True)
+        subprocess.run(['git', 'add', 'firmware_version.json', ino_path], check=True)
         subprocess.run(['git', 'commit', '-m', f'Release firmware v{new_ver}'], check=True)
         subprocess.run(['git', 'push', 'origin', 'main'], check=True)
         print("\n[SUCCÈS] Code source et binaire poussés sur GitHub !")
