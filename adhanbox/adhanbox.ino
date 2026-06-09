@@ -1658,7 +1658,7 @@ void handleOtaUploadComplete() {
     server.send(500, "application/json", "{\"ok\":false,\"error\":\"Update failed\"}");
   } else {
     server.send(200, "application/json", "{\"ok\":true,\"msg\":\"Firmware updated — rebooting\"}");
-    delay(200);
+    delay(2000);
     ESP.restart();
   }
 }

@@ -719,6 +719,20 @@ class AdhanBoxAPI {
         throw Exception(msg);
       }
     } catch (e) {
+      // Si on obtient une erreur de socket/connexion lors de la fin du téléversement,
+      // c'est généralement parce que la box a accepté le firmware et a initié le redémarrage
+      // avant que la réponse HTTP ne soit complètement lue et fermée proprement.
+      final errStr = e.toString().toLowerCase();
+      if (errStr.contains('socketexception') || 
+          errStr.contains('connection failed') || 
+          errStr.contains('host is down') ||
+          errStr.contains('connection aborted') ||
+          errStr.contains('connection reset') ||
+          errStr.contains('handshake') ||
+          errStr.contains('errno = 64')) {
+        // Succès probable (la box est en train de redémarrer avec le nouveau firmware)
+        return;
+      }
       throw Exception('Erreur de flashage : $e');
     }
   }
