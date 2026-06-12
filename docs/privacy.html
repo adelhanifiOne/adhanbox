@@ -4,26 +4,30 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Politique de Confidentialité — AdhanBox</title>
-  <style>
-    @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@600;700&family=Inter:wght@300;400;500;600&display=swap');
+  <meta name="description" content="Politique de confidentialité de l'application AdhanBox : aucune donnée personnelle collectée, tout reste sur votre réseau local.">
+  <meta name="theme-color" content="#0C5B45">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230C5B45'/%3E%3Cpath d='M32 12c2 7 7 11 14 13v21a2 2 0 0 1-2 2H20a2 2 0 0 1-2-2V25c7-2 12-6 14-13z' fill='%23F7EEDC'/%3E%3Ccircle cx='32' cy='33' r='6' fill='%230C5B45'/%3E%3C/svg%3E">
 
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <style>
     :root {
-      --emerald: #10B981;
-      --emerald-dark: #059669;
-      --emerald-dim: rgba(16,185,129,0.1);
-      --gold: #F59E0B;
-      --bg: #0F172A;
-      --card: #1A2535;
-      --border: #2D3F55;
-      --text: #F1F5F9;
-      --text-muted: #94A3B8;
+      --ivory: #FAF6EF;
+      --paper: #FFFFFF;
+      --ink: #15251F;
+      --muted: #5D6B63;
+      --emerald: #0C5B45;
+      --gold-deep: #96690F;
+      --line: #E6DECF;
     }
 
-    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
 
     body {
-      background: var(--bg);
-      color: var(--text);
+      background: var(--ivory);
+      color: var(--ink);
       font-family: 'Inter', system-ui, sans-serif;
       line-height: 1.7;
       padding: 3rem 1.5rem;
@@ -32,76 +36,16 @@
     .container {
       max-width: 760px;
       margin: 0 auto;
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: 1.5rem;
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 24px;
       padding: 3rem;
-      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4);
+      box-shadow: 0 24px 60px rgba(21, 37, 31, 0.10);
     }
 
     @media (max-width: 600px) {
       body { padding: 1.5rem 0.75rem; }
       .container { padding: 1.75rem; }
-    }
-
-    .header {
-      border-bottom: 1px solid var(--border);
-      padding-bottom: 2rem;
-      margin-bottom: 2.5rem;
-      text-align: center;
-    }
-
-    .logo {
-      font-family: 'Poppins', sans-serif;
-      font-weight: 700;
-      font-size: 1.8rem;
-      background: linear-gradient(135deg, var(--emerald), var(--gold));
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-      margin-bottom: 0.5rem;
-    }
-
-    h1 {
-      font-family: 'Poppins', sans-serif;
-      font-size: 1.6rem;
-      font-weight: 700;
-      color: #FFF;
-      margin-bottom: 0.5rem;
-    }
-
-    .update-date {
-      font-size: 0.85rem;
-      color: var(--text-muted);
-    }
-
-    h2 {
-      font-family: 'Poppins', sans-serif;
-      font-size: 1.2rem;
-      font-weight: 600;
-      color: var(--emerald);
-      margin: 2rem 0 1rem 0;
-    }
-
-    p {
-      color: var(--text-muted);
-      margin-bottom: 1.25rem;
-      font-size: 0.95rem;
-    }
-
-    ul {
-      margin-bottom: 1.25rem;
-      padding-left: 1.5rem;
-      color: var(--text-muted);
-      font-size: 0.95rem;
-    }
-
-    li {
-      margin-bottom: 0.5rem;
-    }
-
-    strong {
-      color: #FFF;
     }
 
     .back-link {
@@ -113,29 +57,63 @@
       font-weight: 600;
       font-size: 0.9rem;
       margin-bottom: 1.5rem;
-      transition: color 0.2s;
+    }
+    .back-link:hover { text-decoration: underline; }
+
+    .header {
+      border-bottom: 1px solid var(--line);
+      padding-bottom: 2rem;
+      margin-bottom: 2.5rem;
+      text-align: center;
     }
 
-    .back-link:hover {
-      color: var(--emerald-dark);
+    .logo {
+      font-family: 'Fraunces', Georgia, serif;
+      font-weight: 700;
+      font-size: 1.8rem;
+      color: var(--emerald);
+      margin-bottom: 0.5rem;
     }
+
+    h1 {
+      font-family: 'Fraunces', Georgia, serif;
+      font-size: 1.6rem;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+    }
+
+    .update-date {
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+
+    h2 {
+      font-family: 'Fraunces', Georgia, serif;
+      font-size: 1.2rem;
+      font-weight: 600;
+      color: var(--emerald);
+      margin: 2rem 0 0.75rem;
+    }
+
+    p, li { color: var(--muted); margin-bottom: 0.75rem; font-size: 0.96rem; }
+    strong { color: var(--ink); }
+    ul { padding-left: 1.3rem; }
+    li { margin-bottom: 0.6rem; }
 
     footer {
       margin-top: 3rem;
       padding-top: 1.5rem;
-      border-top: 1px solid var(--border);
+      border-top: 1px solid var(--line);
       text-align: center;
       font-size: 0.8rem;
-      color: var(--text-muted);
+      color: var(--muted);
     }
   </style>
 </head>
 <body>
 
   <div class="container">
-    <a href="index.html" class="back-link">
-      ← Retour au site
-    </a>
+    <a href="index.html" class="back-link">← Retour au site</a>
 
     <div class="header">
       <div class="logo">AdhanBox</div>
@@ -144,18 +122,18 @@
     </div>
 
     <p>
-      La présente politique de confidentialité définit et vous informe de la manière dont l'application 
+      La présente politique de confidentialité définit et vous informe de la manière dont l'application
       <strong>AdhanBox</strong> utilise et protège les informations que vous nous transmettez lorsque vous l'utilisez.
     </p>
 
     <h2>1. Collecte et stockage des données</h2>
     <p>
-      L'application compagnon <strong>AdhanBox</strong> a été conçue dans le respect de la vie privée. 
+      L'application compagnon <strong>AdhanBox</strong> a été conçue dans le respect de la vie privée.
       <strong>Aucune donnée personnelle n'est collectée, stockée sur des serveurs distants ou partagée avec des tiers.</strong>
     </p>
     <p>
-      Toutes les configurations (adresses IP locales, clés API de géolocalisation et préférences) sont stockées 
-      <strong>localement sur votre téléphone</strong> (via les préférences de l'application) et sur votre appareil 
+      Toutes les configurations (adresses IP locales, clés API de géolocalisation et préférences) sont stockées
+      <strong>localement sur votre téléphone</strong> (via les préférences de l'application) et sur votre appareil
       physique <strong>AdhanBox (ESP32)</strong> présent sur votre réseau local.
     </p>
 
@@ -165,36 +143,36 @@
     </p>
     <ul>
       <li>
-        <strong>Localisation GPS (Location)</strong> : Utilisée exclusivement pour calculer précisément les horaires de prière 
-        locaux et pour scanner les réseaux WiFi environnants ou les appareils Bluetooth. Les données de position ne quittent jamais 
+        <strong>Localisation GPS (Location)</strong> : Utilisée exclusivement pour calculer précisément les horaires de prière
+        locaux et pour scanner les réseaux WiFi environnants ou les appareils Bluetooth. Les données de position ne quittent jamais
         votre réseau local et sont transmises directement à l'appareil AdhanBox.
       </li>
       <li>
-        <strong>Bluetooth / Bluetooth LE</strong> : Requis pour détecter, associer et configurer les paramètres de connexion 
+        <strong>Bluetooth / Bluetooth LE</strong> : Requis pour détecter, associer et configurer les paramètres de connexion
         WiFi de l'appareil AdhanBox présent à proximité de vous.
       </li>
       <li>
-        <strong>État du réseau (WiFi & Réseau)</strong> : Utilisé pour détecter les changements de connectivité et communiquer 
+        <strong>État du réseau (WiFi &amp; Réseau)</strong> : Utilisé pour détecter les changements de connectivité et communiquer
         avec le boîtier AdhanBox via le réseau WiFi local de votre domicile.
       </li>
     </ul>
 
     <h2>3. Partage des données</h2>
     <p>
-      N'ayant accès à aucune de vos données personnelles et ne disposant pas de base de données cloud, 
+      N'ayant accès à aucune de vos données personnelles et ne disposant pas de base de données cloud,
       <strong>nous ne vendons, ne louons et ne partageons aucune information</strong> avec des tiers.
     </p>
 
     <h2>4. Droits des utilisateurs</h2>
     <p>
-      Conformément aux réglementations relatives à la protection des données (RGPD), puisque l'application ne stocke aucune donnée 
-      sur un serveur et ne requiert pas de création de compte, vous disposez d'un contrôle total : vous pouvez effacer toutes les 
+      Conformément aux réglementations relatives à la protection des données (RGPD), puisque l'application ne stocke aucune donnée
+      sur un serveur et ne requiert pas de création de compte, vous disposez d'un contrôle total : vous pouvez effacer toutes les
       données locales en désinstallant simplement l'application ou en vidant son cache depuis les réglages de votre téléphone.
     </p>
 
     <h2>5. Contact</h2>
     <p>
-      Pour toute question relative à cette politique de confidentialité ou au fonctionnement de l'application, 
+      Pour toute question relative à cette politique de confidentialité ou au fonctionnement de l'application,
       vous pouvez envoyer un e-mail à l'adresse suivante : <strong>contact@adhanbox.com</strong>.
     </p>
 
