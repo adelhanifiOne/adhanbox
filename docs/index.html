@@ -3,15 +3,15 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AdhanBox — Le boîtier d'adhan connecté, synchronisé avec votre mosquée</title>
-  <meta name="description" content="AdhanBox est un boîtier d'appel à la prière haut de gamme : châssis imprimé en 3D personnalisable, PCB sur-mesure, synchronisation en temps réel avec votre mosquée via Mawaqit, application mobile et lumière d'ambiance.">
+  <title>AdhanBox — L'adhan chez vous, comme à la mosquée</title>
+  <meta name="description" content="AdhanBox est un boîtier d'appel à la prière artisanal et connecté : synchronisé avec votre mosquée via Mawaqit ou autonome grâce à son calcul astronomique embarqué, il sonne l'adhan même sans Internet. Lumière d'ambiance, doua automatique, application mobile.">
   <meta name="theme-color" content="#0C5B45">
   <link rel="canonical" href="https://adelhanifione.github.io/adhanbox/">
 
   <!-- Open Graph -->
   <meta property="og:type" content="website">
-  <meta property="og:title" content="AdhanBox — L'appel à la prière connecté pour votre foyer">
-  <meta property="og:description" content="Boîtier d'adhan artisanal et connecté : synchronisé à la seconde près avec votre mosquée via Mawaqit, personnalisable en finitions et motifs, piloté depuis une application mobile.">
+  <meta property="og:title" content="AdhanBox — L'adhan chez vous, comme à la mosquée">
+  <meta property="og:description" content="Boîtier d'appel à la prière artisanal : synchronisé avec votre mosquée via Mawaqit, autonome hors-ligne, lumière d'ambiance et doua automatique après chaque adhan.">
   <meta property="og:locale" content="fr_FR">
 
   <!-- Favicon -->
@@ -34,7 +34,7 @@
     "@context": "https://schema.org",
     "@type": "Product",
     "name": "AdhanBox",
-    "description": "Boîtier d'appel à la prière connecté : châssis imprimé en 3D personnalisable, PCB sur-mesure, synchronisation Mawaqit en temps réel, application mobile compagnon.",
+    "description": "Boîtier d'appel à la prière connecté : synchronisation Mawaqit, calcul astronomique embarqué, lumière d'ambiance, doua automatique, application mobile compagnon.",
     "brand": { "@type": "Brand", "name": "AdhanBox" },
     "offers": {
       "@type": "AggregateOffer",
@@ -115,7 +115,6 @@
 
     a { color: var(--emerald); }
 
-    /* ─── Motif géométrique discret ─── */
     .pattern-bg {
       position: absolute;
       inset: 0;
@@ -126,9 +125,8 @@
       mask-image: linear-gradient(180deg, rgba(0,0,0,0.9), transparent 75%);
     }
 
-    /* ─── En-têtes de section ─── */
     .section-head {
-      max-width: 640px;
+      max-width: 660px;
       margin: 0 auto 3.5rem;
       text-align: center;
     }
@@ -153,7 +151,7 @@
       font-size: clamp(1.9rem, 4vw, 2.6rem);
       margin-bottom: 0.9rem;
     }
-    .section-head h2 em {
+    .section-head h2 em, .left-head h2 em {
       font-style: italic;
       color: var(--emerald);
     }
@@ -162,7 +160,6 @@
       font-size: 1.05rem;
     }
 
-    /* ─── Boutons ─── */
     .btn {
       display: inline-flex;
       align-items: center;
@@ -208,9 +205,7 @@
       transform: translateY(-2px);
     }
 
-    /* ═══════════════════════════════════════════════════════
-       HEADER
-       ═══════════════════════════════════════════════════════ */
+    /* ═══ HEADER ═══ */
     header {
       position: fixed;
       top: 0; left: 0; right: 0;
@@ -249,7 +244,6 @@
       place-items: center;
       flex-shrink: 0;
     }
-    .logo-mark svg { display: block; }
     .logo span { color: var(--emerald); }
 
     .nav-links {
@@ -296,9 +290,7 @@
       .nav-links .btn { margin-top: 0.5rem; }
     }
 
-    /* ═══════════════════════════════════════════════════════
-       HERO
-       ═══════════════════════════════════════════════════════ */
+    /* ═══ HERO ═══ */
     .hero {
       position: relative;
       padding: 11rem 0 5rem;
@@ -349,7 +341,7 @@
     .hero-text {
       color: var(--muted);
       font-size: 1.08rem;
-      max-width: 520px;
+      max-width: 540px;
       margin-bottom: 2rem;
     }
     .hero-actions {
@@ -373,7 +365,6 @@
     }
     .trust-row svg { color: var(--gold); flex-shrink: 0; }
 
-    /* Visuel produit du hero */
     .hero-visual { position: relative; }
     .product-stage {
       position: relative;
@@ -400,19 +391,19 @@
       width: min(280px, 70vw);
       aspect-ratio: 1;
       border-radius: 34px;
-      background: linear-gradient(150deg, #6B3A1E 0%, #4A2511 55%, #381B0B 100%);
+      background: linear-gradient(150deg, #8a5a32 0%, #6B3A1E 55%, #54290F 100%);
       box-shadow:
         inset 0 2px 4px rgba(255, 255, 255, 0.18),
-        inset 0 -6px 16px rgba(0, 0, 0, 0.35),
-        0 30px 50px rgba(40, 22, 8, 0.35);
+        inset 0 -6px 16px rgba(0, 0, 0, 0.3),
+        0 30px 50px rgba(40, 22, 8, 0.3);
       display: grid;
       place-items: center;
     }
     .device-mandala {
       width: 62%;
       aspect-ratio: 1;
-      color: #D8B45A;
-      filter: drop-shadow(0 0 14px rgba(216, 180, 90, 0.35));
+      color: #E4C982;
+      filter: drop-shadow(0 0 14px rgba(216, 180, 90, 0.3));
       animation: mandala-spin 60s linear infinite;
     }
     @keyframes mandala-spin {
@@ -423,12 +414,12 @@
       left: 12%; right: 12%; bottom: -8px;
       height: 16px;
       border-radius: 999px;
-      background: radial-gradient(ellipse at center, rgba(16, 185, 129, 0.85), rgba(16, 185, 129, 0) 70%);
+      background: radial-gradient(ellipse at center, rgba(56, 178, 172, 0.85), rgba(56, 178, 172, 0) 70%);
       filter: blur(6px);
-      animation: led-breathe 3.5s ease-in-out infinite;
+      animation: led-breathe 4s ease-in-out infinite;
     }
     @keyframes led-breathe {
-      0%, 100% { opacity: 0.45; }
+      0%, 100% { opacity: 0.4; }
       50% { opacity: 1; }
     }
     .hero-chip {
@@ -466,202 +457,365 @@
       .chip-sync { right: -0.4rem; }
     }
 
-    /* ═══════════════════════════════════════════════════════
-       CARACTÉRISTIQUES
-       ═══════════════════════════════════════════════════════ */
-    .features { background: var(--paper); border-block: 1px solid var(--line); }
-    .features-grid {
+    /* ═══ LE RITUEL (timeline) ═══ */
+    .ritual { background: var(--emerald-dark); color: #F2F7F4; }
+    .ritual .eyebrow { color: #D8B45A; }
+    .ritual .eyebrow::before, .ritual .eyebrow::after { background: #D8B45A; }
+    .ritual .section-head h2 { color: #FFF; }
+    .ritual .section-head h2 em { color: #7BC9A8; }
+    .ritual .section-head p { color: rgba(242, 247, 244, 0.7); }
+    .ritual-grid {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
       gap: 1.4rem;
     }
-    .feature-card {
+    .ritual-card {
+      position: relative;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: var(--radius);
+      padding: 2rem 1.8rem;
+    }
+    .ritual-step {
+      font-family: var(--font-display);
+      font-style: italic;
+      font-size: 0.95rem;
+      color: #D8B45A;
+      margin-bottom: 0.9rem;
+    }
+    .ritual-card h3 { font-size: 1.25rem; margin-bottom: 0.6rem; }
+    .ritual-card p { color: rgba(242, 247, 244, 0.72); font-size: 0.93rem; }
+    .ritual-visual {
+      height: 56px;
+      border-radius: var(--radius-sm);
+      margin-bottom: 1.4rem;
+      position: relative;
+      overflow: hidden;
+      background: rgba(0, 0, 0, 0.25);
+    }
+    .rv-light {
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(ellipse at 50% 120%, rgba(0, 150, 136, 0.8), transparent 70%);
+      animation: led-breathe 4s ease-in-out infinite;
+    }
+    .rv-sound {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+    }
+    .rv-sound i {
+      width: 4px;
+      border-radius: 2px;
+      background: #D8B45A;
+      animation: eq 1.2s ease-in-out infinite;
+    }
+    .rv-sound i:nth-child(1) { height: 14px; animation-delay: 0s; }
+    .rv-sound i:nth-child(2) { height: 28px; animation-delay: 0.15s; }
+    .rv-sound i:nth-child(3) { height: 20px; animation-delay: 0.3s; }
+    .rv-sound i:nth-child(4) { height: 32px; animation-delay: 0.45s; }
+    .rv-sound i:nth-child(5) { height: 16px; animation-delay: 0.6s; }
+    .rv-sound i:nth-child(6) { height: 26px; animation-delay: 0.75s; }
+    .rv-sound i:nth-child(7) { height: 12px; animation-delay: 0.9s; }
+    @keyframes eq {
+      0%, 100% { transform: scaleY(0.5); }
+      50% { transform: scaleY(1); }
+    }
+    .rv-duaa {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      font-family: var(--font-arabic);
+      font-size: 1.5rem;
+      color: #D8B45A;
+    }
+    @media (max-width: 880px) {
+      .ritual-grid { grid-template-columns: 1fr; max-width: 480px; margin: 0 auto; }
+    }
+
+    /* ═══ HORAIRES : DEUX MODES ═══ */
+    .modes-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.6rem;
+      max-width: 960px;
+      margin: 0 auto;
+    }
+    .mode-card {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      padding: 2.4rem 2.2rem;
+    }
+    .mode-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.74rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 0.35rem 0.9rem;
+      border-radius: 999px;
+      margin-bottom: 1.3rem;
+    }
+    .mode-tag.green { background: var(--emerald-soft); color: var(--emerald); }
+    .mode-tag.gold { background: var(--gold-soft); color: var(--gold-deep); }
+    .mode-card h3 { font-size: 1.4rem; margin-bottom: 0.7rem; }
+    .mode-card > p { color: var(--muted); font-size: 0.95rem; margin-bottom: 1.3rem; }
+    .mode-list { list-style: none; display: grid; gap: 0.7rem; }
+    .mode-list li {
+      display: flex;
+      gap: 0.6rem;
+      align-items: flex-start;
+      font-size: 0.91rem;
+      color: var(--muted);
+    }
+    .mode-list li strong { color: var(--ink); font-weight: 600; }
+    .mode-list svg { color: var(--emerald); flex-shrink: 0; margin-top: 4px; }
+    .modes-note {
+      max-width: 960px;
+      margin: 1.6rem auto 0;
+      background: var(--emerald-soft);
+      border: 1px solid rgba(12, 91, 69, 0.15);
+      border-radius: var(--radius-sm);
+      padding: 1rem 1.4rem;
+      font-size: 0.92rem;
+      color: var(--emerald);
+      display: flex;
+      gap: 0.7rem;
+      align-items: flex-start;
+    }
+    .modes-note svg { flex-shrink: 0; margin-top: 3px; }
+    @media (max-width: 820px) {
+      .modes-grid { grid-template-columns: 1fr; }
+    }
+
+    /* ═══ AMBIANCES LUMINEUSES ═══ */
+    .scenes { background: var(--paper); border-block: 1px solid var(--line); }
+    .scenes-layout {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4rem;
+      align-items: center;
+    }
+    .left-head .eyebrow { justify-content: flex-start; }
+    .left-head .eyebrow::before { display: none; }
+    .left-head h2 {
+      font-size: clamp(1.8rem, 3.6vw, 2.4rem);
+      margin-bottom: 0.9rem;
+    }
+    .left-head > p { color: var(--muted); font-size: 1.02rem; margin-bottom: 1.5rem; }
+    .scene-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.6rem;
+    }
+    .scene-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
       background: var(--ivory);
       border: 1px solid var(--line);
-      border-radius: var(--radius);
-      padding: 1.8rem;
-      transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+      border-radius: 999px;
+      padding: 0.45rem 1rem;
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: var(--muted);
     }
-    .feature-card:hover {
-      transform: translateY(-4px);
-      box-shadow: var(--shadow-md);
-      border-color: rgba(12, 91, 69, 0.25);
+    .scene-chip i {
+      width: 12px; height: 12px;
+      border-radius: 50%;
+      flex-shrink: 0;
     }
-    .feature-icon {
-      width: 46px; height: 46px;
-      border-radius: 13px;
+    .sc-prayer i { background: #00BFA5; animation: led-breathe 4s ease-in-out infinite; }
+    .sc-breath i { background: #4FC3F7; animation: led-breathe 4s ease-in-out infinite; }
+    .sc-candle i { background: #FFB74D; animation: flicker 0.8s ease-in-out infinite; }
+    .sc-hue i { background: linear-gradient(135deg, #F06292, #BA68C8, #4FC3F7); }
+    .sc-fade i { background: linear-gradient(90deg, #81C784, #FFD54F); }
+    .sc-fixed i { background: #9575CD; }
+    @keyframes flicker {
+      0%, 100% { opacity: 1; }
+      40% { opacity: 0.55; }
+      60% { opacity: 0.85; }
+    }
+    .button-note {
+      margin-top: 1.8rem;
+      display: flex;
+      gap: 0.9rem;
+      align-items: flex-start;
+      background: var(--ivory);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-sm);
+      padding: 1.1rem 1.3rem;
+    }
+    .button-note .b-icon {
+      width: 40px; height: 40px;
+      border-radius: 50%;
       background: var(--emerald-soft);
       color: var(--emerald);
       display: grid;
       place-items: center;
-      margin-bottom: 1.1rem;
+      flex-shrink: 0;
     }
-    .feature-card:nth-child(even) .feature-icon {
-      background: var(--gold-soft);
-      color: var(--gold-deep);
+    .button-note strong { display: block; font-size: 0.94rem; }
+    .button-note span { color: var(--muted); font-size: 0.87rem; }
+
+    .scenes-visual {
+      position: relative;
+      border-radius: 24px;
+      background: #0E1A16;
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow-lg);
+      padding: 2.6rem 2rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1.2rem;
     }
-    .feature-card h3 {
-      font-size: 1.12rem;
-      margin-bottom: 0.55rem;
-      font-family: var(--font-body);
-      font-weight: 700;
-      letter-spacing: 0;
+    .scene-row {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
     }
-    .feature-card p {
-      color: var(--muted);
-      font-size: 0.92rem;
+    .scene-row .label {
+      width: 96px;
+      font-size: 0.76rem;
+      font-weight: 600;
+      color: rgba(242, 247, 244, 0.6);
+      flex-shrink: 0;
+      text-align: right;
     }
-    @media (max-width: 880px) {
-      .features-grid { grid-template-columns: 1fr 1fr; }
+    .led-strip {
+      flex: 1;
+      display: flex;
+      gap: 6px;
     }
-    @media (max-width: 600px) {
-      .features-grid { grid-template-columns: 1fr; }
+    .led-strip i {
+      flex: 1;
+      aspect-ratio: 1;
+      max-width: 18px;
+      border-radius: 50%;
+      background: var(--led, #00BFA5);
+      box-shadow: 0 0 10px var(--led, #00BFA5);
+    }
+    .strip-prayer i { --led: #00BFA5; animation: led-breathe 4s ease-in-out infinite; }
+    .strip-breath i { --led: #4FC3F7; animation: led-breathe 4s ease-in-out infinite; }
+    .strip-candle i { --led: #FFB74D; animation: flicker 0.9s ease-in-out infinite; }
+    .strip-candle i:nth-child(odd) { animation-delay: 0.35s; }
+    .strip-candle i:nth-child(3n) { animation-delay: 0.6s; }
+    .strip-hue i { animation: hue-cycle 8s linear infinite; }
+    .strip-hue i:nth-child(2n) { animation-delay: -2s; }
+    .strip-hue i:nth-child(3n) { animation-delay: -4s; }
+    @keyframes hue-cycle {
+      0% { background: #F06292; box-shadow: 0 0 10px #F06292; }
+      33% { background: #BA68C8; box-shadow: 0 0 10px #BA68C8; }
+      66% { background: #4FC3F7; box-shadow: 0 0 10px #4FC3F7; }
+      100% { background: #F06292; box-shadow: 0 0 10px #F06292; }
+    }
+    @media (max-width: 980px) {
+      .scenes-layout { grid-template-columns: 1fr; gap: 2.5rem; }
+      .scene-row .label { width: 80px; }
     }
 
-    /* ═══════════════════════════════════════════════════════
-       COMMENT ÇA MARCHE
-       ═══════════════════════════════════════════════════════ */
-    .steps-grid {
+    /* ═══ AUDIO ═══ */
+    .audio-layout {
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 1.4rem;
-      counter-reset: step;
+      grid-template-columns: 0.95fr 1.05fr;
+      gap: 4rem;
+      align-items: center;
     }
-    .step-card {
-      position: relative;
+    .audio-visual {
       background: var(--paper);
       border: 1px solid var(--line);
-      border-radius: var(--radius);
-      padding: 2.2rem 1.8rem 1.8rem;
-      text-align: center;
+      border-radius: 24px;
+      box-shadow: var(--shadow-md);
+      padding: 1.8rem;
     }
-    .step-num {
-      width: 44px; height: 44px;
-      margin: 0 auto 1.1rem;
+    .audio-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: 0.95rem 1.1rem;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--line);
+      background: var(--ivory);
+      margin-bottom: 0.7rem;
+      font-size: 0.88rem;
+    }
+    .audio-row:last-child { margin-bottom: 0; }
+    .audio-row .p-name { font-weight: 600; display: flex; align-items: center; gap: 0.6rem; }
+    .audio-row .p-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+    .audio-row .p-track { color: var(--muted); font-size: 0.82rem; text-align: right; }
+    .audio-row .p-track b { color: var(--gold-deep); font-weight: 600; }
+    .feature-list {
+      list-style: none;
+      display: grid;
+      gap: 1.1rem;
+      margin-top: 1.6rem;
+    }
+    .feature-list li { display: flex; gap: 0.85rem; align-items: flex-start; }
+    .feature-list .f-icon {
+      width: 38px; height: 38px;
+      border-radius: 11px;
+      background: var(--gold-soft);
+      color: var(--gold-deep);
+      display: grid;
+      place-items: center;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+    .feature-list strong { display: block; font-size: 0.97rem; }
+    .feature-list span { color: var(--muted); font-size: 0.89rem; }
+    @media (max-width: 980px) {
+      .audio-layout { grid-template-columns: 1fr; gap: 2.5rem; }
+    }
+
+    /* ═══ INSTALLATION ═══ */
+    .install { background: var(--paper); border-block: 1px solid var(--line); }
+    .install-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1.3rem;
+    }
+    .install-card {
+      background: var(--ivory);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 1.8rem 1.5rem;
+      position: relative;
+    }
+    .install-num {
+      width: 40px; height: 40px;
       border-radius: 50%;
       background: var(--emerald);
       color: #FFF;
       font-family: var(--font-display);
-      font-size: 1.15rem;
+      font-size: 1.05rem;
       font-weight: 600;
       display: grid;
       place-items: center;
+      margin-bottom: 1.1rem;
     }
-    .step-card h3 {
-      font-size: 1.1rem;
+    .install-card h3 {
+      font-size: 1.02rem;
       font-family: var(--font-body);
       font-weight: 700;
       margin-bottom: 0.5rem;
     }
-    .step-card p { color: var(--muted); font-size: 0.92rem; }
-    @media (max-width: 880px) {
-      .steps-grid { grid-template-columns: 1fr; max-width: 460px; margin: 0 auto; }
-    }
-
-    /* ═══════════════════════════════════════════════════════
-       MAWAQIT
-       ═══════════════════════════════════════════════════════ */
-    .mawaqit { background: var(--emerald-dark); color: #F2F7F4; }
-    .mawaqit .eyebrow { color: #D8B45A; }
-    .mawaqit .eyebrow::before, .mawaqit .eyebrow::after { background: #D8B45A; }
-    .mawaqit-grid {
-      display: grid;
-      grid-template-columns: 1.05fr 0.95fr;
-      gap: 4rem;
-      align-items: center;
-    }
-    .mawaqit h2 {
-      font-size: clamp(1.8rem, 3.6vw, 2.4rem);
-      margin-bottom: 1.2rem;
-    }
-    .mawaqit h2 em { font-style: italic; color: #7BC9A8; }
-    .mawaqit p { color: rgba(242, 247, 244, 0.75); margin-bottom: 1rem; }
-    .mawaqit-points {
-      list-style: none;
-      margin-top: 1.6rem;
-      display: grid;
-      gap: 0.8rem;
-    }
-    .mawaqit-points li {
-      display: flex;
-      gap: 0.7rem;
-      align-items: flex-start;
-      font-size: 0.95rem;
-      color: rgba(242, 247, 244, 0.9);
-    }
-    .mawaqit-points svg { color: #7BC9A8; flex-shrink: 0; margin-top: 3px; }
-
-    .sync-card {
-      background: rgba(255, 255, 255, 0.05);
-      border: 1px solid rgba(255, 255, 255, 0.12);
-      border-radius: var(--radius);
-      padding: 1.8rem;
-      backdrop-filter: blur(6px);
-    }
-    .sync-node {
-      display: flex;
-      align-items: center;
-      gap: 1rem;
-      background: rgba(255, 255, 255, 0.06);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      border-radius: var(--radius-sm);
-      padding: 1rem 1.2rem;
-    }
-    .sync-node .n-icon {
-      width: 42px; height: 42px;
-      border-radius: 11px;
-      display: grid;
-      place-items: center;
-      flex-shrink: 0;
-      background: rgba(123, 201, 168, 0.15);
-      color: #7BC9A8;
-    }
-    .sync-node h4 { font-family: var(--font-body); font-size: 0.95rem; }
-    .sync-node p {
-      margin: 0;
-      font-family: ui-monospace, monospace;
-      font-size: 0.74rem;
-      color: rgba(242, 247, 244, 0.55);
-    }
-    .sync-link {
-      display: flex;
-      justify-content: center;
-      padding: 0.45rem 0;
-    }
-    .sync-link .line {
-      width: 2px; height: 38px;
-      background: linear-gradient(180deg, #7BC9A8, #D8B45A);
-      border-radius: 2px;
-      position: relative;
-      overflow: hidden;
-    }
-    .sync-link .line::after {
-      content: "";
-      position: absolute;
-      left: -2px; top: -8px;
-      width: 6px; height: 8px;
-      border-radius: 3px;
-      background: #FFF;
-      animation: sync-drop 1.8s ease-in-out infinite;
-    }
-    @keyframes sync-drop {
-      0% { top: -10px; opacity: 0; }
-      30% { opacity: 1; }
-      100% { top: 40px; opacity: 0; }
-    }
-    .sync-foot {
-      margin-top: 1.2rem;
-      text-align: center;
-      font-size: 0.8rem;
-      color: rgba(242, 247, 244, 0.55);
-    }
+    .install-card p { color: var(--muted); font-size: 0.88rem; }
     @media (max-width: 980px) {
-      .mawaqit-grid { grid-template-columns: 1fr; gap: 2.5rem; }
+      .install-grid { grid-template-columns: 1fr 1fr; }
+    }
+    @media (max-width: 600px) {
+      .install-grid { grid-template-columns: 1fr; }
     }
 
-    /* ═══════════════════════════════════════════════════════
-       CONFIGURATEUR
-       ═══════════════════════════════════════════════════════ */
+    /* ═══ CONFIGURATEUR ═══ */
     .configurator-panel {
       display: grid;
       grid-template-columns: 1.05fr 0.95fr;
@@ -680,10 +834,7 @@
       min-height: 380px;
       overflow: hidden;
     }
-    #canvas3d {
-      position: absolute;
-      inset: 0;
-    }
+    #canvas3d { position: absolute; inset: 0; }
     .viewport-hint {
       position: absolute;
       bottom: 0.9rem;
@@ -727,15 +878,17 @@
       border-color: var(--emerald);
       box-shadow: 0 0 0 3px rgba(12, 91, 69, 0.18);
     }
-    .sw-wood { background: linear-gradient(135deg, #8a5a32, #4A2511); }
-    .sw-black { background: linear-gradient(135deg, #2b2b30, #121215); }
-    .sw-marble { background: linear-gradient(135deg, #ffffff, #d6d9de); }
-    .sw-brass { background: linear-gradient(135deg, #e8c66b, #b8892f); }
-    .sw-gold { background: linear-gradient(135deg, #ffe066, #d4af37); }
-    .sw-silver { background: linear-gradient(135deg, #ffffff, #a6a6a6); }
-    .sw-copper { background: linear-gradient(135deg, #f0a07a, #b87333); }
-    .sw-mat-black { background: #1a1a1a; }
-    .sw-white { background: #fff; }
+    /* Finitions mates */
+    .sw-wood { background: #8B5A2B; }
+    .sw-anthracite { background: #3A3A40; }
+    .sw-chalk { background: #E8E6E1; }
+    .sw-sand { background: #C9A86A; }
+    /* Couleurs mates du motif */
+    .sw-m-gold { background: #C9A227; }
+    .sw-m-pearl { background: #C9CDD1; }
+    .sw-m-terra { background: #A9663F; }
+    .sw-m-black { background: #2A2A2A; }
+    .sw-m-white { background: #F2F0EB; }
     .control-note {
       font-size: 0.85rem;
       color: var(--muted);
@@ -765,9 +918,7 @@
       .config-viewport { min-height: 320px; }
     }
 
-    /* ═══════════════════════════════════════════════════════
-       APPLICATION MOBILE
-       ═══════════════════════════════════════════════════════ */
+    /* ═══ APPLICATION ═══ */
     .app-section { background: var(--paper); border-block: 1px solid var(--line); }
     .app-grid {
       display: grid;
@@ -775,34 +926,28 @@
       gap: 4rem;
       align-items: center;
     }
-    .app-grid .section-head {
-      text-align: left;
-      margin: 0 0 1.6rem;
-    }
-    .app-grid .eyebrow::before { display: none; }
-    .app-list {
-      list-style: none;
+    .app-tabs {
       display: grid;
-      gap: 1.1rem;
-      margin-bottom: 2rem;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+      margin: 1.8rem 0 2rem;
     }
-    .app-list li {
+    .app-tab {
+      background: var(--ivory);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-sm);
+      padding: 1.2rem 1.3rem;
+    }
+    .app-tab .t-head {
       display: flex;
-      gap: 0.85rem;
-      align-items: flex-start;
+      align-items: center;
+      gap: 0.6rem;
+      font-weight: 700;
+      font-size: 0.95rem;
+      margin-bottom: 0.4rem;
     }
-    .app-list .a-icon {
-      width: 38px; height: 38px;
-      border-radius: 11px;
-      background: var(--emerald-soft);
-      color: var(--emerald);
-      display: grid;
-      place-items: center;
-      flex-shrink: 0;
-      margin-top: 2px;
-    }
-    .app-list strong { display: block; font-size: 0.97rem; }
-    .app-list span { color: var(--muted); font-size: 0.89rem; }
+    .app-tab .t-head svg { color: var(--emerald); flex-shrink: 0; }
+    .app-tab p { color: var(--muted); font-size: 0.85rem; }
 
     .phone {
       width: min(290px, 80vw);
@@ -817,7 +962,7 @@
       border-radius: 30px;
       padding: 1.5rem 1.2rem;
       color: #EAF3EE;
-      min-height: 420px;
+      min-height: 430px;
     }
     .phone-notch {
       width: 90px; height: 22px;
@@ -856,10 +1001,7 @@
       margin-right: 0.5rem;
       animation: pulse 2.4s infinite;
     }
-    .phone-next {
-      text-align: center;
-      padding: 1.1rem 1rem;
-    }
+    .phone-next { text-align: center; padding: 1.1rem 1rem; }
     .phone-next .label {
       font-size: 0.68rem;
       letter-spacing: 0.12em;
@@ -873,51 +1015,94 @@
       line-height: 1.2;
     }
     .phone-next .prayer { color: #D8B45A; font-size: 0.85rem; font-weight: 600; }
+    .phone-tabbar {
+      display: flex;
+      justify-content: space-around;
+      padding-top: 0.9rem;
+      margin-top: 0.4rem;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+      font-size: 0.62rem;
+      color: rgba(234, 243, 238, 0.55);
+      text-align: center;
+    }
+    .phone-tabbar .active-tab { color: #7BC9A8; font-weight: 700; }
     @media (max-width: 980px) {
       .app-grid { grid-template-columns: 1fr; gap: 3rem; }
+      .app-tabs { grid-template-columns: 1fr; }
     }
 
-    /* ═══════════════════════════════════════════════════════
-       ÉCOSYSTÈME
-       ═══════════════════════════════════════════════════════ */
-    .eco-grid {
+    /* ═══ FIABILITÉ / TECHNIQUE ═══ */
+    .reliability-grid {
       display: grid;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: repeat(3, 1fr);
       gap: 1.4rem;
+      margin-bottom: 3rem;
     }
-    .eco-card {
+    .rel-card {
       background: var(--paper);
       border: 1px solid var(--line);
       border-radius: var(--radius);
-      padding: 2rem;
-      transition: transform 0.25s ease, box-shadow 0.25s ease;
+      padding: 1.8rem;
+      transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
     }
-    .eco-card:hover { transform: translateY(-4px); box-shadow: var(--shadow-md); }
-    .eco-card .feature-icon { margin-bottom: 1.2rem; }
-    .eco-card h3 {
-      font-size: 1.2rem;
-      margin-bottom: 0.6rem;
+    .rel-card:hover {
+      transform: translateY(-4px);
+      box-shadow: var(--shadow-md);
+      border-color: rgba(12, 91, 69, 0.25);
     }
-    .eco-card p { color: var(--muted); font-size: 0.94rem; }
-    .eco-tag {
-      display: inline-block;
-      margin-top: 1.2rem;
-      font-size: 0.75rem;
-      font-weight: 700;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
-      color: var(--gold-deep);
+    .rel-icon {
+      width: 46px; height: 46px;
+      border-radius: 13px;
+      background: var(--emerald-soft);
+      color: var(--emerald);
+      display: grid;
+      place-items: center;
+      margin-bottom: 1.1rem;
+    }
+    .rel-card:nth-child(even) .rel-icon {
       background: var(--gold-soft);
-      padding: 0.3rem 0.8rem;
-      border-radius: 999px;
+      color: var(--gold-deep);
     }
+    .rel-card h3 {
+      font-size: 1.08rem;
+      margin-bottom: 0.55rem;
+      font-family: var(--font-body);
+      font-weight: 700;
+      letter-spacing: 0;
+    }
+    .rel-card p { color: var(--muted); font-size: 0.9rem; }
     @media (max-width: 880px) {
-      .eco-grid { grid-template-columns: 1fr; }
+      .reliability-grid { grid-template-columns: 1fr 1fr; }
+    }
+    @media (max-width: 600px) {
+      .reliability-grid { grid-template-columns: 1fr; }
     }
 
-    /* ═══════════════════════════════════════════════════════
-       OFFRES
-       ═══════════════════════════════════════════════════════ */
+    .specs-table {
+      max-width: 860px;
+      margin: 0 auto;
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    .spec-row {
+      display: grid;
+      grid-template-columns: 220px 1fr;
+      gap: 1rem;
+      padding: 1rem 1.6rem;
+      font-size: 0.92rem;
+      border-bottom: 1px solid var(--line);
+    }
+    .spec-row:last-child { border-bottom: none; }
+    .spec-row:nth-child(odd) { background: var(--ivory); }
+    .spec-row dt { font-weight: 700; color: var(--ink); }
+    .spec-row dd { color: var(--muted); }
+    @media (max-width: 600px) {
+      .spec-row { grid-template-columns: 1fr; gap: 0.2rem; }
+    }
+
+    /* ═══ OFFRES ═══ */
     .pricing { background: var(--paper); border-block: 1px solid var(--line); }
     .pricing-grid {
       display: grid;
@@ -956,10 +1141,7 @@
       border-radius: 999px;
       white-space: nowrap;
     }
-    .price-card h3 {
-      font-size: 1.3rem;
-      margin-bottom: 0.4rem;
-    }
+    .price-card h3 { font-size: 1.3rem; margin-bottom: 0.4rem; }
     .price-sub { color: var(--muted); font-size: 0.9rem; margin-bottom: 1.4rem; }
     .price-card.featured .price-sub { color: rgba(242, 247, 244, 0.65); }
     .price-amount {
@@ -1002,9 +1184,7 @@
       .pricing-grid { grid-template-columns: 1fr; }
     }
 
-    /* ═══════════════════════════════════════════════════════
-       FAQ
-       ═══════════════════════════════════════════════════════ */
+    /* ═══ FAQ ═══ */
     .faq-list { max-width: 760px; margin: 0 auto; }
     .faq-item {
       background: var(--paper);
@@ -1046,9 +1226,7 @@
       font-size: 0.93rem;
     }
 
-    /* ═══════════════════════════════════════════════════════
-       CTA FINAL & FOOTER
-       ═══════════════════════════════════════════════════════ */
+    /* ═══ CTA & FOOTER ═══ */
     .cta-band {
       position: relative;
       background: var(--emerald-dark);
@@ -1089,9 +1267,7 @@
     }
     .cta-band .btn-outline:hover { border-color: #FFF; color: #FFF; }
 
-    footer {
-      padding: 4rem 0 2.5rem;
-    }
+    footer { padding: 4rem 0 2.5rem; }
     .footer-grid {
       display: grid;
       grid-template-columns: 1.4fr 1fr 1fr;
@@ -1146,14 +1322,13 @@
       transform: translateY(24px);
       transition: opacity 0.7s ease, transform 0.7s ease;
     }
-    .reveal.visible {
-      opacity: 1;
-      transform: none;
-    }
+    .reveal.visible { opacity: 1; transform: none; }
     @media (prefers-reduced-motion: reduce) {
       html { scroll-behavior: auto; }
       .reveal { opacity: 1; transform: none; transition: none; }
-      .device-mandala, .device-led, .sync-link .line::after { animation: none; }
+      .device-mandala, .device-led, .rv-light, .rv-sound i,
+      .strip-prayer i, .strip-breath i, .strip-candle i, .strip-hue i,
+      .sc-prayer i, .sc-breath i, .sc-candle i { animation: none; }
     }
   </style>
 </head>
@@ -1176,8 +1351,9 @@
       </button>
       <nav aria-label="Navigation principale">
         <ul class="nav-links" id="nav-links">
-          <li><a href="#caracteristiques">Le boîtier</a></li>
-          <li><a href="#mawaqit">Mawaqit</a></li>
+          <li><a href="#horaires">Horaires</a></li>
+          <li><a href="#ambiances">Lumière</a></li>
+          <li><a href="#audio">Adhan</a></li>
           <li><a href="#configurateur">Personnaliser</a></li>
           <li><a href="#application">Application</a></li>
           <li><a href="#faq">FAQ</a></li>
@@ -1194,12 +1370,13 @@
       <div class="hero-grid">
         <div>
           <div class="bismillah">بِسْمِ ٱللَّٰهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ</div>
-          <div class="hero-badge"><span class="dot"></span> Synchronisé en temps réel avec votre mosquée</div>
-          <h1>L'appel à la prière, <em>au cœur de votre foyer</em></h1>
+          <div class="hero-badge"><span class="dot"></span> Synchronisé avec votre mosquée · fonctionne aussi hors-ligne</div>
+          <h1>L'adhan chez vous, <em>comme à la mosquée</em></h1>
           <p class="hero-text">
-            AdhanBox est un boîtier artisanal et connecté : un châssis imprimé en 3D aux finitions
-            soignées, une électronique conçue sur-mesure, et l'adhan qui résonne chez vous à la
-            seconde exacte où il retentit dans votre mosquée, grâce à Mawaqit.
+            À l'heure de chaque prière, AdhanBox s'éveille : la lumière respire doucement,
+            l'adhan résonne — avec sa voix dédiée au Fajr — puis la doua conclut l'appel.
+            Synchronisé avec votre mosquée via Mawaqit, ou entièrement autonome grâce à
+            son calcul astronomique embarqué.
           </p>
           <div class="hero-actions">
             <a href="#configurateur" class="btn btn-primary">
@@ -1211,7 +1388,7 @@
           <div class="trust-row">
             <span>
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg>
-              Imprimé &amp; assemblé en France
+              Sonne même sans Internet
             </span>
             <span>
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg>
@@ -1219,14 +1396,14 @@
             </span>
             <span>
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg>
-              Alimentation USB-C
+              Mises à jour automatiques
             </span>
           </div>
         </div>
 
         <div class="hero-visual">
           <div class="product-stage">
-            <div class="device" id="hero-device">
+            <div class="device">
               <svg class="device-mandala" viewBox="0 0 200 200" fill="none" stroke="currentColor" aria-hidden="true">
                 <g stroke-width="1.4">
                   <circle cx="100" cy="100" r="88"/>
@@ -1244,173 +1421,293 @@
             <div class="chip-icon gold" aria-hidden="true">
               <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
             </div>
-            <div><strong>Maghreb · 21:42</strong><small>Prochaine prière</small></div>
+            <div><strong>Maghreb · 21:42</strong><small>Prochain appel programmé</small></div>
           </div>
           <div class="hero-chip chip-sync">
             <div class="chip-icon green" aria-hidden="true">
               <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38"/></svg>
             </div>
-            <div><strong>Mawaqit</strong><small>Synchronisé avec votre mosquée</small></div>
+            <div><strong>Mawaqit</strong><small>Horaires de votre mosquée</small></div>
           </div>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- ═══ CARACTÉRISTIQUES ═════════════════════════════════ -->
-  <section id="caracteristiques" class="features">
+  <!-- ═══ LE RITUEL ════════════════════════════════════════ -->
+  <section id="rituel" class="ritual">
     <div class="container">
       <div class="section-head reveal">
-        <div class="eyebrow">Le boîtier</div>
-        <h2>Un objet <em>pensé dans les moindres détails</em></h2>
-        <p>Du circuit imprimé au châssis, chaque élément a été conçu spécifiquement pour AdhanBox. Une pièce d'artisanat numérique, fiable et durable.</p>
+        <div class="eyebrow">Le moment de la prière</div>
+        <h2>Un appel complet, <em>pas une simple sonnerie</em></h2>
+        <p>AdhanBox ne se contente pas de jouer un fichier audio : il recrée le moment de l'appel, du premier rayon de lumière jusqu'à la doua.</p>
       </div>
 
-      <div class="features-grid">
-        <div class="feature-card reveal">
-          <div class="feature-icon" aria-hidden="true">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 2l9 5v10l-9 5-9-5V7z"/><path d="M12 22V12M3 7l9 5 9-5"/></svg>
-          </div>
-          <h3>Châssis imprimé en 3D</h3>
-          <p>Imprimé en haute qualité en France, avec des finitions au choix : bois, noir mat, blanc marbre ou laiton brossé. Un objet qui s'harmonise avec votre intérieur.</p>
+      <div class="ritual-grid">
+        <div class="ritual-card reveal">
+          <div class="ritual-visual" aria-hidden="true"><div class="rv-light"></div></div>
+          <div class="ritual-step">Premier temps</div>
+          <h3>La lumière s'éveille</h3>
+          <p>
+            Dès le déclenchement, le boîtier passe automatiquement en scène « Prière » :
+            une respiration lumineuse douce et apaisante qui annonce l'appel, visible
+            de loin sans être éblouissante.
+          </p>
         </div>
-
-        <div class="feature-card reveal">
-          <div class="feature-icon" aria-hidden="true">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M9 9h6v6H9zM4 10h-2M4 14h-2M22 10h-2M22 14h-2M10 4V2M14 4V2M10 22v-2M14 22v-2"/></svg>
+        <div class="ritual-card reveal">
+          <div class="ritual-visual" aria-hidden="true">
+            <div class="rv-sound"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
           </div>
-          <h3>PCB conçu sur-mesure</h3>
-          <p>Une carte électronique dessinée pour le projet : ESP32-S3, horloge RTC DS3231 haute précision et isolation audio soignée pour un son sans aucun parasite.</p>
+          <div class="ritual-step">Deuxième temps</div>
+          <h3>L'adhan résonne</h3>
+          <p>
+            La récitation que vous avez choisie est diffusée, au volume propre à chaque
+            prière — plus doux au Fajr, plus présent au Maghreb. Le Fajr dispose de sa
+            propre voix, distincte des autres prières.
+          </p>
         </div>
-
-        <div class="feature-card reveal">
-          <div class="feature-icon" aria-hidden="true">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M2 12a10 10 0 0 1 20 0M5 12a7 7 0 0 1 14 0M8.5 12a3.5 3.5 0 0 1 7 0"/><circle cx="12" cy="16" r="1.5" fill="currentColor"/></svg>
-          </div>
-          <h3>Synchronisation Mawaqit</h3>
-          <p>Connecté à votre Wi-Fi, le boîtier récupère chaque jour les horaires officiels de la mosquée de votre choix. L'adhan sonne à la seconde près, comme sur place.</p>
-        </div>
-
-        <div class="feature-card reveal">
-          <div class="feature-icon" aria-hidden="true">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4L7 17M17 7l1.4-1.4"/><circle cx="12" cy="12" r="4"/></svg>
-          </div>
-          <h3>Lumière d'ambiance</h3>
-          <p>Une bande LED s'illumine en douceur à l'approche de la prière. Couleurs statiques, cycles dynamiques, fondus : tout est réglable, jusqu'à la luminosité.</p>
-        </div>
-
-        <div class="feature-card reveal">
-          <div class="feature-icon" aria-hidden="true">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M11 5L6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a9.5 9.5 0 0 1 0 14"/></svg>
-          </div>
-          <h3>L'adhan de votre choix</h3>
-          <p>Plusieurs récitations préchargées sur carte MicroSD, avec une voix dédiée pour le Fajr et les douas. Ajoutez librement vos propres fichiers MP3.</p>
-        </div>
-
-        <div class="feature-card reveal">
-          <div class="feature-icon" aria-hidden="true">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M18.36 6.64A9 9 0 1 1 5.64 6.64"/><path d="M12 2v8"/></svg>
-          </div>
-          <h3>Autonome, même hors-ligne</h3>
-          <p>Grâce à son horloge RTC avec pile de sauvegarde, le boîtier continue de calculer les horaires et de sonner l'adhan même en cas de coupure du Wi-Fi.</p>
+        <div class="ritual-card reveal">
+          <div class="ritual-visual" aria-hidden="true"><div class="rv-duaa">دعاء</div></div>
+          <div class="ritual-step">Troisième temps</div>
+          <h3>La doua conclut</h3>
+          <p>
+            Après l'adhan, la doua est récitée automatiquement — activable ou non,
+            prière par prière. Puis la lumière revient en douceur à votre ambiance
+            habituelle.
+          </p>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- ═══ COMMENT ÇA MARCHE ════════════════════════════════ -->
-  <section id="fonctionnement">
+  <!-- ═══ HORAIRES : DEUX MODES ════════════════════════════ -->
+  <section id="horaires">
     <div class="container">
       <div class="section-head reveal">
-        <div class="eyebrow">Simplicité</div>
-        <h2>Prêt en <em>moins de deux minutes</em></h2>
-        <p>Aucune compétence technique requise. Le boîtier arrive configuré, l'application fait le reste.</p>
+        <div class="eyebrow">Horaires de prière</div>
+        <h2>Votre mosquée, <em>ou le ciel</em></h2>
+        <p>Deux façons de connaître l'heure exacte de la prière. AdhanBox utilise la meilleure des deux, automatiquement.</p>
       </div>
-      <div class="steps-grid">
-        <div class="step-card reveal">
-          <div class="step-num" aria-hidden="true">1</div>
-          <h3>Branchez</h3>
-          <p>Posez le boîtier où vous voulez et alimentez-le avec un simple câble USB-C, comme un chargeur de téléphone.</p>
-        </div>
-        <div class="step-card reveal">
-          <div class="step-num" aria-hidden="true">2</div>
-          <h3>Synchronisez</h3>
-          <p>Ouvrez l'application mobile : elle détecte le boîtier sur votre réseau, transmet votre position et vos réglages en quelques secondes.</p>
-        </div>
-        <div class="step-card reveal">
-          <div class="step-num" aria-hidden="true">3</div>
-          <h3>Vivez au rythme de la prière</h3>
-          <p>Le boîtier s'illumine à l'approche de chaque prière et fait résonner l'adhan, en parfaite harmonie avec votre mosquée.</p>
-        </div>
-      </div>
-    </div>
-  </section>
 
-  <!-- ═══ MAWAQIT ══════════════════════════════════════════ -->
-  <section id="mawaqit" class="mawaqit">
-    <div class="container">
-      <div class="mawaqit-grid">
-        <div class="reveal">
-          <div class="eyebrow">Précision absolue</div>
-          <h2>Connecté en temps réel <em>avec votre mosquée</em></h2>
+      <div class="modes-grid">
+        <div class="mode-card reveal">
+          <span class="mode-tag green">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38"/></svg>
+            Mode mosquée
+          </span>
+          <h3>Synchronisé via Mawaqit</h3>
           <p>
-            Les horloges d'adhan classiques calculent les horaires avec des formules astronomiques
-            génériques — d'où des décalages avec votre mosquée locale.
+            Choisissez votre mosquée parmi les milliers présentes sur la plateforme
+            Mawaqit : AdhanBox récupère ses horaires officiels et sonne au même
+            instant qu'elle.
           </p>
-          <p>
-            AdhanBox s'appuie sur la plateforme <strong>Mawaqit</strong>, utilisée par des milliers
-            de mosquées : le boîtier se synchronise quotidiennement en arrière-plan, et s'ajuste
-            automatiquement dès que les horaires de votre mosquée changent.
-          </p>
-          <ul class="mawaqit-points">
+          <ul class="mode-list">
             <li>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg>
-              Les horaires exacts de la mosquée de votre choix, pas une approximation
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg>
+              <span><strong>Recherche par GPS</strong> : l'application liste les mosquées proches de chez vous, triées par distance</span>
             </li>
             <li>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg>
-              Mise à jour quotidienne automatique, sans aucune intervention
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg>
+              <span><strong>Synchronisation quotidienne</strong> automatique, en arrière-plan</span>
             </li>
             <li>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg>
-              Mode de calcul astronomique local disponible en alternative, sans Internet
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg>
+              <span><strong>Ajustement fin</strong> : décalez chaque prière de quelques minutes si vous le souhaitez</span>
             </li>
           </ul>
         </div>
 
-        <div class="reveal">
-          <div class="sync-card" aria-hidden="true">
-            <div class="sync-node">
-              <div class="n-icon">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>
-              </div>
-              <div>
-                <h4>Plateforme Mawaqit</h4>
-                <p>Horaires officiels de votre mosquée</p>
-              </div>
-            </div>
-            <div class="sync-link"><div class="line"></div></div>
-            <div class="sync-node">
-              <div class="n-icon" style="background: rgba(216, 180, 90, 0.15); color: #D8B45A;">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 3c1.5 4 4.5 6.5 8 7.5V19a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-8.5C7.5 9.5 10.5 7 12 3z"/></svg>
-              </div>
-              <div>
-                <h4>Votre AdhanBox</h4>
-                <p>Synchronisation quotidienne · RTC DS3231</p>
-              </div>
-            </div>
-            <div class="sync-link"><div class="line"></div></div>
-            <div class="sync-node">
-              <div class="n-icon" style="background: rgba(255, 255, 255, 0.1); color: #F2F7F4;">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M11 5L6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/></svg>
-              </div>
-              <div>
-                <h4>L'adhan résonne</h4>
-                <p>À la seconde près, chez vous</p>
-              </div>
-            </div>
-            <div class="sync-foot">Synchronisation chiffrée via votre Wi-Fi résidentiel</div>
+        <div class="mode-card reveal">
+          <span class="mode-tag gold">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+            Mode autonome
+          </span>
+          <h3>Calcul astronomique embarqué</h3>
+          <p>
+            Pas de mosquée Mawaqit à proximité, ou pas d'Internet ? Le boîtier calcule
+            lui-même les horaires à partir de votre position, selon la méthode de
+            votre choix.
+          </p>
+          <ul class="mode-list">
+            <li>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg>
+              <span><strong>5 méthodes reconnues</strong> : MWL, ISNA, UOIF (12°), Égypte, Karachi — ou vos propres angles</span>
+            </li>
+            <li>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg>
+              <span><strong>École Chaféite ou Hanafite</strong> pour le calcul du Asr</span>
+            </li>
+            <li>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg>
+              <span><strong>100 % hors-ligne</strong> : le calcul se fait dans le boîtier, aucun serveur n'est nécessaire</span>
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="modes-note reveal">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v4M12 16h.01"/></svg>
+        <span>
+          Les deux modes travaillent ensemble : si la connexion à Mawaqit est interrompue,
+          le calcul embarqué prend automatiquement le relais — l'adhan ne manque jamais à l'appel.
+        </span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ AMBIANCES LUMINEUSES ═════════════════════════════ -->
+  <section id="ambiances" class="scenes">
+    <div class="container">
+      <div class="scenes-layout">
+        <div class="left-head reveal">
+          <div class="eyebrow">Lumière d'ambiance</div>
+          <h2>Treize ambiances, <em>une seule sérénité</em></h2>
+          <p>
+            En dehors des prières, AdhanBox est une veilleuse d'ambiance. Couleurs fixes,
+            teinte qui évolue lentement, fondu entre les couleurs, ou l'effet bougie dont
+            chaque LED scintille indépendamment, comme une vraie flamme.
+          </p>
+          <div class="scene-chips" aria-label="Aperçu des scènes lumineuses">
+            <span class="scene-chip sc-prayer"><i></i>Prière</span>
+            <span class="scene-chip sc-breath"><i></i>Respiration</span>
+            <span class="scene-chip sc-candle"><i></i>Bougie</span>
+            <span class="scene-chip sc-hue"><i></i>Teinte dynamique</span>
+            <span class="scene-chip sc-fade"><i></i>Fondu</span>
+            <span class="scene-chip sc-fixed"><i></i>6 couleurs fixes</span>
           </div>
+          <div class="button-note">
+            <div class="b-icon" aria-hidden="true">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.5"/></svg>
+            </div>
+            <div>
+              <strong>Un seul bouton, geste simple</strong>
+              <span>Un appui change d'ambiance lumineuse. Pendant l'adhan, le même appui arrête la diffusion. Pas de télécommande à chercher.</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="reveal">
+          <div class="scenes-visual" aria-hidden="true">
+            <div class="scene-row">
+              <span class="label">Prière</span>
+              <div class="led-strip strip-prayer"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+            </div>
+            <div class="scene-row">
+              <span class="label">Respiration</span>
+              <div class="led-strip strip-breath"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+            </div>
+            <div class="scene-row">
+              <span class="label">Bougie</span>
+              <div class="led-strip strip-candle"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+            </div>
+            <div class="scene-row">
+              <span class="label">Teinte</span>
+              <div class="led-strip strip-hue"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ AUDIO ════════════════════════════════════════════ -->
+  <section id="audio">
+    <div class="container">
+      <div class="audio-layout">
+        <div class="reveal">
+          <div class="audio-visual" aria-hidden="true">
+            <div class="audio-row">
+              <span class="p-name"><span class="p-dot" style="background:#818CF8;"></span>Fajr</span>
+              <span class="p-track">Adhan dédié Fajr · <b>doua activée</b> · vol. 12</span>
+            </div>
+            <div class="audio-row">
+              <span class="p-name"><span class="p-dot" style="background:#FBBB24;"></span>Dhuhr</span>
+              <span class="p-track">Adhan 4 · doua activée · vol. 20</span>
+            </div>
+            <div class="audio-row">
+              <span class="p-name"><span class="p-dot" style="background:#FF8C42;"></span>Asr</span>
+              <span class="p-track">Adhan 4 · doua activée · vol. 20</span>
+            </div>
+            <div class="audio-row">
+              <span class="p-name"><span class="p-dot" style="background:#EF4444;"></span>Maghreb</span>
+              <span class="p-track">Adhan 7 · doua activée · <b>vol. 26</b></span>
+            </div>
+            <div class="audio-row">
+              <span class="p-name"><span class="p-dot" style="background:#6366F1;"></span>Isha</span>
+              <span class="p-track">Adhan 4 · doua désactivée · vol. 18</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="left-head reveal">
+          <div class="eyebrow">Le son</div>
+          <h2>Chaque prière a <em>sa propre voix</em></h2>
+          <p>
+            L'adhan n'est pas un réglage unique : AdhanBox vous laisse composer
+            l'appel de chaque prière, indépendamment des autres.
+          </p>
+          <ul class="feature-list">
+            <li>
+              <div class="f-icon" aria-hidden="true">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 18V6l11-2v12"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg>
+              </div>
+              <div>
+                <strong>Une bibliothèque de récitations</strong>
+                <span>Plus de quinze adhans préchargés sur la carte MicroSD, écoutables depuis l'application avant de valider votre choix.</span>
+              </div>
+            </li>
+            <li>
+              <div class="f-icon" aria-hidden="true">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M11 5L6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/></svg>
+              </div>
+              <div>
+                <strong>Volume réglé prière par prière</strong>
+                <span>Un Fajr discret pour ne pas réveiller toute la maison, un Maghreb bien présent : chaque prière a son niveau sonore.</span>
+              </div>
+            </li>
+            <li>
+              <div class="f-icon" aria-hidden="true">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2v4M12 18v4M4.9 4.9l2.8 2.8M16.3 16.3l2.8 2.8M2 12h4M18 12h4M4.9 19.1l2.8-2.8M16.3 7.7l2.8-2.8"/></svg>
+              </div>
+              <div>
+                <strong>Vos propres fichiers</strong>
+                <span>La carte MicroSD est accessible : ajoutez la récitation de votre récitateur préféré en y déposant un simple fichier MP3.</span>
+              </div>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ INSTALLATION ═════════════════════════════════════ -->
+  <section id="installation" class="install">
+    <div class="container">
+      <div class="section-head reveal">
+        <div class="eyebrow">Installation</div>
+        <h2>Guidé <em>du premier branchement à l'appel</em></h2>
+        <p>L'application vous accompagne pas à pas. Aucune compétence technique nécessaire.</p>
+      </div>
+      <div class="install-grid">
+        <div class="install-card reveal">
+          <div class="install-num" aria-hidden="true">1</div>
+          <h3>Branchez</h3>
+          <p>Alimentez le boîtier en USB-C. Au premier démarrage, les LED clignotent en rouge : il est prêt à être appairé.</p>
+        </div>
+        <div class="install-card reveal">
+          <div class="install-num" aria-hidden="true">2</div>
+          <h3>Appairez en Bluetooth</h3>
+          <p>L'application détecte le boîtier à proximité et lui transmet votre réseau Wi-Fi en toute sécurité.</p>
+        </div>
+        <div class="install-card reveal">
+          <div class="install-num" aria-hidden="true">3</div>
+          <h3>Il rejoint votre réseau</h3>
+          <p>Le boîtier se connecte à votre Wi-Fi et devient accessible automatiquement — l'application le retrouve toute seule.</p>
+        </div>
+        <div class="install-card reveal">
+          <div class="install-num" aria-hidden="true">4</div>
+          <h3>Synchronisez</h3>
+          <p>Heure, fuseau horaire, position et mosquée : tout est réglé en un geste depuis votre téléphone. C'est prêt.</p>
         </div>
       </div>
     </div>
@@ -1422,7 +1719,7 @@
       <div class="section-head reveal">
         <div class="eyebrow">Atelier</div>
         <h2>Composez <em>votre AdhanBox</em></h2>
-        <p>Choisissez la finition du châssis, le motif de la façade et sa couleur. Faites tourner le modèle 3D pour l'admirer sous tous les angles.</p>
+        <p>Chaque boîtier est imprimé en 3D à la commande. Choisissez la finition du châssis, le motif de la façade et sa teinte — toutes les finitions sont mates, pensées pour révéler le relief des motifs.</p>
       </div>
 
       <div class="configurator-panel reveal">
@@ -1435,12 +1732,12 @@
           <div>
             <span class="control-label">Finition du châssis</span>
             <div class="swatches" role="group" aria-label="Finitions du châssis">
-              <button class="swatch sw-wood active" data-finish="wood" title="Bois précieux" aria-label="Bois précieux"></button>
-              <button class="swatch sw-black" data-finish="matte-black" title="Noir mat" aria-label="Noir mat"></button>
-              <button class="swatch sw-marble" data-finish="marble" title="Blanc marbre" aria-label="Blanc marbre"></button>
-              <button class="swatch sw-brass" data-finish="brass" title="Laiton brossé" aria-label="Laiton brossé"></button>
+              <button class="swatch sw-wood active" data-finish="wood" title="Bois noyer" aria-label="Bois noyer"></button>
+              <button class="swatch sw-anthracite" data-finish="anthracite" title="Anthracite" aria-label="Anthracite"></button>
+              <button class="swatch sw-chalk" data-finish="chalk" title="Blanc craie" aria-label="Blanc craie"></button>
+              <button class="swatch sw-sand" data-finish="sand" title="Sable doré" aria-label="Sable doré"></button>
             </div>
-            <p class="control-note" id="finish-note">Bois précieux — finition organique et chaleureuse.</p>
+            <p class="control-note" id="finish-note">Bois noyer — chaleureux et organique, mat.</p>
           </div>
 
           <div>
@@ -1456,13 +1753,13 @@
           </div>
 
           <div id="mandala-color-group" style="display: none;">
-            <span class="control-label">Couleur du motif</span>
-            <div class="swatches" role="group" aria-label="Couleur du mandala">
-              <button class="swatch sw-gold active" data-mcolor="gold" title="Or" aria-label="Or"></button>
-              <button class="swatch sw-silver" data-mcolor="silver" title="Argent" aria-label="Argent"></button>
-              <button class="swatch sw-copper" data-mcolor="copper" title="Cuivre" aria-label="Cuivre"></button>
-              <button class="swatch sw-mat-black" data-mcolor="black" title="Noir mat" aria-label="Noir mat"></button>
-              <button class="swatch sw-white" data-mcolor="white" title="Blanc" aria-label="Blanc"></button>
+            <span class="control-label">Teinte du motif (mate)</span>
+            <div class="swatches" role="group" aria-label="Teinte du mandala">
+              <button class="swatch sw-m-gold active" data-mcolor="gold" title="Or mat" aria-label="Or mat"></button>
+              <button class="swatch sw-m-pearl" data-mcolor="pearl" title="Gris perle" aria-label="Gris perle"></button>
+              <button class="swatch sw-m-terra" data-mcolor="terra" title="Terre cuite" aria-label="Terre cuite"></button>
+              <button class="swatch sw-m-black" data-mcolor="black" title="Noir mat" aria-label="Noir mat"></button>
+              <button class="swatch sw-m-white" data-mcolor="white" title="Blanc cassé" aria-label="Blanc cassé"></button>
             </div>
           </div>
 
@@ -1478,50 +1775,44 @@
   <section id="application" class="app-section">
     <div class="container">
       <div class="app-grid">
-        <div class="reveal">
-          <div class="section-head">
-            <div class="eyebrow" style="justify-content: flex-start;">Contrôle total</div>
-            <h2>Une application <em>pensée pour tous</em></h2>
-            <p>Pas besoin d'être ingénieur : l'application compagnon AdhanBox (iOS &amp; Android) configure et pilote votre boîtier en toute simplicité.</p>
+        <div class="left-head reveal">
+          <div class="eyebrow">L'application compagnon</div>
+          <h2>Tout le boîtier, <em>dans votre poche</em></h2>
+          <p>
+            Quatre onglets, zéro jargon. L'application AdhanBox (iOS &amp; Android) pilote
+            un ou plusieurs boîtiers — un dans le salon, un dans la chambre — depuis le
+            même écran.
+          </p>
+          <div class="app-tabs">
+            <div class="app-tab">
+              <div class="t-head">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3c1.5 4 4.5 6.5 8 7.5V19a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-8.5C7.5 9.5 10.5 7 12 3z"/></svg>
+                Prières
+              </div>
+              <p>Les cinq horaires du jour, la prochaine prière en surbrillance, et le passage d'un boîtier à l'autre.</p>
+            </div>
+            <div class="app-tab">
+              <div class="t-head">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4"/><circle cx="12" cy="12" r="4"/></svg>
+                Lumière
+              </div>
+              <p>Les treize ambiances avec aperçu en direct, et la luminosité au curseur.</p>
+            </div>
+            <div class="app-tab">
+              <div class="t-head">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 18V6l11-2v12"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg>
+                Adhan
+              </div>
+              <p>La voix, la doua et le volume de chaque prière — avec écoute de test avant de valider.</p>
+            </div>
+            <div class="app-tab">
+              <div class="t-head">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.09a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.09a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.09a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                Réglages
+              </div>
+              <p>Méthode de calcul, synchronisation en un geste et mises à jour du boîtier en un appui.</p>
+            </div>
           </div>
-          <ul class="app-list">
-            <li>
-              <div class="a-icon" aria-hidden="true">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2 12a10 10 0 0 1 20 0M5 12a7 7 0 0 1 14 0M8.5 12a3.5 3.5 0 0 1 7 0"/><circle cx="12" cy="16" r="1.5" fill="currentColor"/></svg>
-              </div>
-              <div>
-                <strong>Détection instantanée</strong>
-                <span>Le boîtier est trouvé automatiquement sur votre réseau Wi-Fi local, sans aucune adresse à saisir.</span>
-              </div>
-            </li>
-            <li>
-              <div class="a-icon" aria-hidden="true">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 21s7-5.5 7-11a7 7 0 1 0-14 0c0 5.5 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>
-              </div>
-              <div>
-                <strong>Synchronisation en un geste</strong>
-                <span>Position GPS, fuseau horaire, heure exacte et mosquée Mawaqit : tout est réglé en un seul appui.</span>
-              </div>
-            </li>
-            <li>
-              <div class="a-icon" aria-hidden="true">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 18V6l11-2v12"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg>
-              </div>
-              <div>
-                <strong>Personnalisation audio et lumière</strong>
-                <span>Choix du récitateur, volume, scènes lumineuses et luminosité : tout se règle depuis le téléphone.</span>
-              </div>
-            </li>
-            <li>
-              <div class="a-icon" aria-hidden="true">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
-              </div>
-              <div>
-                <strong>Mises à jour automatiques</strong>
-                <span>Le firmware du boîtier évolue : les nouveautés s'installent directement depuis l'application.</span>
-              </div>
-            </li>
-          </ul>
           <a href="https://github.com/adelhanifiOne/adhanbox/tree/main/flutter_app" target="_blank" rel="noopener" class="btn btn-outline">
             Découvrir l'application sur GitHub
           </a>
@@ -1531,7 +1822,7 @@
           <div class="phone" aria-hidden="true">
             <div class="phone-screen">
               <div class="phone-notch"></div>
-              <div class="phone-title">AdhanBox Compagnon</div>
+              <div class="phone-title">AdhanBox · Salon</div>
               <div class="phone-card">
                 <div class="row">
                   <span><span class="status-led"></span>Boîtier connecté</span>
@@ -1544,13 +1835,16 @@
                 <div class="prayer">Maghreb · dans 1 h 12</div>
               </div>
               <div class="phone-card">
-                <div class="row"><span>Mosquée Mawaqit</span><span class="gold">Synchronisée</span></div>
+                <div class="row"><span>Source des horaires</span><span class="gold">Mawaqit</span></div>
               </div>
               <div class="phone-card">
-                <div class="row"><span>Adhan</span><span class="ok">Voix Makkah</span></div>
+                <div class="row"><span>Ambiance</span><span class="ok">Bougie · 45 %</span></div>
               </div>
-              <div class="phone-card">
-                <div class="row"><span>Lumière d'ambiance</span><span class="ok">Fondu doux · 60 %</span></div>
+              <div class="phone-tabbar">
+                <span class="active-tab">Prières</span>
+                <span>Lumière</span>
+                <span>Adhan</span>
+                <span>Réglages</span>
               </div>
             </div>
           </div>
@@ -1559,40 +1853,70 @@
     </div>
   </section>
 
-  <!-- ═══ ÉCOSYSTÈME ═══════════════════════════════════════ -->
-  <section id="ecosysteme">
+  <!-- ═══ FIABILITÉ & TECHNIQUE ════════════════════════════ -->
+  <section id="technique">
     <div class="container">
       <div class="section-head reveal">
-        <div class="eyebrow">Écosystème</div>
-        <h2>Pour aller <em>encore plus loin</em></h2>
-        <p>AdhanBox s'accompagne d'outils conçus pour la communauté : à la mosquée comme au bureau.</p>
+        <div class="eyebrow">Sous le capot</div>
+        <h2>Pensé pour ne <em>jamais manquer un appel</em></h2>
+        <p>Derrière la simplicité, une électronique conçue sur-mesure et des protections à chaque étage.</p>
       </div>
-      <div class="eco-grid">
-        <div class="eco-card reveal">
-          <div class="feature-icon" aria-hidden="true">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M3 9h18M8 21h8M12 18v3"/></svg>
+
+      <div class="reliability-grid">
+        <div class="rel-card reveal">
+          <div class="rel-icon" aria-hidden="true">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
           </div>
-          <h3>Adhan Kiosk — Borne pour mosquées</h3>
-          <p>
-            Une application en mode kiosque plein écran qui modernise les dons des fidèles à la mosquée.
-            Les transactions sont enregistrées localement dans une base sécurisée, puis synchronisées
-            de manière chiffrée avec les serveurs de la mosquée.
-          </p>
-          <span class="eco-tag">Pour les mosquées</span>
+          <h3>Réveil matériel, pas logiciel</h3>
+          <p>L'horloge DS3231 embarque une alarme physique qui réveille le boîtier à l'heure exacte de chaque prière — avec sa pile de sauvegarde, l'heure survit même aux coupures de courant.</p>
         </div>
-        <div class="eco-card reveal">
-          <div class="feature-icon" aria-hidden="true">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+        <div class="rel-card reveal">
+          <div class="rel-icon" aria-hidden="true">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M18.36 6.64A9 9 0 1 1 5.64 6.64"/><path d="M12 2v8"/></svg>
           </div>
-          <h3>Adhan Overlay — Widget de bureau</h3>
-          <p>
-            Une application légère pour Windows et Mac qui interroge votre AdhanBox en arrière-plan.
-            À l'approche de la prière, une fine bordure colorée apparaît aux contours de votre écran :
-            un rappel discret qui ne perturbe jamais votre travail.
-          </p>
-          <span class="eco-tag">Windows &amp; Mac</span>
+          <h3>Coupure ? Il continue</h3>
+          <p>Wi-Fi en panne, box redémarrée, Internet coupé : le calcul astronomique embarqué et l'alarme matérielle assurent l'adhan sans aucune dépendance au réseau.</p>
+        </div>
+        <div class="rel-card reveal">
+          <div class="rel-icon" aria-hidden="true">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+          </div>
+          <h3>Mises à jour sécurisées</h3>
+          <p>Le firmware se met à jour depuis l'application, protégé par un jeton unique généré par votre boîtier. Chaque version est publiée publiquement sur GitHub.</p>
+        </div>
+        <div class="rel-card reveal">
+          <div class="rel-icon" aria-hidden="true">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="5" y="2" width="14" height="20" rx="3"/><path d="M12 18h.01"/></svg>
+          </div>
+          <h3>Plusieurs boîtiers, une application</h3>
+          <p>Un boîtier dans le salon, un autre dans la chambre : l'application mobile les gère tous depuis le même écran, chacun avec ses propres réglages d'adhan et de lumière.</p>
+        </div>
+        <div class="rel-card reveal">
+          <div class="rel-icon" aria-hidden="true">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M9 9h6v6H9zM4 10h-2M4 14h-2M22 10h-2M22 14h-2M10 4V2M14 4V2M10 22v-2M14 22v-2"/></svg>
+          </div>
+          <h3>Électronique sur-mesure</h3>
+          <p>Pas un assemblage de modules du commerce : une carte conçue pour le projet autour de l'ESP32-S3, avec une chaîne audio isolée pour un son net, sans souffle.</p>
+        </div>
+        <div class="rel-card reveal">
+          <div class="rel-icon" aria-hidden="true">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/></svg>
+          </div>
+          <h3>Open source, vérifiable</h3>
+          <p>Firmware, application et modèles 3D sont publics. Vous pouvez lire le code qui tourne chez vous, le modifier, ou fabriquer votre propre boîtier.</p>
         </div>
       </div>
+
+      <dl class="specs-table reveal">
+        <div class="spec-row"><dt>Cerveau</dt><dd>ESP32-S3 double cœur, Wi-Fi &amp; Bluetooth Low Energy</dd></div>
+        <div class="spec-row"><dt>Horloge</dt><dd>RTC DS3231 haute précision, alarme matérielle, pile de sauvegarde</dd></div>
+        <div class="spec-row"><dt>Audio</dt><dd>Lecteur MP3 dédié, bibliothèque d'adhans sur carte MicroSD remplaçable</dd></div>
+        <div class="spec-row"><dt>Lumière</dt><dd>Anneau de 16 LED adressables, 13 scènes, luminosité réglable</dd></div>
+        <div class="spec-row"><dt>Commandes</dt><dd>Application mobile (iOS &amp; Android) et bouton physique (ambiances / arrêt de l'adhan)</dd></div>
+        <div class="spec-row"><dt>Boîtier</dt><dd>Châssis imprimé en 3D (~12 cm), finitions mates, façade mandala en option</dd></div>
+        <div class="spec-row"><dt>Alimentation</dt><dd>USB-C 5 V — un chargeur de téléphone standard suffit</dd></div>
+        <div class="spec-row"><dt>Mises à jour</dt><dd>OTA depuis l'application, versions publiées sur GitHub</dd></div>
+      </dl>
     </div>
   </section>
 
@@ -1611,10 +1935,10 @@
           <p class="price-sub">Pour les bricoleurs qui aiment souder et imprimer eux-mêmes.</p>
           <div class="price-amount">0 €<small>Open source, gratuit et libre</small></div>
           <ul class="price-list">
-            <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg> Accès complet aux dépôts GitHub</li>
-            <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg> Schémas du PCB (fichiers KiCad)</li>
-            <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg> Modèles 3D du châssis (fichiers STL)</li>
-            <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg> Firmware ESP32-S3 libre et documenté</li>
+            <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg> Accès complet au dépôt GitHub</li>
+            <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg> Schémas de la carte électronique</li>
+            <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg> Modèles 3D du châssis et des mandalas</li>
+            <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg> Firmware documenté, avec ses mises à jour</li>
           </ul>
           <a href="https://github.com/adelhanifiOne/adhanbox" target="_blank" rel="noopener" class="btn btn-outline">Voir sur GitHub</a>
         </div>
@@ -1625,12 +1949,12 @@
           <p class="price-sub">Soudé, testé et livré prêt à fonctionner, dans la finition de votre choix.</p>
           <div class="price-amount">Sur devis<small>Fabrication artisanale à la commande</small></div>
           <ul class="price-list">
-            <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg> Finition et motif au choix (bois, laiton, noir, marbre…)</li>
-            <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg> PCB assemblé et soudé par des professionnels</li>
-            <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg> Carte MicroSD avec adhans préchargés</li>
-            <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg> Accompagnement à la configuration inclus</li>
+            <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg> Finition et motif au choix, imprimés à la commande</li>
+            <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg> Électronique assemblée, soudée et testée</li>
+            <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg> Carte MicroSD avec la bibliothèque d'adhans préchargée</li>
+            <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg> Accompagnement à l'installation inclus</li>
           </ul>
-          <a href="mailto:contact@adhanbox.com?subject=Demande%20de%20devis%20AdhanBox%20assembl%C3%A9" class="btn btn-primary">Demander un devis</a>
+          <a href="mailto:adel.hanifi@yahoo.fr?subject=Demande%20de%20devis%20AdhanBox%20assembl%C3%A9" class="btn btn-primary">Demander un devis</a>
         </div>
       </div>
     </div>
@@ -1652,45 +1976,63 @@
             <svg class="chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg>
           </button>
           <div class="faq-a"><p>
-            Oui. AdhanBox embarque une horloge temps réel haute précision (RTC DS3231) avec pile de
-            sauvegarde. Une fois configuré, il peut calculer les horaires localement et continuer à
-            sonner l'adhan même sans Wi-Fi.
+            Oui, entièrement. L'horloge DS3231 réveille le boîtier par une alarme matérielle à
+            l'heure de chaque prière, et le calcul astronomique embarqué détermine les horaires
+            sans aucun serveur. Internet ne sert qu'à la synchronisation Mawaqit et aux mises à
+            jour — dès que la connexion revient, la synchronisation reprend toute seule.
           </p></div>
         </div>
 
         <div class="faq-item">
           <button class="faq-q" aria-expanded="false">
-            <span>Comment se passe la première configuration ?</span>
+            <span>Comment se passe la première installation ?</span>
             <svg class="chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg>
           </button>
           <div class="faq-a"><p>
-            Allumez le boîtier, ouvrez l'application mobile et appuyez sur « Synchroniser ».
-            L'application détecte le boîtier sur votre réseau local, transmet votre position GPS et
-            vos identifiants Wi-Fi, et configure le tout en moins de dix secondes.
+            Au premier branchement, les LED clignotent en rouge : le boîtier attend d'être appairé.
+            L'application le détecte en Bluetooth, lui transmet votre réseau Wi-Fi, puis le retrouve
+            automatiquement sur votre réseau. Heure, position et mosquée se synchronisent ensuite en
+            un geste. Un tutoriel intégré vous guide à chaque étape.
           </p></div>
         </div>
 
         <div class="faq-item">
           <button class="faq-q" aria-expanded="false">
-            <span>Puis-je changer ou ajouter mes propres sons d'adhan ?</span>
+            <span>Puis-je choisir un adhan différent pour chaque prière ?</span>
             <svg class="chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg>
           </button>
           <div class="faq-a"><p>
-            Tout à fait. Les fichiers audio sont stockés sur une carte MicroSD : vous pouvez y glisser
-            n'importe quel fichier MP3 (la récitation de votre récitateur préféré, par exemple) ou
-            simplement changer de piste depuis l'application mobile.
+            Oui. Chaque prière a sa propre configuration : la récitation, le volume, et la doua
+            après l'adhan (activable ou non). Le Fajr dispose par défaut d'une voix dédiée. Vous
+            pouvez écouter chaque piste depuis l'application avant de valider, et ajouter vos
+            propres MP3 sur la carte MicroSD.
           </p></div>
         </div>
 
         <div class="faq-item">
           <button class="faq-q" aria-expanded="false">
-            <span>Faut-il un compte Mawaqit pour utiliser la synchronisation ?</span>
+            <span>Ma mosquée n'est pas sur Mawaqit, que se passe-t-il ?</span>
             <svg class="chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg>
           </button>
           <div class="faq-a"><p>
-            Non. Il vous suffit de sélectionner votre mosquée dans l'application : le boîtier récupère
-            ensuite ses horaires automatiquement. Si votre mosquée n'est pas sur Mawaqit, le mode de
-            calcul astronomique local prend le relais.
+            Le mode autonome prend le relais : le boîtier calcule les horaires à partir de votre
+            position GPS, selon la méthode de votre choix (MWL, ISNA, UOIF, Égypte, Karachi ou
+            angles personnalisés) et votre école pour le Asr. Vous pouvez aussi ajuster chaque
+            prière de quelques minutes pour coller aux habitudes de votre mosquée.
+          </p></div>
+        </div>
+
+        <div class="faq-item">
+          <button class="faq-q" aria-expanded="false">
+            <span>Peut-on gérer plusieurs boîtiers avec la même application ?</span>
+            <svg class="chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg>
+          </button>
+          <div class="faq-a"><p>
+            Oui. L'application gère plusieurs AdhanBox sur le même réseau — un boîtier dans le
+            salon, un autre dans la chambre — et vous passez de l'un à l'autre en un appui.
+            Chacun garde ses propres réglages : adhan, volume, doua et ambiance lumineuse.
+            Au quotidien, le bouton physique permet aussi de changer d'ambiance ou d'arrêter
+            l'adhan sans sortir le téléphone.
           </p></div>
         </div>
 
@@ -1702,18 +2044,6 @@
           <div class="faq-a"><p>
             Le boîtier mesure environ 12 cm de côté et s'alimente via un simple câble USB-C (5 V),
             identique à un chargeur de smartphone standard.
-          </p></div>
-        </div>
-
-        <div class="faq-item">
-          <button class="faq-q" aria-expanded="false">
-            <span>Le boîtier reçoit-il des mises à jour ?</span>
-            <svg class="chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg>
-          </button>
-          <div class="faq-a"><p>
-            Oui. Le firmware évolue régulièrement (nouvelles fonctionnalités, améliorations) et les
-            mises à jour s'installent directement depuis l'application mobile, sans brancher le
-            boîtier à un ordinateur. Le projet étant open source, tout le code est public sur GitHub.
           </p></div>
         </div>
       </div>
@@ -1732,11 +2062,11 @@
           personnalisé ou poser vos questions : nous répondons rapidement.
         </p>
         <div class="actions">
-          <a href="mailto:contact@adhanbox.com?subject=Demande%20de%20devis%20AdhanBox" class="btn btn-gold">
+          <a href="mailto:adel.hanifi@yahoo.fr?subject=Demande%20de%20devis%20AdhanBox" class="btn btn-gold">
             Demander un devis
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
           </a>
-          <a href="mailto:contact@adhanbox.com" class="btn btn-outline">contact@adhanbox.com</a>
+          <a href="mailto:adel.hanifi@yahoo.fr" class="btn btn-outline">adel.hanifi@yahoo.fr</a>
         </div>
       </div>
     </div>
@@ -1758,15 +2088,15 @@
           </a>
           <p>
             Projet open source et matériel libre, développé avec minutie pour soutenir la communauté
-            musulmane et les mosquées.
+            musulmane.
           </p>
         </div>
         <div class="footer-col">
           <h4>Produit</h4>
           <ul>
-            <li><a href="#caracteristiques">Le boîtier</a></li>
+            <li><a href="#horaires">Horaires de prière</a></li>
+            <li><a href="#ambiances">Lumière d'ambiance</a></li>
             <li><a href="#configurateur">Personnaliser</a></li>
-            <li><a href="#application">Application mobile</a></li>
             <li><a href="#offres">Offres</a></li>
           </ul>
         </div>
@@ -1774,9 +2104,9 @@
           <h4>Ressources</h4>
           <ul>
             <li><a href="https://github.com/adelhanifiOne/adhanbox" target="_blank" rel="noopener">GitHub</a></li>
-            <li><a href="#faq">FAQ</a></li>
+            <li><a href="https://github.com/adelhanifiOne/Overlay" target="_blank" rel="noopener">Adhan Overlay (widget bureau)</a></li>
             <li><a href="privacy.html">Politique de confidentialité</a></li>
-            <li><a href="mailto:contact@adhanbox.com">Contact</a></li>
+            <li><a href="mailto:adel.hanifi@yahoo.fr">Contact</a></li>
           </ul>
         </div>
       </div>
@@ -1841,20 +2171,22 @@
     });
 
     // ═══════════════════════════════════════════════════════
-    // CONFIGURATEUR 3D (three.js)
+    // CONFIGURATEUR 3D (three.js) — finitions mates
     // ═══════════════════════════════════════════════════════
+    // Matériaux volontairement mats (metalness quasi nul, rugosité élevée) :
+    // les reflets brillants écrasaient le relief des motifs.
     const FINISHES = {
-      'wood':        { label: 'Bois précieux',  note: 'Bois précieux — finition organique et chaleureuse.',           color: 0x5a2d13, roughness: 0.7,  metalness: 0.0 },
-      'matte-black': { label: 'Noir mat',       note: 'Noir mat — discret, moderne et technologique.',                color: 0x151518, roughness: 0.6,  metalness: 0.1 },
-      'marble':      { label: 'Blanc marbre',   note: 'Blanc marbre — élégant et épuré, aux reflets doux.',           color: 0xe5e7eb, roughness: 0.25, metalness: 0.1 },
-      'brass':       { label: 'Laiton brossé',  note: 'Laiton brossé — finition métallique dorée haut de gamme.',     color: 0xd4af37, roughness: 0.35, metalness: 0.9 }
+      'wood':       { label: 'Bois noyer',   note: 'Bois noyer — chaleureux et organique, mat.',          color: 0x8B5A2B, roughness: 0.85, metalness: 0.0 },
+      'anthracite': { label: 'Anthracite',   note: 'Anthracite — sobre et moderne, sans reflets.',        color: 0x3A3A40, roughness: 0.9,  metalness: 0.0 },
+      'chalk':      { label: 'Blanc craie',  note: 'Blanc craie — épuré et doux, finition poudrée.',      color: 0xE8E6E1, roughness: 0.85, metalness: 0.0 },
+      'sand':       { label: 'Sable doré',   note: 'Sable doré — chaleur dorée, sans brillance.',         color: 0xC9A86A, roughness: 0.8,  metalness: 0.05 }
     };
     const MANDALA_COLORS = {
-      'gold':   { label: 'Or',     color: 0xd4af37, roughness: 0.25, metalness: 0.95 },
-      'silver': { label: 'Argent', color: 0xcccccc, roughness: 0.2,  metalness: 0.95 },
-      'copper': { label: 'Cuivre', color: 0xb87333, roughness: 0.3,  metalness: 0.9 },
-      'black':  { label: 'Noir',   color: 0x111111, roughness: 0.7,  metalness: 0.1 },
-      'white':  { label: 'Blanc',  color: 0xffffff, roughness: 0.4,  metalness: 0.1 }
+      'gold':  { label: 'Or mat',      color: 0xC9A227, roughness: 0.65, metalness: 0.15 },
+      'pearl': { label: 'Gris perle',  color: 0xC9CDD1, roughness: 0.7,  metalness: 0.1 },
+      'terra': { label: 'Terre cuite', color: 0xA9663F, roughness: 0.75, metalness: 0.05 },
+      'black': { label: 'Noir mat',    color: 0x2A2A2A, roughness: 0.85, metalness: 0.0 },
+      'white': { label: 'Blanc cassé', color: 0xF2F0EB, roughness: 0.8,  metalness: 0.0 }
     };
 
     const state = { finish: 'wood', mandala: 0, mandalaColor: 'gold' };
@@ -1898,11 +2230,14 @@
       controls.autoRotateSpeed = 1.5;
       controls.addEventListener('start', () => { controls.autoRotate = false; });
 
-      scene.add(new THREE.AmbientLight(0xffffff, 0.65));
-      const key = new THREE.DirectionalLight(0xffffff, 1.15);
+      // Éclairage doux et enveloppant : les matériaux mats ont besoin de
+      // lumière diffuse pour révéler le relief, pas de reflets spéculaires.
+      scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+      scene.add(new THREE.HemisphereLight(0xfff8ec, 0x8a7a5c, 0.55));
+      const key = new THREE.DirectionalLight(0xffffff, 0.95);
       key.position.set(2, 4, 3);
       scene.add(key);
-      const fill = new THREE.DirectionalLight(0xffffff, 0.5);
+      const fill = new THREE.DirectionalLight(0xfff2dd, 0.45);
       fill.position.set(-2, 2, -3);
       scene.add(fill);
 
@@ -2003,11 +2338,10 @@
       }, undefined, (err) => console.error('Erreur de chargement du mandala :', err));
     }
 
-    // Initialisation différée : on ne démarre la 3D que lorsque la section est visible
+    // Initialisation différée : la 3D ne démarre que lorsque la section est visible
     const configSection = document.getElementById('configurateur');
     new IntersectionObserver((entries, obs) => {
       if (entries[0].isIntersecting) {
-        // three.js est chargé en defer : on attend qu'il soit prêt
         const tryInit = () => (typeof THREE !== 'undefined' && THREE.OrbitControls) ? init3D() : setTimeout(tryInit, 150);
         tryInit();
         obs.disconnect();
@@ -2067,7 +2401,7 @@
         'Merci !'
       );
       document.getElementById('config-cta').href =
-        'mailto:contact@adhanbox.com?subject=' + subject + '&body=' + body;
+        'mailto:adel.hanifi@yahoo.fr?subject=' + subject + '&body=' + body;
     }
     updateQuoteLink();
   </script>
