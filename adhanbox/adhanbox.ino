@@ -2,7 +2,7 @@
 // - Starts an AP when a long-press is detected on CONFIG_BUTTON_PIN
 // - Serves a small webpage that requests navigator.geolocation and POSTs lat/lon
 // - Stores lat/lon/accuracy/timestamp in Preferences (NVS)
-//Version: 1.4.5
+//Version: 1.4.6
 #include <Arduino.h>
 #include <Wire.h>
 #include <WiFi.h>
@@ -1249,6 +1249,11 @@ void handlePlayTrack() {
   }
 
   if (dfAvailable) {
+    String v = server.arg("volume");
+    if (v.length()) {
+      int vol = constrain(v.toInt(), 0, 30);
+      dfplayer.volume(vol);
+    }
     Serial.printf("Playing track %d\n", track);
     dfplayer.playMp3Folder(track);
     isPlaying = true;
@@ -1667,7 +1672,7 @@ void handleOtaUploadComplete() {
 // GET /api/firmware/version
 void handleFirmwareVersion() {
   server.send(200, "application/json",
-              "{\"version\":\"1.4.5\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
+              "{\"version\":\"1.4.6\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
 }
 
 // Returns true if the request carries the correct API key (or if token not yet set).
@@ -1689,7 +1694,7 @@ bool requireApiKey() {
 void handleDeviceInfo() {
   char buf[512];
   snprintf(buf, sizeof(buf),
-           "{\"version\":\"1.4.5\",\"hostname\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
+           "{\"version\":\"1.4.6\",\"hostname\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
            OTA_HOSTNAME, _apiToken.c_str(), _otaPass.c_str());
   server.send(200, "application/json", buf);
 }

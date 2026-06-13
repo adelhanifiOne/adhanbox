@@ -1,5 +1,5 @@
 {
-  "version": "1.4.5",
+  "version": "1.4.6",
   "url": "https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/build_temp/adhanbox.ino.bin",
-  "changelog": "Fix I2C rtc.begin lockups"
+  "changelog": "Mise à jour automatique vers v1.4.6"
 }
