@@ -70,22 +70,23 @@ final autoReconnectProvider = FutureProvider<String?>((ref) async {
   final prefs = await SharedPreferences.getInstance();
   final savedIp = prefs.getString('deviceIp');
 
-  // Helper: charger le token API depuis prefs ou le device, et l'activer
+  // Helper: charger le token API depuis le device ou prefs, et l'activer
   Future<void> loadApiToken(String ip) async {
     try {
-      String? token = prefs.getString('api_token_$ip');
-      if (token == null || token.isEmpty) {
-        final devApi = AdhanBoxAPI(baseUrl: 'http://$ip', timeout: const Duration(seconds: 3));
-        final info = await devApi.getDeviceInfo();
-        token = info['token'] as String?;
-        if (token != null && token.isNotEmpty) {
-          await prefs.setString('api_token_$ip', token);
-        }
+      final devApi = AdhanBoxAPI(baseUrl: 'http://$ip', timeout: const Duration(seconds: 3));
+      final info = await devApi.getDeviceInfo();
+      final token = info['token'] as String?;
+      if (token != null && token.isNotEmpty) {
+        await prefs.setString('api_token_$ip', token);
+        ref.read(adhanboxApiKeyProvider.notifier).state = token;
       }
+    } catch (_) {
+      // Fallback si la box est injoignable mais qu'on a un jeton en cache
+      final token = prefs.getString('api_token_$ip');
       if (token != null && token.isNotEmpty) {
         ref.read(adhanboxApiKeyProvider.notifier).state = token;
       }
-    } catch (_) {} // Token optionnel — ne bloque pas la connexion
+    }
   }
 
   // Helper: synchroniser l'heure du RTC après connexion
