@@ -1,5 +1,5 @@
 {
-  "version": "1.4.4",
+  "version": "1.4.5",
   "url": "https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/build_temp/adhanbox.ino.bin",
-  "changelog": "Add 2-second reboot delay to prevent socket exceptions"
+  "changelog": "Fix I2C rtc.begin lockups"
 }

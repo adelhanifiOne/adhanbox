@@ -2,7 +2,7 @@
 // - Starts an AP when a long-press is detected on CONFIG_BUTTON_PIN
 // - Serves a small webpage that requests navigator.geolocation and POSTs lat/lon
 // - Stores lat/lon/accuracy/timestamp in Preferences (NVS)
-//Version: 1.4.4
+//Version: 1.4.5
 #include <Arduino.h>
 #include <Wire.h>
 #include <WiFi.h>
@@ -215,6 +215,7 @@ DNSServer dnsServer;
 const byte DNS_PORT = 53;
 
 RTC_DS3231 rtc;
+bool rtcPresent = false;
 DFRobotDFPlayerMini dfplayer;
 bool dfAvailable = false;
 // If DFPlayer reports missing files, avoid repeatedly attempting to play
@@ -1102,7 +1103,7 @@ void handlePlayTest() {
 // HTTP handlers implementing serial commands
 void handleSetRTC() {
   if (!requireApiKey()) return;
-  if (!rtc.begin()) {
+  if (!rtcPresent) {
     server.send(200, "text/plain", "RTC not present");
     return;
   }
@@ -1152,7 +1153,7 @@ void handleSetRtcManual() {
     mm = timeStr.substring(3, 5).toInt();
     if (timeStr.length() >= 8) ss = timeStr.substring(6, 8).toInt();
   }
-  if (!rtc.begin()) {
+  if (!rtcPresent) {
     server.send(500, "text/plain", "RTC not present");
     return;
   }
@@ -1172,7 +1173,7 @@ void handleSetRtcManual() {
 }
 
 void handleSetAlarmTest() {
-  if (!rtc.begin()) {
+  if (!rtcPresent) {
     server.send(200, "text/plain", "RTC not present");
     return;
   }
@@ -1223,7 +1224,7 @@ void handleShowLoc() {
 }
 
 void handleShowTime() {
-  if (!rtc.begin()) {
+  if (!rtcPresent) {
     server.send(200, "text/plain", "RTC not present");
     return;
   }
@@ -1423,8 +1424,8 @@ void handleLedOff() {
 // Return current RTC time as plain text (YYYY-MM-DD HH:MM:SS) and tz offset if set
 void handleGetRTC() {
   Serial.println("HTTP GET /rtc_time -> handleGetRTC called");
-  if (!rtc.begin()) {
-    Serial.println("handleGetRTC: rtc.begin() failed");
+  if (!rtcPresent) {
+    Serial.println("handleGetRTC: RTC not present");
     server.send(200, "text/plain", "RTC not present");
     return;
   }
@@ -1666,7 +1667,7 @@ void handleOtaUploadComplete() {
 // GET /api/firmware/version
 void handleFirmwareVersion() {
   server.send(200, "application/json",
-              "{\"version\":\"1.4.4\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
+              "{\"version\":\"1.4.5\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
 }
 
 // Returns true if the request carries the correct API key (or if token not yet set).
@@ -1688,7 +1689,7 @@ bool requireApiKey() {
 void handleDeviceInfo() {
   char buf[512];
   snprintf(buf, sizeof(buf),
-           "{\"version\":\"1.4.4\",\"hostname\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
+           "{\"version\":\"1.4.5\",\"hostname\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
            OTA_HOSTNAME, _apiToken.c_str(), _otaPass.c_str());
   server.send(200, "application/json", buf);
 }
@@ -1845,7 +1846,7 @@ void handleMawaqitSetOffsets() {
                 fajrOff, sunriseOff, dhuhrOff, asrOff, maghribOff, ishaOff);
 
   // Reschedule alarm with new offsets
-  if (rtc.begin()) scheduleNextPrayerAlarm();
+  if (rtcPresent) scheduleNextPrayerAlarm();
 
   server.send(200, "application/json", "{\"ok\":true}");
 }
@@ -2127,7 +2128,7 @@ bool performMawaqitSync(String &errorMsg) {
   }
 
   // Save to Preferences with RTC timestamp (not millis!)
-  if (!rtc.begin()) {
+  if (!rtcPresent) {
     errorMsg = "RTC missing";
     return false;
   }
@@ -2195,7 +2196,7 @@ void handleMawaqitDebug() {
   json += "},";
   json += "\"sync_ts\":" + String(mq_sync_ts) + ",";
 
-  if (rtc.begin()) {
+  if (rtcPresent) {
     unsigned long now_epoch = rtc.now().unixtime();
     unsigned long age_sec = (mq_sync_ts > 0 && now_epoch >= mq_sync_ts) ? (now_epoch - mq_sync_ts) : 999999UL;
     float age_hours = age_sec / 3600.0;
@@ -2302,7 +2303,7 @@ void handleCalculationConfig() {
   prefs.putFloat("calc_isha_angle", (float)customIsha);
   prefs.end();
 
-  if (rtc.begin()) scheduleNextPrayerAlarm();
+  if (rtcPresent) scheduleNextPrayerAlarm();
 
   String out = "{\"ok\":true,\"method\":\"" + method + "\",\"fajr_angle\":" + String(customFajr, 1) + ",\"isha_angle\":" + String(customIsha, 1) + "}";
   server.send(200, "application/json", out);
@@ -2518,7 +2519,7 @@ bool syncTimeFromNtp(unsigned long timeoutMs) {
     Serial.println("Failed to convert local time");
     return false;
   }
-  if (!rtc.begin()) {
+  if (!rtcPresent) {
     Serial.println("RTC not present; cannot set time");
     return false;
   }
@@ -2690,7 +2691,7 @@ void handleBLEProvisioning() {
     startServices();
     wifiConnectState = WCS_CONNECTED;
 
-    if (rtc.begin()) {
+    if (rtcPresent) {
       syncTimeFromNtp(10000);
       scheduleNextPrayerAlarm();
     }
@@ -2790,7 +2791,7 @@ void setupServerRoutes() {
   server.on("/sync_time", HTTP_GET, []() {
     bool ok = syncTimeFromNtp(10000);
     if (ok) {
-      if (rtc.begin()) scheduleNextPrayerAlarm();
+      if (rtcPresent) scheduleNextPrayerAlarm();
       server.send(200, "text/plain", "Time synced");
     } else server.send(500, "text/plain", "Time sync failed");
   });
@@ -3123,7 +3124,7 @@ bool getPrayerPlaybackForIndex(int prayerIndex, int &trackToPlay, bool &playDuaa
 
 // HTTP handler to return today's prayer times as JSON
 void handlePrayerTimes() {
-  if (!rtc.begin()) {
+  if (!rtcPresent) {
     server.send(200, "application/json", "{\"error\":\"RTC missing\"}");
     return;
   }
@@ -3226,7 +3227,7 @@ void handleDumpStatus() {
   Serial.println((int)key.length());
   prefs.end();
 
-  bool rtc_ok = rtc.begin();
+  bool rtc_ok = rtcPresent;
   String rtc_time = "";
   if (rtc_ok) {
     DateTime now = rtc.now();
@@ -3447,7 +3448,7 @@ bool computeNextPrayer(const DateTime &now, DateTime &nextDt, int &idx) {
 
 // Schedule next prayer alarm: computes next prayer, programs Alarm2 daily at that hh:mm
 void scheduleNextPrayerAlarm() {
-  if (!rtc.begin()) return;
+  if (!rtcPresent) return;
   DateTime now = rtc.now();
   // Guard against corrupt RTC data (I2C bus issue) to avoid out-of-bounds crash in dayOfYear()
   if (now.month() < 1 || now.month() > 12 || now.day() < 1 || now.day() > 31 || now.year() < 2020 || now.year() > 2100) {
@@ -3871,7 +3872,8 @@ void setup() {
   probeIP5306();
 
   // Initialize DS3231 RTC using RTClib
-  if (!rtc.begin()) {
+  rtcPresent = rtc.begin();
+  if (!rtcPresent) {
     Serial.println("Couldn't find RTC. Check wiring (VCC/GND/SDA/SCL) and power.");
   } else {
     if (rtc.lostPower()) {
@@ -3975,7 +3977,7 @@ void setup() {
   }
 
   // Decoupled alarm scheduling: Always schedule on boot if RTC is present (covers Mawaqit-only setups)
-  if (rtc.begin()) {
+  if (rtcPresent) {
     Serial.println("Scheduling next prayer alarm on startup...");
     scheduleNextPrayerAlarm();
   }
@@ -4088,7 +4090,7 @@ void setup() {
       Serial.println("Synchro NTP au boot...");
       if (syncTimeFromNtp(15000)) Serial.println("NTP OK.");
       else Serial.println("NTP echoue.");
-      if (rtc.begin()) scheduleNextPrayerAlarm();
+      if (rtcPresent) scheduleNextPrayerAlarm();
     } else {
       Serial.println("\n✗ WiFi echoue.");
     }
@@ -4423,7 +4425,7 @@ void loop() {
   // Handle alarm triggers
   static uint32_t lastPrayerTriggeredUnix = 0;
   uint32_t nowUnix = 0;
-  if (rtc.begin()) {
+  if (rtcPresent) {
     DateTime _ln = rtc.now();
     if (_ln.month() >= 1 && _ln.month() <= 12 && _ln.year() >= 2020 && _ln.year() <= 2100)
       nowUnix = _ln.unixtime();
@@ -4543,7 +4545,7 @@ void loop() {
       }
       setupOTA();
       // NTP + prayer reschedule
-      if (syncTimeFromNtp(15000) && rtc.begin()) scheduleNextPrayerAlarm();
+      if (syncTimeFromNtp(15000) && rtcPresent) scheduleNextPrayerAlarm();
       // Init MQTT if broker stored
       prefs.begin("adhancfg", true);
       String broker = prefs.getString("mqtt_broker", "");
@@ -4581,7 +4583,7 @@ void loop() {
   static unsigned long lastAutoSyncCheck = 0;
   if (millis() - lastAutoSyncCheck > 60000) {  // Check once per minute
     lastAutoSyncCheck = millis();
-    if (WiFi.status() == WL_CONNECTED && rtc.begin()) {
+    if (WiFi.status() == WL_CONNECTED && rtcPresent) {
       unsigned long now_epoch = rtc.now().unixtime();
       prefs.begin("adhancfg", true);
       unsigned long mq_sync_ts = prefs.getULong("mq_sync_ts", 0);
