@@ -112,10 +112,30 @@ class _AdhanConfigScreenState extends ConsumerState<AdhanConfigScreen> {
           }
         });
       } else {
-        setState(() => _errorMessage = 'Impossible de charger la configuration (HTTP ${r.statusCode})');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Erreur de chargement (HTTP ${r.statusCode})'),
+              backgroundColor: Colors.orange[800],
+              behavior: SnackBarBehavior.floating,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
       }
     } catch (e) {
-      setState(() => _errorMessage = 'Erreur de connexion : $e');
+      // Si c'est juste un timeout au chargement, on affiche un snackbar discret
+      // plutôt qu'un bandeau rouge permanent — les valeurs par défaut restent affichées
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Appareil injoignable, valeurs par défaut affichées'),
+            backgroundColor: Colors.orange[800],
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
     }
     if (mounted) setState(() => _isLoading = false);
   }
