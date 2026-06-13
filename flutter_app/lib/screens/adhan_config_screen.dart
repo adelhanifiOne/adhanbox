@@ -59,6 +59,8 @@ class _AdhanConfigScreenState extends ConsumerState<AdhanConfigScreen> {
     'fajr': 20, 'dhuhr': 20, 'asr': 20, 'maghrib': 20, 'isha': 20,
   };
 
+  String? _playingKey; // clé de la prière en cours de lecture
+
   static const _prayerMeta = {
     'fajr':    _PrayerMeta('Fajr',    Icons.wb_twilight_rounded),
     'dhuhr':   _PrayerMeta('Dhuhr',   Icons.wb_sunny_rounded),
@@ -151,10 +153,20 @@ class _AdhanConfigScreenState extends ConsumerState<AdhanConfigScreen> {
     }
   }
 
-  Future<void> _playPreview(int track) async {
+  Future<void> _playPreview(String key, int track, int volume) async {
+    if (_deviceIp == null) return;
+    setState(() => _playingKey = key);
+    try {
+      await http.get(Uri.parse('http://$_deviceIp/play?track=$track&volume=$volume'))
+          .timeout(const Duration(seconds: 5));
+    } catch (_) {}
+  }
+
+  Future<void> _stopPreview() async {
+    setState(() => _playingKey = null);
     if (_deviceIp == null) return;
     try {
-      await http.get(Uri.parse('http://$_deviceIp/play?track=$track'))
+      await http.get(Uri.parse('http://$_deviceIp/stopplay'))
           .timeout(const Duration(seconds: 5));
     } catch (_) {}
   }
@@ -231,7 +243,9 @@ class _AdhanConfigScreenState extends ConsumerState<AdhanConfigScreen> {
                         onDuaaChanged: (v) => setState(() => _playDuaa[key] = v),
                         onEnabledChanged: (v) => setState(() => _enabledPrayers[key] = v),
                         onVolumeChanged: (v) => setState(() => _selectedVolumes[key] = v),
-                        onPreview: () => _playPreview(_selectedTracks[key]!),
+                        isPlaying: _playingKey == key,
+                        onPreview: () => _playPreview(key, _selectedTracks[key]!, _selectedVolumes[key]!),
+                        onStop: _stopPreview,
                       ).animate().fadeIn(delay: Duration(milliseconds: 60 * i)).slideY(begin: 0.06),
                     );
                   }),
@@ -272,7 +286,9 @@ class _PrayerAdhanCard extends StatelessWidget {
   final ValueChanged<bool> onDuaaChanged;
   final ValueChanged<bool> onEnabledChanged;
   final ValueChanged<int> onVolumeChanged;
+  final bool isPlaying;
   final VoidCallback onPreview;
+  final VoidCallback onStop;
 
   const _PrayerAdhanCard({
     required this.prayerKey,
@@ -285,7 +301,9 @@ class _PrayerAdhanCard extends StatelessWidget {
     required this.onDuaaChanged,
     required this.onEnabledChanged,
     required this.onVolumeChanged,
+    required this.isPlaying,
     required this.onPreview,
+    required this.onStop,
   });
 
   @override
@@ -344,10 +362,13 @@ class _PrayerAdhanCard extends StatelessWidget {
                   children: [
                     if (enabled)
                       IconButton(
-                        icon: const Icon(Icons.play_circle_rounded, size: 28),
-                        color: AppTheme.emerald,
-                        tooltip: 'Écouter',
-                        onPressed: onPreview,
+                        icon: Icon(
+                          isPlaying ? Icons.stop_circle_rounded : Icons.play_circle_rounded,
+                          size: 28,
+                        ),
+                        color: isPlaying ? Colors.redAccent : AppTheme.emerald,
+                        tooltip: isPlaying ? 'Arrêter' : 'Écouter',
+                        onPressed: isPlaying ? onStop : onPreview,
                       ),
                     Switch.adaptive(
                       value: enabled,
