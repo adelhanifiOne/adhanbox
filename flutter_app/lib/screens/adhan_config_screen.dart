@@ -79,7 +79,11 @@ class _AdhanConfigScreenState extends ConsumerState<AdhanConfigScreen> {
       setState(() { _errorMessage = 'Aucun appareil configuré'; _isLoading = false; });
       return;
     }
-    setState(() => _deviceIp = ip);
+    setState(() {
+      _deviceIp = ip;
+      _errorMessage = null; // Clear old error banner on new load
+      _isLoading = true;
+    });
     try {
       final r = await http.get(Uri.parse('http://$ip/api/adhan/config'))
           .timeout(const Duration(seconds: 5));
@@ -105,8 +109,12 @@ class _AdhanConfigScreenState extends ConsumerState<AdhanConfigScreen> {
             _selectedVolumes[k] = (d['${k}_volume'] as num?)?.toInt() ?? 20;
           }
         });
+      } else {
+        setState(() => _errorMessage = 'Impossible de charger la configuration (HTTP ${r.statusCode})');
       }
-    } catch (_) {}
+    } catch (e) {
+      setState(() => _errorMessage = 'Erreur de connexion : $e');
+    }
     if (mounted) setState(() => _isLoading = false);
   }
 
@@ -153,6 +161,24 @@ class _AdhanConfigScreenState extends ConsumerState<AdhanConfigScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Watch currentDeviceIpProvider so we reactively listen to IP updates
+    ref.listen<String?>(currentDeviceIpProvider, (prev, next) {
+      if (next != null && next != _deviceIp) {
+        _loadConfiguration();
+      } else if (next == null) {
+        setState(() {
+          _deviceIp = null;
+          _errorMessage = 'Aucun appareil configuré';
+        });
+      }
+    });
+
+    // Handle case where IP resolved after first stack initialization but before listener registered
+    final currentIp = ref.watch(currentDeviceIpProvider);
+    if (currentIp != null && _deviceIp == null && !_isLoading && _errorMessage == 'Aucun appareil configuré') {
+      Future.microtask(() => _loadConfiguration());
+    }
+
     return Scaffold(
       body: CustomScrollView(
         slivers: [
