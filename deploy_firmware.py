@@ -130,7 +130,7 @@ def main():
     print("\nCompilation du firmware avec arduino-cli...")
     os.makedirs('build_temp', exist_ok=True)
 
-    fqbn = 'esp32:esp32:esp32s3:PartitionScheme=no_fs'
+    fqbn = 'esp32:esp32:esp32s3:PartitionScheme=min_spiffs'
     lib_path = os.path.expanduser('~/Documents/Arduino/libraries')
 
     compile_cmd = [
