@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -59,7 +60,9 @@ class _AdhanConfigScreenState extends ConsumerState<AdhanConfigScreen> {
     'fajr': 20, 'dhuhr': 20, 'asr': 20, 'maghrib': 20, 'isha': 20,
   };
 
-  String? _playingKey; // clé de la prière en cours de lecture
+  String? _playingKey;
+  int _globalVolume = 20;
+  Timer? _volumeDebounce;
 
   static const _prayerMeta = {
     'fajr':    _PrayerMeta('Fajr',    Icons.wb_twilight_rounded),
@@ -75,6 +78,34 @@ class _AdhanConfigScreenState extends ConsumerState<AdhanConfigScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadConfiguration());
   }
 
+  @override
+  void dispose() {
+    _volumeDebounce?.cancel();
+    super.dispose();
+  }
+
+  void _onGlobalVolumeChanged(int vol) {
+    setState(() => _globalVolume = vol);
+    _volumeDebounce?.cancel();
+    _volumeDebounce = Timer(const Duration(milliseconds: 300), () => _sendGlobalVolume(vol));
+  }
+
+  Future<void> _sendGlobalVolume(int vol) async {
+    if (_deviceIp == null) return;
+    final apiKey = ref.read(adhanboxApiKeyProvider);
+    try {
+      await http.post(
+        Uri.parse('http://$_deviceIp/set_volume'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (apiKey != null) 'Authorization': 'Bearer $apiKey',
+          if (apiKey != null) 'X-API-Key': apiKey,
+        },
+        body: jsonEncode({'vol': vol}),
+      ).timeout(const Duration(seconds: 5));
+    } catch (_) {}
+  }
+
   Future<void> _loadConfiguration() async {
     final ip = ref.read(currentDeviceIpProvider);
     if (ip == null) {
@@ -87,11 +118,21 @@ class _AdhanConfigScreenState extends ConsumerState<AdhanConfigScreen> {
       _isLoading = true;
     });
     try {
-      final r = await http.get(Uri.parse('http://$ip/api/adhan/config'))
-          .timeout(const Duration(seconds: 10));
+      final results = await Future.wait([
+        http.get(Uri.parse('http://$ip/api/adhan/config')).timeout(const Duration(seconds: 10)),
+        http.get(Uri.parse('http://$ip/get_volume')).timeout(const Duration(seconds: 5)),
+      ]);
+      final r = results[0];
+      final rVol = results[1];
       if (r.statusCode == 200) {
         final d = jsonDecode(r.body);
+        int globalVol = _globalVolume;
+        if (rVol.statusCode == 200) {
+          final dv = jsonDecode(rVol.body);
+          globalVol = (dv['vol'] as num?)?.toInt() ?? 20;
+        }
         setState(() {
+          _globalVolume = globalVol;
           for (final k in _selectedTracks.keys) {
             int raw = d['${k}_track'] as int? ?? (k == 'fajr' ? 2 : 4);
             if (k == 'fajr') {
@@ -250,6 +291,13 @@ class _AdhanConfigScreenState extends ConsumerState<AdhanConfigScreen> {
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
                   const SizedBox(height: 20),
+
+                  // ── Volume général live ──
+                  _GlobalVolumeCard(
+                    volume: _globalVolume,
+                    onChanged: _deviceIp != null ? _onGlobalVolumeChanged : null,
+                  ),
+                  const SizedBox(height: 16),
 
                   ..._prayerMeta.entries.indexed.map((e) {
                     final (i, entry) = e;
@@ -550,6 +598,60 @@ class _ErrorBanner extends StatelessWidget {
           const Icon(Icons.error_outline_rounded, color: Colors.red, size: 18),
           const SizedBox(width: 10),
           Expanded(child: Text(message, style: const TextStyle(color: Colors.red, fontSize: 13))),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────── GLOBAL VOLUME CARD ───────────────────────────
+class _GlobalVolumeCard extends StatelessWidget {
+  final int volume;
+  final ValueChanged<int>? onChanged;
+
+  const _GlobalVolumeCard({required this.volume, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
+      decoration: BoxDecoration(
+        color: isDark ? AppTheme.darkCard : AppTheme.lightCard,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: isDark ? AppTheme.darkBorder : AppTheme.lightBorder),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.volume_up_rounded, color: AppTheme.emerald, size: 20),
+              const SizedBox(width: 10),
+              Text('Volume général', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
+              const Spacer(),
+              Text('$volume / 30', style: Theme.of(context).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.bold)),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              Icon(Icons.volume_mute_rounded, size: 18, color: isDark ? Colors.grey[600] : Colors.grey[400]),
+              Expanded(
+                child: Slider(
+                  value: volume.toDouble(),
+                  min: 0,
+                  max: 30,
+                  divisions: 30,
+                  activeColor: AppTheme.emerald,
+                  onChanged: onChanged != null ? (v) => onChanged!(v.round()) : null,
+                ),
+              ),
+              Icon(Icons.volume_up_rounded, size: 18, color: AppTheme.emerald),
+            ],
+          ),
+          if (onChanged == null)
+            Text('Connectez-vous à un appareil pour régler le volume', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.grey)),
         ],
       ),
     );
