@@ -88,7 +88,7 @@ class _AdhanConfigScreenState extends ConsumerState<AdhanConfigScreen> {
     });
     try {
       final r = await http.get(Uri.parse('http://$ip/api/adhan/config'))
-          .timeout(const Duration(seconds: 5));
+          .timeout(const Duration(seconds: 10));
       if (r.statusCode == 200) {
         final d = jsonDecode(r.body);
         setState(() {
