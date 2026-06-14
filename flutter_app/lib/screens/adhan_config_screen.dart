@@ -150,9 +150,14 @@ class _AdhanConfigScreenState extends ConsumerState<AdhanConfigScreen> {
         for (final k in _enabledPrayers.keys) '${k}_enabled': _enabledPrayers[k],
         for (final k in _selectedVolumes.keys) '${k}_volume': _selectedVolumes[k],
       };
+      final apiKey = ref.read(adhanboxApiKeyProvider);
       final r = await http.post(
         Uri.parse('http://$_deviceIp/api/adhan/config'),
-        headers: {'Content-Type': 'application/json'},
+        headers: {
+          'Content-Type': 'application/json',
+          if (apiKey != null) 'Authorization': 'Bearer $apiKey',
+          if (apiKey != null) 'X-API-Key': apiKey,
+        },
         body: jsonEncode(payload),
       ).timeout(const Duration(seconds: 10));
       if (r.statusCode < 200 || r.statusCode >= 300) {
