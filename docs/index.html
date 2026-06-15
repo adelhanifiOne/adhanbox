@@ -878,17 +878,6 @@
       border-color: var(--emerald);
       box-shadow: 0 0 0 3px rgba(12, 91, 69, 0.18);
     }
-    /* Finitions mates */
-    .sw-wood { background: #8B5A2B; }
-    .sw-anthracite { background: #3A3A40; }
-    .sw-chalk { background: #E8E6E1; }
-    .sw-sand { background: #C9A86A; }
-    /* Couleurs mates du motif */
-    .sw-m-gold { background: #C9A227; }
-    .sw-m-pearl { background: #C9CDD1; }
-    .sw-m-terra { background: #A9663F; }
-    .sw-m-black { background: #2A2A2A; }
-    .sw-m-white { background: #F2F0EB; }
     .control-note {
       font-size: 0.85rem;
       color: var(--muted);
@@ -1817,14 +1806,9 @@
 
         <div class="config-controls">
           <div>
-            <span class="control-label">Finition du châssis</span>
-            <div class="swatches" role="group" aria-label="Finitions du châssis">
-              <button class="swatch sw-wood active" data-finish="wood" title="Bois noyer" aria-label="Bois noyer"></button>
-              <button class="swatch sw-anthracite" data-finish="anthracite" title="Anthracite" aria-label="Anthracite"></button>
-              <button class="swatch sw-chalk" data-finish="chalk" title="Blanc craie" aria-label="Blanc craie"></button>
-              <button class="swatch sw-sand" data-finish="sand" title="Sable doré" aria-label="Sable doré"></button>
-            </div>
-            <p class="control-note" id="finish-note">Bois noyer — chaleureux et organique, mat.</p>
+            <span class="control-label">Couleur du châssis</span>
+            <div class="swatches" id="finish-swatches" role="group" aria-label="Couleur du châssis"></div>
+            <p class="control-note" id="finish-note">Bois — finition mate.</p>
           </div>
 
           <div>
@@ -1840,14 +1824,8 @@
           </div>
 
           <div id="mandala-color-group" style="display: none;">
-            <span class="control-label">Teinte du motif (mate)</span>
-            <div class="swatches" role="group" aria-label="Teinte du mandala">
-              <button class="swatch sw-m-gold active" data-mcolor="gold" title="Or mat" aria-label="Or mat"></button>
-              <button class="swatch sw-m-pearl" data-mcolor="pearl" title="Gris perle" aria-label="Gris perle"></button>
-              <button class="swatch sw-m-terra" data-mcolor="terra" title="Terre cuite" aria-label="Terre cuite"></button>
-              <button class="swatch sw-m-black" data-mcolor="black" title="Noir mat" aria-label="Noir mat"></button>
-              <button class="swatch sw-m-white" data-mcolor="white" title="Blanc cassé" aria-label="Blanc cassé"></button>
-            </div>
+            <span class="control-label">Couleur du motif</span>
+            <div class="swatches" id="mcolor-swatches" role="group" aria-label="Couleur du motif"></div>
           </div>
 
           <a href="#" id="config-cta" class="btn btn-gold" style="align-self: flex-start;">
@@ -2345,23 +2323,28 @@
     // ═══════════════════════════════════════════════════════
     // CONFIGURATEUR 3D (three.js) — finitions mates
     // ═══════════════════════════════════════════════════════
-    // Matériaux volontairement mats (metalness quasi nul, rugosité élevée) :
+    // Palette unique partagée entre le châssis et le motif.
+    // Matériaux volontairement mats (rugosité élevée, metalness quasi nul) :
     // les reflets brillants écrasaient le relief des motifs.
-    const FINISHES = {
-      'wood':       { label: 'Bois noyer',   note: 'Bois noyer — chaleureux et organique, mat.',          color: 0x8B5A2B, roughness: 0.85, metalness: 0.0 },
-      'anthracite': { label: 'Anthracite',   note: 'Anthracite — sobre et moderne, sans reflets.',        color: 0x3A3A40, roughness: 0.9,  metalness: 0.0 },
-      'chalk':      { label: 'Blanc craie',  note: 'Blanc craie — épuré et doux, finition poudrée.',      color: 0xE8E6E1, roughness: 0.85, metalness: 0.0 },
-      'sand':       { label: 'Sable doré',   note: 'Sable doré — chaleur dorée, sans brillance.',         color: 0xC9A86A, roughness: 0.8,  metalness: 0.05 }
+    const PALETTE = {
+      'bois':   { label: 'Bois',    hex: '#8B5A2B', color: 0x8B5A2B, roughness: 0.85, metalness: 0.0 },
+      'marbre': { label: 'Marbre',  hex: '#E4E2DC', color: 0xE4E2DC, roughness: 0.8,  metalness: 0.0 },
+      'blanc':  { label: 'Blanc',   hex: '#F2F0EB', color: 0xF2F0EB, roughness: 0.85, metalness: 0.0 },
+      'gris':   { label: 'Gris',    hex: '#8A8A8A', color: 0x8A8A8A, roughness: 0.85, metalness: 0.0 },
+      'noir':   { label: 'Noir',    hex: '#2A2A2A', color: 0x2A2A2A, roughness: 0.85, metalness: 0.0 },
+      'dore':   { label: 'Doré',    hex: '#C9A227', color: 0xC9A227, roughness: 0.7,  metalness: 0.15 },
+      'rouge':  { label: 'Rouge',   hex: '#B23A3A', color: 0xB23A3A, roughness: 0.85, metalness: 0.0 },
+      'orange': { label: 'Orange',  hex: '#C97A35', color: 0xC97A35, roughness: 0.85, metalness: 0.0 },
+      'jaune':  { label: 'Jaune',   hex: '#D6B23A', color: 0xD6B23A, roughness: 0.85, metalness: 0.0 },
+      'vert':   { label: 'Vert',    hex: '#4A7A52', color: 0x4A7A52, roughness: 0.85, metalness: 0.0 },
+      'bleu':   { label: 'Bleu',    hex: '#3D5A8C', color: 0x3D5A8C, roughness: 0.85, metalness: 0.0 },
+      'violet': { label: 'Violet',  hex: '#6B4E8C', color: 0x6B4E8C, roughness: 0.85, metalness: 0.0 },
+      'rose':   { label: 'Rose',    hex: '#CE8BA3', color: 0xCE8BA3, roughness: 0.85, metalness: 0.0 }
     };
-    const MANDALA_COLORS = {
-      'gold':  { label: 'Or mat',      color: 0xC9A227, roughness: 0.65, metalness: 0.15 },
-      'pearl': { label: 'Gris perle',  color: 0xC9CDD1, roughness: 0.7,  metalness: 0.1 },
-      'terra': { label: 'Terre cuite', color: 0xA9663F, roughness: 0.75, metalness: 0.05 },
-      'black': { label: 'Noir mat',    color: 0x2A2A2A, roughness: 0.85, metalness: 0.0 },
-      'white': { label: 'Blanc cassé', color: 0xF2F0EB, roughness: 0.8,  metalness: 0.0 }
-    };
+    const FINISHES = PALETTE;
+    const MANDALA_COLORS = PALETTE;
 
-    const state = { finish: 'wood', mandala: 0, mandalaColor: 'gold' };
+    const state = { finish: 'bois', mandala: 0, mandalaColor: 'dore' };
     let scene, camera, renderer, controls, boxGroup, boxMesh = null, mandalaMesh = null, lidMesh = null;
     let boxSize = null, boxCenter = null;
     let threeStarted = false;
@@ -2566,15 +2549,36 @@
       target.classList.add('active');
     }
 
-    const finishSwatches = document.querySelectorAll('[data-finish]');
-    finishSwatches.forEach((sw) => {
-      sw.addEventListener('click', () => {
-        state.finish = sw.dataset.finish;
-        selectIn(finishSwatches, sw);
-        document.getElementById('finish-note').textContent = FINISHES[state.finish].note;
-        applyFinish();
-        updateQuoteLink();
+    // Génère les pastilles de couleur à partir de la palette partagée
+    function buildSwatches(containerId, activeKey, onPick) {
+      const container = document.getElementById(containerId);
+      const buttons = [];
+      Object.entries(PALETTE).forEach(([key, c]) => {
+        const btn = document.createElement('button');
+        btn.className = 'swatch' + (key === activeKey ? ' active' : '');
+        btn.style.background = c.hex;
+        btn.title = c.label;
+        btn.setAttribute('aria-label', c.label);
+        btn.addEventListener('click', () => {
+          selectIn(buttons, btn);
+          onPick(key);
+          updateQuoteLink();
+        });
+        container.appendChild(btn);
+        buttons.push(btn);
       });
+      return buttons;
+    }
+
+    buildSwatches('finish-swatches', state.finish, (key) => {
+      state.finish = key;
+      document.getElementById('finish-note').textContent = PALETTE[key].label + ' — finition mate.';
+      applyFinish();
+    });
+
+    buildSwatches('mcolor-swatches', state.mandalaColor, (key) => {
+      state.mandalaColor = key;
+      applyMandalaColor();
     });
 
     const mandalaBtns = document.querySelectorAll('[data-mandala]');
@@ -2584,16 +2588,6 @@
         selectIn(mandalaBtns, btn);
         document.getElementById('mandala-color-group').style.display = state.mandala === 0 ? 'none' : 'block';
         loadMandala(state.mandala);
-        updateQuoteLink();
-      });
-    });
-
-    const colorSwatches = document.querySelectorAll('[data-mcolor]');
-    colorSwatches.forEach((sw) => {
-      sw.addEventListener('click', () => {
-        state.mandalaColor = sw.dataset.mcolor;
-        selectIn(colorSwatches, sw);
-        applyMandalaColor();
         updateQuoteLink();
       });
     });
