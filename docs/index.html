@@ -2297,6 +2297,10 @@
         const f = FINISHES[state.finish];
         lidMesh.traverse((child) => {
           if (child.isMesh) {
+            // The lid OBJ has no normals → compute them so lighting works
+            if (child.geometry && !child.geometry.attributes.normal) {
+              child.geometry.computeVertexNormals();
+            }
             child.material = new THREE.MeshStandardMaterial({
               color: f.color,
               roughness: f.roughness,
