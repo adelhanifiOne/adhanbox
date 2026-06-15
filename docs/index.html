@@ -2295,7 +2295,7 @@
         if (boxSize) {
           lidMesh.position.z += boxSize.z / 2 + lidSize.z / 2;
         }
-        lidMesh.rotation.z = Math.PI;
+        lidMesh.rotation.x = Math.PI;
         boxGroup.add(lidMesh);
         applyFinish();
       }, undefined, (err) => console.error('Erreur de chargement du couvercle :', err));
