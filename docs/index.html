@@ -2190,8 +2190,8 @@
     };
 
     const state = { finish: 'wood', mandala: 0, mandalaColor: 'gold' };
-    let scene, camera, renderer, controls, boxGroup, boxMesh = null, mandalaMesh = null;
-    let boxSize = null;
+    let scene, camera, renderer, controls, boxGroup, boxMesh = null, mandalaMesh = null, lidMesh = null;
+    let boxSize = null, boxCenter = null;
     let threeStarted = false;
 
     function makeLoader() {
@@ -2252,13 +2252,14 @@
         const bounds = new THREE.Box3().setFromObject(boxMesh);
         boxSize = new THREE.Vector3();
         bounds.getSize(boxSize);
-        const center = new THREE.Vector3();
-        bounds.getCenter(center);
-        boxMesh.position.sub(center);
+        boxCenter = new THREE.Vector3();
+        bounds.getCenter(boxCenter);
+        boxMesh.position.sub(boxCenter);
         boxGroup.add(boxMesh);
         boxGroup.rotation.x = -Math.PI / 2;
         applyFinish();
         animate3D();
+        loadLid();
       }, undefined, (err) => console.error('Erreur de chargement du modèle 3D :', err));
 
       window.addEventListener('resize', () => {
@@ -2275,16 +2276,30 @@
       renderer.render(scene, camera);
     }
 
+    function loadLid() {
+      makeLoader().load('lid.glb', (gltf) => {
+        lidMesh = gltf.scene;
+        lidMesh.traverse((child) => {
+          if (child.isMesh) child.material = new THREE.MeshStandardMaterial();
+        });
+        if (boxCenter) lidMesh.position.sub(boxCenter);
+        boxGroup.add(lidMesh);
+        applyFinish();
+      }, undefined, (err) => console.error('Erreur de chargement du couvercle :', err));
+    }
+
     function applyFinish() {
-      if (!boxMesh) return;
       const f = FINISHES[state.finish];
-      boxMesh.traverse((child) => {
-        if (child.isMesh) {
-          child.material.color.setHex(f.color);
-          child.material.roughness = f.roughness;
-          child.material.metalness = f.metalness;
-          child.material.needsUpdate = true;
-        }
+      [boxMesh, lidMesh].forEach((mesh) => {
+        if (!mesh) return;
+        mesh.traverse((child) => {
+          if (child.isMesh) {
+            child.material.color.setHex(f.color);
+            child.material.roughness = f.roughness;
+            child.material.metalness = f.metalness;
+            child.material.needsUpdate = true;
+          }
+        });
       });
     }
 
