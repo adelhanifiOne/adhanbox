@@ -2280,7 +2280,7 @@
       makeLoader().load('lid.glb', (gltf) => {
         lidMesh = gltf.scene;
         lidMesh.traverse((child) => {
-          if (child.isMesh) child.material = new THREE.MeshStandardMaterial();
+          if (child.isMesh) child.material = new THREE.MeshStandardMaterial({ side: THREE.DoubleSide });
         });
         // OBJ from Fusion 360 exports in mm; adhanbox.glb is in m → scale down 1000×
         lidMesh.scale.setScalar(0.001);
