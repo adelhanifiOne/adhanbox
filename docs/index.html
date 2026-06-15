@@ -2284,8 +2284,9 @@
         });
         // OBJ from Fusion 360 exports in mm; adhanbox.glb is in m → scale down 1000×
         lidMesh.scale.setScalar(0.001);
-        // Center the lid independently, then place it on top of the box chassis
-        // (boxGroup.rotation.x = -PI/2, so local +Z = world +Y = up)
+        // Apply rotation BEFORE computing bounds so centering accounts for it
+        lidMesh.rotation.x = Math.PI;
+        lidMesh.updateMatrixWorld(true);
         const lidBounds = new THREE.Box3().setFromObject(lidMesh);
         const lidCenter = new THREE.Vector3();
         const lidSize = new THREE.Vector3();
@@ -2295,7 +2296,6 @@
         if (boxSize) {
           lidMesh.position.z += boxSize.z / 2 + lidSize.z / 2;
         }
-        lidMesh.rotation.x = Math.PI;
         boxGroup.add(lidMesh);
         applyFinish();
       }, undefined, (err) => console.error('Erreur de chargement du couvercle :', err));
