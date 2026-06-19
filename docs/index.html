@@ -220,6 +220,36 @@
       border-bottom-color: var(--line);
       box-shadow: var(--shadow-sm);
     }
+
+    /* Première section : dégage le header fixe */
+    .first-section { padding-top: 9.5rem; }
+
+    /* Bouton « Commander » flottant, visible partout */
+    .order-fab {
+      position: fixed;
+      right: 1.4rem;
+      bottom: 1.4rem;
+      z-index: 190;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.9rem 1.55rem;
+      border-radius: 999px;
+      background: var(--gold);
+      color: #FFF;
+      font-family: var(--font-body);
+      font-weight: 700;
+      font-size: 0.95rem;
+      text-decoration: none;
+      box-shadow: 0 12px 30px rgba(150, 105, 15, 0.42);
+      transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+    }
+    .order-fab svg { width: 17px; height: 17px; }
+    .order-fab:hover {
+      background: var(--gold-deep);
+      transform: translateY(-3px);
+      box-shadow: 0 16px 38px rgba(150, 105, 15, 0.52);
+    }
     .nav-bar {
       display: flex;
       align-items: center;
@@ -293,7 +323,7 @@
     /* ═══ HERO ═══ */
     .hero {
       position: relative;
-      padding: 11rem 0 5rem;
+      padding: 5rem 0;
     }
     .hero-grid {
       display: grid;
@@ -450,11 +480,15 @@
     .chip-icon.gold { background: var(--gold-soft); color: var(--gold-deep); }
 
     @media (max-width: 980px) {
-      .hero { padding-top: 9rem; }
+      .hero { padding-top: 3rem; }
+      .first-section { padding-top: 7rem; }
       .hero-grid { grid-template-columns: 1fr; gap: 3rem; }
       .hero-visual { max-width: 460px; margin: 0 auto; width: 100%; }
       .chip-prayer { left: -0.4rem; }
       .chip-sync { right: -0.4rem; }
+    }
+    @media (max-width: 560px) {
+      .order-fab { right: 1rem; bottom: 1rem; padding: 0.8rem 1.3rem; font-size: 0.9rem; }
     }
 
     /* ═══ LE RITUEL (timeline) ═══ */
@@ -1448,6 +1482,59 @@
     </div>
   </header>
 
+  <!-- Bouton « Commander » flottant, visible sur toute la page -->
+  <a href="#offres" class="order-fab" aria-label="Commander l'AdhanBox">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.7 13.4a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.6L23 6H6"/></svg>
+    Commander
+  </a>
+
+  <!-- ═══ CONFIGURATEUR 3D (en tête de page) ═══════════════ -->
+  <section id="configurateur" class="first-section">
+    <div class="container">
+      <div class="section-head reveal">
+        <div class="eyebrow">Personnalisez le vôtre</div>
+        <h2>Composez <em>votre AdhanBox</em></h2>
+        <p>Chaque boîtier est imprimé en 3D à la commande. Choisissez la couleur du châssis, le motif de la façade et sa teinte — toutes les finitions sont mates, pensées pour révéler le relief des motifs.</p>
+      </div>
+
+      <div class="configurator-panel reveal">
+        <div class="config-viewport">
+          <div id="canvas3d" role="img" aria-label="Aperçu 3D interactif du boîtier AdhanBox"></div>
+          <div class="viewport-hint">Glissez pour faire pivoter · molette pour zoomer</div>
+        </div>
+
+        <div class="config-controls">
+          <div>
+            <span class="control-label">Couleur du châssis</span>
+            <div class="swatches" id="finish-swatches" role="group" aria-label="Couleur du châssis"></div>
+            <p class="control-note" id="finish-note">Bois — finition mate.</p>
+          </div>
+
+          <div>
+            <span class="control-label">Motif de la façade</span>
+            <div class="pill-options" role="group" aria-label="Motif de mandala">
+              <button class="pill-btn active" data-mandala="0">Aucun</button>
+              <button class="pill-btn" data-mandala="1">Motif 1</button>
+              <button class="pill-btn" data-mandala="2">Motif 2</button>
+              <button class="pill-btn" data-mandala="3">Motif 3</button>
+              <button class="pill-btn" data-mandala="4">Motif 4</button>
+              <button class="pill-btn" data-mandala="5">Motif 5</button>
+            </div>
+          </div>
+
+          <div id="mandala-color-group" style="display: none;">
+            <span class="control-label">Couleur du motif</span>
+            <div class="swatches" id="mcolor-swatches" role="group" aria-label="Couleur du motif"></div>
+          </div>
+
+          <a href="#" id="config-cta" class="btn btn-gold" style="align-self: flex-start;">
+            Demander un devis avec cette configuration
+          </a>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <!-- ═══ HERO ═════════════════════════════════════════════ -->
   <section class="hero">
     <div class="pattern-bg" aria-hidden="true"></div>
@@ -1784,53 +1871,6 @@
           <div class="install-num" aria-hidden="true">4</div>
           <h3>Synchronisez</h3>
           <p>Heure, fuseau horaire, position et mosquée : tout est réglé en un geste depuis votre téléphone. C'est prêt.</p>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- ═══ CONFIGURATEUR 3D ═════════════════════════════════ -->
-  <section id="configurateur">
-    <div class="container">
-      <div class="section-head reveal">
-        <div class="eyebrow">Atelier</div>
-        <h2>Composez <em>votre AdhanBox</em></h2>
-        <p>Chaque boîtier est imprimé en 3D à la commande. Choisissez la finition du châssis, le motif de la façade et sa teinte — toutes les finitions sont mates, pensées pour révéler le relief des motifs.</p>
-      </div>
-
-      <div class="configurator-panel reveal">
-        <div class="config-viewport">
-          <div id="canvas3d" role="img" aria-label="Aperçu 3D interactif du boîtier AdhanBox"></div>
-          <div class="viewport-hint">Glissez pour faire pivoter · molette pour zoomer</div>
-        </div>
-
-        <div class="config-controls">
-          <div>
-            <span class="control-label">Couleur du châssis</span>
-            <div class="swatches" id="finish-swatches" role="group" aria-label="Couleur du châssis"></div>
-            <p class="control-note" id="finish-note">Bois — finition mate.</p>
-          </div>
-
-          <div>
-            <span class="control-label">Motif de la façade</span>
-            <div class="pill-options" role="group" aria-label="Motif de mandala">
-              <button class="pill-btn active" data-mandala="0">Aucun</button>
-              <button class="pill-btn" data-mandala="1">Motif 1</button>
-              <button class="pill-btn" data-mandala="2">Motif 2</button>
-              <button class="pill-btn" data-mandala="3">Motif 3</button>
-              <button class="pill-btn" data-mandala="4">Motif 4</button>
-              <button class="pill-btn" data-mandala="5">Motif 5</button>
-            </div>
-          </div>
-
-          <div id="mandala-color-group" style="display: none;">
-            <span class="control-label">Couleur du motif</span>
-            <div class="swatches" id="mcolor-swatches" role="group" aria-label="Couleur du motif"></div>
-          </div>
-
-          <a href="#" id="config-cta" class="btn btn-gold" style="align-self: flex-start;">
-            Demander un devis avec cette configuration
-          </a>
         </div>
       </div>
     </div>
