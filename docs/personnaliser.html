@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Personnaliser — AdhanBox</title>
+  <meta name="description" content="Composez votre AdhanBox en 3D : couleur du châssis, motif de la façade et sa teinte. Toutes les finitions sont mates.">
+  <meta name="theme-color" content="#0C5B45">
+  <link rel="canonical" href="https://adelhanifione.github.io/adhanbox/personnaliser.html">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230C5B45'/%3E%3Cpath d='M32 12c2 7 7 11 14 13v21a2 2 0 0 1-2 2H20a2 2 0 0 1-2-2V25c7-2 12-6 14-13z' fill='%23F7EEDC'/%3E%3Ccircle cx='32' cy='33' r='6' fill='%230C5B45'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=Amiri:wght@400;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/DRACOLoader.js"></script>
+  <script defer src="configurator.js"></script>
+  <script defer src="site.js"></script>
+</head>
+<body data-page="personnaliser">
+  <main>
+    <section id="configurateur" class="first-section">
+    <div class="container">
+      <div class="section-head reveal">
+        <div class="eyebrow">Personnalisez le vôtre</div>
+        <h2>Composez <em>votre AdhanBox</em></h2>
+        <p>Chaque boîtier est imprimé en 3D à la commande. Choisissez la couleur du châssis, le motif de la façade et sa teinte — toutes les finitions sont mates, pensées pour révéler le relief des motifs.</p>
+      </div>
+
+      <div class="configurator-panel reveal">
+        <div class="config-viewport">
+          <div id="canvas3d" role="img" aria-label="Aperçu 3D interactif du boîtier AdhanBox"></div>
+          <div class="viewport-hint">Glissez pour faire pivoter · molette pour zoomer</div>
+        </div>
+
+        <div class="config-controls">
+          <div>
+            <span class="control-label">Couleur du châssis</span>
+            <div class="swatches" id="finish-swatches" role="group" aria-label="Couleur du châssis"></div>
+            <p class="control-note" id="finish-note">Bois — finition mate.</p>
+          </div>
+
+          <div>
+            <span class="control-label">Motif de la façade</span>
+            <div class="pill-options" role="group" aria-label="Motif de mandala">
+              <button class="pill-btn active" data-mandala="0">Aucun</button>
+              <button class="pill-btn" data-mandala="1">Motif 1</button>
+              <button class="pill-btn" data-mandala="2">Motif 2</button>
+              <button class="pill-btn" data-mandala="3">Motif 3</button>
+              <button class="pill-btn" data-mandala="4">Motif 4</button>
+              <button class="pill-btn" data-mandala="5">Motif 5</button>
+            </div>
+          </div>
+
+          <div id="mandala-color-group" style="display: none;">
+            <span class="control-label">Couleur du motif</span>
+            <div class="swatches" id="mcolor-swatches" role="group" aria-label="Couleur du motif"></div>
+          </div>
+
+          <a href="#" id="config-cta" class="btn btn-gold" style="align-self: flex-start;">
+            Demander un devis avec cette configuration
+          </a>
+        </div>
+      </div>
+    </div>
+  </section>
+  </main>
+</body>
+</html>

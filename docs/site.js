@@ -25,7 +25,7 @@
     '<div class="menu-overlay" id="menu-overlay" aria-hidden="true">' +
       '<nav class="menu-nav" aria-label="Navigation principale">' +
         '<a href="index.html" data-nav="accueil">Accueil</a>' +
-        '<a href="index.html#configurateur" data-nav="configurateur">Personnaliser</a>' +
+        '<a href="personnaliser.html" data-nav="personnaliser">Personnaliser</a>' +
         '<div class="menu-group" id="menu-group-produit">' +
           '<button class="menu-group-toggle" aria-expanded="false">Le produit' +
             '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg>' +
@@ -68,7 +68,7 @@
           '<div class="footer-col">' +
             '<h4>Naviguer</h4>' +
             '<ul>' +
-              '<li><a href="index.html#configurateur">Personnaliser</a></li>' +
+              '<li><a href="personnaliser.html">Personnaliser</a></li>' +
               '<li><a href="offres.html">Offres</a></li>' +
               '<li><a href="faq.html">FAQ</a></li>' +
               '<li><a href="contact.html">Contact</a></li>' +

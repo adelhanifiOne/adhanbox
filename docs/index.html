@@ -4,31 +4,14 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AdhanBox — L'adhan chez vous, comme à la mosquée</title>
-  <meta name="description" content="Composez et commandez votre AdhanBox : boîtier d'appel à la prière artisanal et connecté, synchronisé avec votre mosquée ou autonome hors-ligne.">
+  <meta name="description" content="AdhanBox, boîtier d'appel à la prière artisanal et connecté : la lumière s'éveille et l'adhan résonne à chaque prière. Personnalisez le vôtre et commandez.">
   <meta name="theme-color" content="#0C5B45">
   <link rel="canonical" href="https://adelhanifione.github.io/adhanbox/">
 
   <meta property="og:type" content="website">
   <meta property="og:title" content="AdhanBox — L'adhan chez vous, comme à la mosquée">
-  <meta property="og:description" content="Boîtier d'appel à la prière artisanal et connecté : synchronisé avec votre mosquée via Mawaqit, autonome hors-ligne, lumière d'ambiance et doua automatique.">
+  <meta property="og:description" content="Boîtier d'appel à la prière artisanal et connecté : la lumière s'éveille et l'adhan résonne à chaque prière. Synchronisé avec votre mosquée ou autonome hors-ligne.">
   <meta property="og:locale" content="fr_FR">
-
-  <script type="application/ld+json">
-  {
-    "@context": "https://schema.org",
-    "@type": "Product",
-    "name": "AdhanBox",
-    "description": "Boîtier d'appel à la prière connecté : synchronisation Mawaqit, calcul astronomique embarqué, lumière d'ambiance, doua automatique, application mobile compagnon.",
-    "brand": { "@type": "Brand", "name": "AdhanBox" },
-    "offers": {
-      "@type": "AggregateOffer",
-      "priceCurrency": "EUR",
-      "lowPrice": "0",
-      "offerCount": "2",
-      "availability": "https://schema.org/PreOrder"
-    }
-  }
-  </script>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230C5B45'/%3E%3Cpath d='M32 12c2 7 7 11 14 13v21a2 2 0 0 1-2 2H20a2 2 0 0 1-2-2V25c7-2 12-6 14-13z' fill='%23F7EEDC'/%3E%3Ccircle cx='32' cy='33' r='6' fill='%230C5B45'/%3E%3C/svg%3E">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -38,126 +21,48 @@
   <script defer src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/DRACOLoader.js"></script>
-  <script defer src="configurator.js"></script>
+  <script defer src="home3d.js"></script>
   <script defer src="site.js"></script>
 </head>
 <body data-page="accueil">
   <main>
-<section id="configurateur" class="first-section">
-    <div class="container">
-      <div class="section-head reveal">
-        <div class="eyebrow">Personnalisez le vôtre</div>
-        <h2>Composez <em>votre AdhanBox</em></h2>
-        <p>Chaque boîtier est imprimé en 3D à la commande. Choisissez la couleur du châssis, le motif de la façade et sa teinte — toutes les finitions sont mates, pensées pour révéler le relief des motifs.</p>
-      </div>
-
-      <div class="configurator-panel reveal">
-        <div class="config-viewport">
-          <div id="canvas3d" role="img" aria-label="Aperçu 3D interactif du boîtier AdhanBox"></div>
-          <div class="viewport-hint">Glissez pour faire pivoter · molette pour zoomer</div>
-        </div>
-
-        <div class="config-controls">
+    <section class="hero first-section">
+      <div class="pattern-bg" aria-hidden="true"></div>
+      <div class="container">
+        <div class="hero-grid">
           <div>
-            <span class="control-label">Couleur du châssis</span>
-            <div class="swatches" id="finish-swatches" role="group" aria-label="Couleur du châssis"></div>
-            <p class="control-note" id="finish-note">Bois — finition mate.</p>
-          </div>
-
-          <div>
-            <span class="control-label">Motif de la façade</span>
-            <div class="pill-options" role="group" aria-label="Motif de mandala">
-              <button class="pill-btn active" data-mandala="0">Aucun</button>
-              <button class="pill-btn" data-mandala="1">Motif 1</button>
-              <button class="pill-btn" data-mandala="2">Motif 2</button>
-              <button class="pill-btn" data-mandala="3">Motif 3</button>
-              <button class="pill-btn" data-mandala="4">Motif 4</button>
-              <button class="pill-btn" data-mandala="5">Motif 5</button>
+            <div class="bismillah">بِسْمِ ٱللَّٰهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ</div>
+            <div class="hero-badge"><span class="dot"></span> Fabriqué à la main · pour la communauté</div>
+            <h1>L'adhan chez vous, <em>comme à la mosquée</em></h1>
+            <p class="hero-text">
+              AdhanBox est un boîtier d'appel à la prière, pensé et fabriqué à la main.
+              Je l'ai imaginé pour faire entrer l'adhan dans nos maisons : à chaque prière,
+              la lumière s'éveille doucement et l'appel résonne — un rappel paisible au cœur
+              du foyer, pour rapprocher nos familles de leur religion.
+            </p>
+            <div class="hero-actions">
+              <a href="personnaliser.html" class="btn btn-primary btn-lg">
+                Commencer la personnalisation
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+              </a>
+              <a href="offres.html" class="btn btn-outline btn-lg">Commander</a>
+            </div>
+            <div class="trust-row">
+              <span><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg> Sonne même sans Internet</span>
+              <span><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg> Lumière d'ambiance</span>
+              <span><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg> Synchronisé avec votre mosquée</span>
             </div>
           </div>
 
-          <div id="mandala-color-group" style="display: none;">
-            <span class="control-label">Couleur du motif</span>
-            <div class="swatches" id="mcolor-swatches" role="group" aria-label="Couleur du motif"></div>
-          </div>
-
-          <a href="#" id="config-cta" class="btn btn-gold" style="align-self: flex-start;">
-            Demander un devis avec cette configuration
-          </a>
-        </div>
-      </div>
-    </div>
-  </section>
-
-<section class="hero">
-    <div class="pattern-bg" aria-hidden="true"></div>
-    <div class="container">
-      <div class="hero-grid">
-        <div>
-          <div class="bismillah">بِسْمِ ٱللَّٰهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ</div>
-          <div class="hero-badge"><span class="dot"></span> Synchronisé avec votre mosquée · fonctionne aussi hors-ligne</div>
-          <h1>L'adhan chez vous, <em>comme à la mosquée</em></h1>
-          <p class="hero-text">
-            À l'heure de chaque prière, AdhanBox s'éveille : la lumière respire doucement,
-            l'adhan résonne — avec sa voix dédiée au Fajr — puis la doua conclut l'appel.
-            Synchronisé avec votre mosquée via Mawaqit, ou entièrement autonome grâce à
-            son calcul astronomique embarqué.
-          </p>
-          <div class="hero-actions">
-            <a href="#configurateur" class="btn btn-primary">
-              Personnaliser mon boîtier
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-            </a>
-            <a href="offres.html" class="btn btn-outline">Voir les offres</a>
-          </div>
-          <div class="trust-row">
-            <span>
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg>
-              Sonne même sans Internet
-            </span>
-            <span>
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg>
-              Open source
-            </span>
-            <span>
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg>
-              Mises à jour automatiques
-            </span>
-          </div>
-        </div>
-
-        <div class="hero-visual">
-          <div class="product-stage">
-            <div class="device">
-              <svg class="device-mandala" viewBox="0 0 200 200" fill="none" stroke="currentColor" aria-hidden="true">
-                <g stroke-width="1.4">
-                  <circle cx="100" cy="100" r="88"/>
-                  <circle cx="100" cy="100" r="64"/>
-                  <circle cx="100" cy="100" r="22"/>
-                  <path d="M100 12l20.8 52.8L173.6 86 120.8 106.8 100 159.6 79.2 106.8 26.4 86l52.8-21.2z"/>
-                  <path d="M100 36l14.7 37.4L152 88 114.7 102.7 100 140 85.3 102.7 48 88l37.3-14.6z" opacity="0.7"/>
-                  <path d="M100 78l6.2 15.8L122 100l-15.8 6.2L100 122l-6.2-15.8L78 100l15.8-6.2z"/>
-                </g>
-              </svg>
-              <div class="device-led" aria-hidden="true"></div>
+          <div class="hero-visual">
+            <div class="home-stage">
+              <div id="home-3d" role="img" aria-label="Aperçu 3D du boîtier AdhanBox"></div>
+              <div class="viewport-hint">Glissez pour faire pivoter</div>
             </div>
-          </div>
-          <div class="hero-chip chip-prayer">
-            <div class="chip-icon gold" aria-hidden="true">
-              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
-            </div>
-            <div><strong>Maghreb · 21:42</strong><small>Prochain appel programmé</small></div>
-          </div>
-          <div class="hero-chip chip-sync">
-            <div class="chip-icon green" aria-hidden="true">
-              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38"/></svg>
-            </div>
-            <div><strong>Mawaqit</strong><small>Horaires de votre mosquée</small></div>
           </div>
         </div>
       </div>
-    </div>
-  </section>
+    </section>
   </main>
 </body>
 </html>

@@ -1523,3 +1523,30 @@
     }
     .legal-body p { color: var(--muted); margin-bottom: 0.85rem; }
     .legal-body strong { color: var(--ink); }
+
+    /* ═══ PAGE D'ACCUEIL : scène 3D + gros bouton ═══ */
+    .home-stage {
+      position: relative;
+      border-radius: 28px;
+      background: radial-gradient(120% 100% at 50% 18%, #FFFFFF 0%, var(--ivory-deep) 72%);
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow-md);
+      overflow: hidden;
+    }
+    #home-3d {
+      width: 100%;
+      height: min(58vh, 460px);
+      min-height: 320px;
+      cursor: grab;
+    }
+    #home-3d:active { cursor: grabbing; }
+    .home-stage .viewport-hint {
+      position: absolute;
+      bottom: 0.9rem; left: 50%;
+      transform: translateX(-50%);
+    }
+    .btn-lg { padding: 1.05rem 2.3rem; font-size: 1.08rem; }
+    @media (max-width: 560px) {
+      .btn-lg { width: 100%; }
+      .hero-actions { width: 100%; }
+    }
