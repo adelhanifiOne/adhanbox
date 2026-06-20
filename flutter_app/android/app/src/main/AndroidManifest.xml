@@ -13,10 +13,13 @@
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE"/>
     <uses-permission android:name="android.permission.NEARBY_WIFI_DEVICES" android:usesPermissionFlags="neverForLocation" />
     
-    <!-- Location Permissions (required for WiFi scan on Android 10+) -->
+    <!-- Location Permissions (foreground only — required for WiFi scan on Android 10+
+         and for local prayer-time calculation). Background location is NOT used. -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
-    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION"/>
+    <!-- Explicitly strip background location to avoid Google Play policy rejection,
+         even if a transitive dependency tries to merge it in. -->
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" tools:node="remove"/>
     
     <!-- mDNS/Bonjour for ESP32 discovery -->
     <uses-permission android:name="android.permission.NSD_SERVICE"/>

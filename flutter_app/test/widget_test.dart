@@ -11,8 +11,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:adhanbox/main.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const ProviderScope(child: AdhanBoxApp()));
+  testWidgets('App builds without a connected device', (WidgetTester tester) async {
+    // Build the app and trigger a frame — verifies it starts cleanly
+    // even with no AdhanBox device on the network.
+    await tester.pumpWidget(const ProviderScope(child: AdhanBoxApp(showTutorial: false)));
+    await tester.pump();
   });
 }
