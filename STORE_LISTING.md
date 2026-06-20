@@ -18,7 +18,7 @@ AdhanBox
 
 **Sous-titre** (max 30) :
 ```
-L'appel à la prière connecté
+Appel à la prière connecté
 ```
 
 **Texte promotionnel** (max 170, modifiable sans review) :
@@ -105,7 +105,7 @@ The app requires an AdhanBox device to function.
 
 **Titre** (max 30) :
 ```
-AdhanBox — Appel à la prière
+AdhanBox : Appel à la prière
 ```
 
 **Description courte** (max 80) :
