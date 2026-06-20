@@ -182,10 +182,14 @@ class _DeviceSetupScreenState extends ConsumerState<DeviceSetupScreen>
     setState(() { _isScanningHomeWifi = true; _error = null; });
     try {
       final api = AdhanBoxAPI(baseUrl: 'http://192.168.4.1', timeout: const Duration(seconds: 10));
-      final response = await api.scanWifiNetworks();
+      final networks = await api.scanWiFiNetworks();
       setState(() {
-        _homeWifiNetworks = (response['networks'] as List<dynamic>? ?? [])
-            .map((n) => {'ssid': n['ssid'], 'rssi': n['rssi'], 'security': n['security']})
+        _homeWifiNetworks = networks
+            .map((n) => {
+                  'ssid': n['ssid'],
+                  'rssi': n['rssi'],
+                  'security': n['security'] ?? n['secure'],
+                })
             .toList();
         _isScanningHomeWifi = false;
         if (_homeWifiNetworks.isEmpty) _error = 'Aucun réseau WiFi détecté par l\'AdhanBox.';
