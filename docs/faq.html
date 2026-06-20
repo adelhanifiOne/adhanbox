@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FAQ — AdhanBox</title>
+  <meta name="description" content="Toutes les réponses à vos questions sur l'AdhanBox : fonctionnement, horaires, adhan, installation et fiabilité.">
+  <meta name="theme-color" content="#0C5B45">
+  <link rel="canonical" href="https://adelhanifione.github.io/adhanbox/faq.html">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230C5B45'/%3E%3Cpath d='M32 12c2 7 7 11 14 13v21a2 2 0 0 1-2 2H20a2 2 0 0 1-2-2V25c7-2 12-6 14-13z' fill='%23F7EEDC'/%3E%3Ccircle cx='32' cy='33' r='6' fill='%230C5B45'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=Amiri:wght@400;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <script defer src="site.js"></script>
+</head>
+<body data-page="faq">
+  <main>
+<section id="faq">
+    <div class="container">
+      <div class="section-head reveal">
+        <div class="eyebrow">FAQ</div>
+        <h2>Vos questions, <em>nos réponses</em></h2>
+        <p>Tout ce qu'il faut savoir sur le fonctionnement d'AdhanBox au quotidien.</p>
+      </div>
+
+      <div class="faq-list reveal">
+        <div class="faq-item">
+          <button class="faq-q" aria-expanded="false">
+            <span>Le boîtier fonctionne-t-il sans connexion Internet ?</span>
+            <svg class="chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg>
+          </button>
+          <div class="faq-a"><p>
+            Oui, entièrement. L'horloge DS3231 réveille le boîtier par une alarme matérielle à
+            l'heure de chaque prière, et le calcul astronomique embarqué détermine les horaires
+            sans aucun serveur. Internet ne sert qu'à la synchronisation Mawaqit et aux mises à
+            jour — dès que la connexion revient, la synchronisation reprend toute seule.
+          </p></div>
+        </div>
+
+        <div class="faq-item">
+          <button class="faq-q" aria-expanded="false">
+            <span>Comment se passe la première installation ?</span>
+            <svg class="chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg>
+          </button>
+          <div class="faq-a"><p>
+            Au premier branchement, les LED clignotent en rouge : le boîtier attend d'être appairé.
+            L'application le détecte en Bluetooth, lui transmet votre réseau Wi-Fi, puis le retrouve
+            automatiquement sur votre réseau. Heure, position et mosquée se synchronisent ensuite en
+            un geste. Un tutoriel intégré vous guide à chaque étape.
+          </p></div>
+        </div>
+
+        <div class="faq-item">
+          <button class="faq-q" aria-expanded="false">
+            <span>Puis-je choisir un adhan différent pour chaque prière ?</span>
+            <svg class="chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg>
+          </button>
+          <div class="faq-a"><p>
+            Oui. Chaque prière a sa propre configuration : la récitation, le volume, et la doua
+            après l'adhan (activable ou non). Le Fajr dispose par défaut d'une voix dédiée. Vous
+            pouvez écouter chaque piste depuis l'application avant de valider.
+          </p></div>
+        </div>
+
+        <div class="faq-item">
+          <button class="faq-q" aria-expanded="false">
+            <span>Ma mosquée n'est pas sur Mawaqit, que se passe-t-il ?</span>
+            <svg class="chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg>
+          </button>
+          <div class="faq-a"><p>
+            Le mode autonome prend le relais : le boîtier calcule les horaires à partir de votre
+            position GPS, selon la méthode de votre choix (MWL, ISNA, UOIF, Égypte, Karachi ou
+            angles personnalisés) et votre école pour le Asr. Vous pouvez aussi ajuster chaque
+            prière de quelques minutes pour coller aux habitudes de votre mosquée.
+          </p></div>
+        </div>
+
+        <div class="faq-item">
+          <button class="faq-q" aria-expanded="false">
+            <span>Peut-on gérer plusieurs boîtiers avec la même application ?</span>
+            <svg class="chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg>
+          </button>
+          <div class="faq-a"><p>
+            Oui. L'application gère plusieurs AdhanBox sur le même réseau — un boîtier dans le
+            salon, un autre dans la chambre — et vous passez de l'un à l'autre en un appui.
+            Chacun garde ses propres réglages : adhan, volume, doua et ambiance lumineuse.
+            Au quotidien, le bouton physique permet aussi de changer d'ambiance ou d'arrêter
+            l'adhan sans sortir le téléphone.
+          </p></div>
+        </div>
+
+        <div class="faq-item">
+          <button class="faq-q" aria-expanded="false">
+            <span>Quelles sont les dimensions et l'alimentation requise ?</span>
+            <svg class="chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg>
+          </button>
+          <div class="faq-a"><p>
+            Le boîtier mesure environ 12 cm de côté et s'alimente via un simple câble USB-C (5 V),
+            identique à un chargeur de smartphone standard.
+          </p></div>
+        </div>
+      </div>
+    </div>
+  </section>
+  </main>
+</body>
+</html>
