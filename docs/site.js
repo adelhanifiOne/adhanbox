@@ -26,27 +26,11 @@
       '<nav class="menu-nav" aria-label="Navigation principale">' +
         '<a href="index.html" data-nav="accueil">Accueil</a>' +
         '<a href="personnaliser.html" data-nav="personnaliser">Personnaliser</a>' +
-        '<div class="menu-group" id="menu-group-produit">' +
-          '<button class="menu-group-toggle" aria-expanded="false">Le produit' +
-            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg>' +
-          '</button>' +
-          '<div class="menu-sub">' +
-            '<a href="produit.html#horaires">Horaires</a>' +
-            '<a href="produit.html#lumiere">Lumière</a>' +
-            '<a href="produit.html#adhan">Adhan</a>' +
-            '<a href="produit.html#application">Application</a>' +
-          '</div>' +
-        '</div>' +
+        '<a href="produit.html" data-nav="produit">Le produit</a>' +
         '<a href="faq.html" data-nav="faq">FAQ</a>' +
         '<a href="contact.html" data-nav="contact">Contact</a>' +
-        '<a href="offres.html" class="btn btn-primary menu-cta" data-nav="offres">Commander</a>' +
-        '<div class="menu-arabic">صدقة جارية</div>' +
       '</nav>' +
-    '</div>' +
-    '<a href="offres.html" class="order-fab" aria-label="Commander l\'AdhanBox">' +
-      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.7 13.4a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.6L23 6H6"/></svg>' +
-      'Commander' +
-    '</a>';
+    '</div>';
 
   var FOOTER =
     '<footer>' +
@@ -57,19 +41,10 @@
             '<p>Boîtier d\'appel à la prière artisanal et connecté, conçu et fabriqué avec minutie pour soutenir la communauté musulmane.</p>' +
           '</div>' +
           '<div class="footer-col">' +
-            '<h4>Le produit</h4>' +
-            '<ul>' +
-              '<li><a href="produit.html#horaires">Horaires de prière</a></li>' +
-              '<li><a href="produit.html#lumiere">Lumière d\'ambiance</a></li>' +
-              '<li><a href="produit.html#adhan">Adhan &amp; doua</a></li>' +
-              '<li><a href="produit.html#application">Application</a></li>' +
-            '</ul>' +
-          '</div>' +
-          '<div class="footer-col">' +
             '<h4>Naviguer</h4>' +
             '<ul>' +
               '<li><a href="personnaliser.html">Personnaliser</a></li>' +
-              '<li><a href="offres.html">Offres</a></li>' +
+              '<li><a href="produit.html">Le produit</a></li>' +
               '<li><a href="faq.html">FAQ</a></li>' +
               '<li><a href="contact.html">Contact</a></li>' +
             '</ul>' +
@@ -84,7 +59,7 @@
         '</div>' +
         '<div class="footer-bottom">' +
           '<span>© 2026 AdhanBox · Adel Hanifi</span>' +
-          '<span class="arabic">بِسْمِ ٱللَّٰهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ · صدقة جارية</span>' +
+          '<span class="arabic">بِسْمِ ٱللَّٰهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ</span>' +
         '</div>' +
       '</div>' +
     '</footer>';
@@ -122,18 +97,6 @@
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape' && document.body.classList.contains('menu-open')) setMenu(false);
   });
-
-  // Sous-menu « Le produit »
-  var group = document.getElementById('menu-group-produit');
-  var toggle = group.querySelector('.menu-group-toggle');
-  toggle.addEventListener('click', function () {
-    var open = group.classList.toggle('open');
-    toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
-  });
-  if (page === 'produit') {
-    group.classList.add('open');
-    toggle.setAttribute('aria-expanded', 'true');
-  }
 
   // Apparition au défilement
   var revealObserver = new IntersectionObserver(function (entries) {
