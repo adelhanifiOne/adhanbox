@@ -223,8 +223,8 @@ int v2SyncContent() {
     String path = line.substring(0, bar); path.trim();
     String url  = line.substring(bar + 1); url.trim();
     if (SD.exists(path)) continue;                       // deja present -> on saute
-    for (int i = 1; i < (int)path.length(); i++)         // creer les dossiers parents
-      if (path[i] == '/') { String d = path.substring(0, i); if (!SD.exists(d)) SD.mkdir(d); }
+    int sl = path.lastIndexOf('/');                      // creer le dossier parent
+    if (sl > 0) { String d = path.substring(0, sl); if (!SD.exists(d) && !SD.mkdir(d)) _syncMsg += "(mkdirFail)"; }
     WiFiClientSecure c2; c2.setInsecure();
     HTTPClient h2;
     if (!h2.begin(c2, url)) { _syncMsg += " " + path + "=beginFail"; continue; }
@@ -234,13 +234,10 @@ int v2SyncContent() {
     int gc = h2.GET();
     _syncMsg += " " + path + "=" + String(gc);
     if (gc == 200) {
-      String tmp = path + ".part";
-      File f = SD.open(tmp, FILE_WRITE);
+      File f = SD.open(path, FILE_WRITE);
       if (f) {
         h2.writeToStream(&f);                 // streaming -> pas de gros buffer RAM
         f.close();
-        if (SD.exists(path)) SD.remove(path);
-        SD.rename(tmp, path);                 // renomme seulement si complet
         added++; _syncMsg += "(ok)"; Serial.printf("[sync] + %s\n", path.c_str());
       } else { _syncMsg += "(openFail)"; }
     }
