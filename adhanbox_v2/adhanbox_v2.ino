@@ -270,7 +270,7 @@ class DFPlayerCompat {
     stop();
     if (!SD.exists(path)) return false;
     src = new AudioFileSourceSD(path);
-    buf = new AudioFileSourceBuffer(src, 32768);  // gros buffer -> evite les coupures (underruns)
+    buf = new AudioFileSourceBuffer(src, 8192);   // 8KB : sur pour la RAM interne (I2S DMA)
     String p = path; p.toLowerCase();
     if (p.endsWith(".wav")) { wav = new AudioGeneratorWAV(); return wav->begin(buf, out); }
     mp3 = new AudioGeneratorMP3(); return mp3->begin(buf, out);
