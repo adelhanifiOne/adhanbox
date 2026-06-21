@@ -375,11 +375,46 @@ final deviceFirmwareVersionProvider = FutureProvider<Map<String, dynamic>>((ref)
   }
 });
 
-// Provider pour récupérer la dernière version disponible en ligne
-final latestFirmwareVersionProvider = FutureProvider<Map<String, dynamic>>((ref) async {
+// true si le device tourne un firmware V2 (>= 2.x) -> débloque les fonctions V2
+// (upload de fichiers audio, etc.). false pour un device V1 (1.x) ou legacy.
+final isV2DeviceProvider = FutureProvider<bool>((ref) async {
+  try {
+    final device = await ref.watch(deviceFirmwareVersionProvider.future);
+    final hw = (device['hardware'] ?? '').toString();
+    final major =
+        int.tryParse((device['version'] ?? '1').toString().split('.').first) ?? 1;
+    return hw == 'v2' || major >= 2;
+  } catch (_) {
+    return false; // device indisponible -> on considère V1 par sécurité
+  }
+});
+
+// Provider pour récupérer la dernière version disponible en ligne, SUR LE BON
+// CANAL selon le firmware du device :
+//   - firmware 1.x -> canal V1 (firmware_version.json)
+//   - firmware 2.x -> canal V2 (firmware_version_v2.json)
+// Comme chaque manifeste ne contient que sa propre lignée, un device 1.x ne se
+// voit jamais proposer un firmware 2.x (et inversement). Une seule app pour tous.
+final latestFirmwareVersionProvider =
+    FutureProvider<Map<String, dynamic>>((ref) async {
+  // 1) Choisir le canal d'après le firmware actuel du device
+  String channel = 'firmware_version.json'; // défaut = V1
+  try {
+    final device = await ref.watch(deviceFirmwareVersionProvider.future);
+    final hw = (device['hardware'] ?? '').toString();
+    final major =
+        int.tryParse((device['version'] ?? '1.0.0').toString().split('.').first) ?? 1;
+    if (hw == 'v2' || major >= 2) {
+      channel = 'firmware_version_v2.json';
+    }
+  } catch (_) {
+    // device indisponible -> on reste sur le canal V1 par sécurité
+  }
+
+  // 2) Lire le manifeste du canal correspondant
   final timestamp = DateTime.now().millisecondsSinceEpoch;
   final response = await http.get(Uri.parse(
-      'https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/firmware_version.json?t=$timestamp'))
+      'https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/$channel?t=$timestamp'))
       .timeout(const Duration(seconds: 8));
   if (response.statusCode == 200) {
     return jsonDecode(response.body) as Map<String, dynamic>;

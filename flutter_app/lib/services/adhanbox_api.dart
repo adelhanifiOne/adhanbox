@@ -552,6 +552,53 @@ class AdhanBoxAPI {
     }
   }
 
+  // ===== AZKAR / CORAN (V2) =====
+  Future<Map<String, dynamic>> getAzkarCoran() async {
+    final response = await http
+        .get(Uri.parse('$baseUrl/api/azkarcoran'))
+        .timeout(timeout);
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body) as Map<String, dynamic>;
+    }
+    throw Exception('Failed to load azkar/coran: ${response.statusCode}');
+  }
+
+  /// [body] doit utiliser des bool envoyés en 1/0 (ex. sabah_en: 1).
+  Future<void> setAzkarCoran(Map<String, dynamic> body) async {
+    final response = await http
+        .post(Uri.parse('$baseUrl/api/azkarcoran'),
+            headers: _authHeaders, body: jsonEncode(body))
+        .timeout(timeout);
+    if (response.statusCode != 200) {
+      throw Exception('Failed to save azkar/coran: ${response.statusCode}');
+    }
+  }
+
+  // ===== CONTENU AUDIO (V2) =====
+  Future<List<String>> listAudio() async {
+    final response = await http
+        .get(Uri.parse('$baseUrl/api/audio/list'))
+        .timeout(timeout);
+    if (response.statusCode == 200) {
+      final list = jsonDecode(response.body);
+      if (list is List) return list.map((e) => e.toString()).toList();
+      return <String>[];
+    }
+    throw Exception('Failed to list audio: ${response.statusCode}');
+  }
+
+  /// Force une synchronisation du contenu -> nombre de fichiers ajoutés.
+  Future<int> syncContent() async {
+    final response = await http
+        .post(Uri.parse('$baseUrl/api/content/sync'), headers: _authHeaders)
+        .timeout(const Duration(seconds: 30));
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return (data is Map && data['added'] is int) ? data['added'] as int : 0;
+    }
+    throw Exception('Failed to sync content: ${response.statusCode}');
+  }
+
   // ===== WIFI =====
   Future<Map<String, dynamic>> getWiFiStatus() async {
     try {

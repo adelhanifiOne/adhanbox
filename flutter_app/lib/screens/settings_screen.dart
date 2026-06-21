@@ -10,6 +10,8 @@ import '../theme/app_theme.dart';
 import '../main.dart';
 import 'privacy_policy_screen.dart';
 import 'device_setup_screen.dart';
+import 'azkar_coran_screen.dart';
+import 'audio_content_screen.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({Key? key}) : super(key: key);
@@ -84,6 +86,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final themeMode = ref.watch(themeModeProvider);
+    // Fonctions réservées au matériel V2 (firmware >= 2.x)
+    final isV2 = ref.watch(isV2DeviceProvider).value ?? false;
     final deviceIp = ref.watch(currentDeviceIpProvider) ?? '';
     final api = ref.read(adhanboxApiProvider);
     final localVersionAsync = ref.watch(deviceFirmwareVersionProvider);
@@ -224,6 +228,37 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ).animate().fadeIn(delay: 200.ms).slideY(begin: 0.06),
 
                 const SizedBox(height: 20),
+
+                // ── AUDIO & RÉCITATIONS (V2 uniquement) ──
+                if (isV2) ...[
+                  _SectionHeader('Audio & Récitations'),
+                  _SettingsCard(
+                    children: [
+                      _ActionTile(
+                        icon: Icons.mosque_rounded,
+                        iconColor: AppTheme.emerald,
+                        title: 'Azkar & Coran',
+                        subtitle: 'Horaires des azkar, Al-Kahf, Al-Mulk',
+                        onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                              builder: (_) => const AzkarCoranScreen()),
+                        ),
+                      ),
+                      _CardDivider(),
+                      _ActionTile(
+                        icon: Icons.library_music_rounded,
+                        iconColor: Colors.blue,
+                        title: 'Contenu audio',
+                        subtitle: 'Synchroniser et voir les fichiers de la SD',
+                        onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                              builder: (_) => const AudioContentScreen()),
+                        ),
+                      ),
+                    ],
+                  ).animate().fadeIn(delay: 220.ms).slideY(begin: 0.06),
+                  const SizedBox(height: 20),
+                ],
 
                 // ── APPARENCE & THÈME ──
                 _SectionHeader('Préférences'),

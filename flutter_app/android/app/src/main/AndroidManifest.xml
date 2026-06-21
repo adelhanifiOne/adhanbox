@@ -20,7 +20,14 @@
     <!-- Explicitly strip background location to avoid Google Play policy rejection,
          even if a transitive dependency tries to merge it in. -->
     <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" tools:node="remove"/>
-    
+
+    <!-- Bluetooth (BLE) — provisioning de l'AdhanBox (Android 12+) -->
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation"/>
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT"/>
+    <!-- Compat Android <= 11 -->
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30"/>
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30"/>
+
     <!-- mDNS/Bonjour for ESP32 discovery -->
     <uses-permission android:name="android.permission.NSD_SERVICE"/>
 
