@@ -219,17 +219,44 @@ int v2SyncContent() {
     if (!h2.begin(c2, url)) continue;
     h2.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
     if (h2.GET() == 200) {
-      File f = SD.open(path, FILE_WRITE);
-      if (f) { h2.writeToStream(&f); f.close(); added++; Serial.printf("[sync] + %s\n", path.c_str()); }
+      String tmp = path + ".part";
+      File f = SD.open(tmp, FILE_WRITE);
+      if (f) {
+        h2.writeToStream(&f);                 // streaming -> pas de gros buffer RAM
+        f.close();
+        if (SD.exists(path)) SD.remove(path);
+        SD.rename(tmp, path);                 // renomme seulement si complet
+        added++; Serial.printf("[sync] + %s\n", path.c_str());
+      }
     }
     h2.end();
   }
   Serial.printf("[sync] %d fichier(s) ajoute(s)\n", added);
   return added;
 }
+// Synchro lancee en TACHE DE FOND (sinon le download bloque le serveur HTTP
+// + watchdog sur les gros fichiers). L'app interroge /api/content/status.
+static volatile bool _syncRunning = false;
+static volatile int  _syncAdded   = 0;
+void _v2SyncTask(void*) {
+  _syncRunning = true;
+  _syncAdded = v2SyncContent();
+  _syncRunning = false;
+  vTaskDelete(nullptr);
+}
 void handleContentSync() {
-  int n = v2SyncContent();
-  char buf[48]; snprintf(buf, sizeof(buf), "{\"added\":%d}", n);
+  if (!_syncRunning) {
+    _syncAdded = 0;
+    xTaskCreate(_v2SyncTask, "v2sync", 16384, nullptr, 1, nullptr);  // stack large (TLS)
+  }
+  char buf[64];
+  snprintf(buf, sizeof(buf), "{\"status\":\"%s\"}", _syncRunning ? "running" : "started");
+  server.send(200, "application/json", buf);
+}
+void handleContentStatus() {
+  char buf[64];
+  snprintf(buf, sizeof(buf), "{\"running\":%s,\"added\":%d}",
+           _syncRunning ? "true" : "false", _syncAdded);
   server.send(200, "application/json", buf);
 }
 
@@ -239,7 +266,10 @@ void v2Tick() {
   static unsigned long lastCheck = 0;
   static int fSabah = -1, fMasaa = -1, fKahf = -1, fMulk = -1;
   if (!inited) { v2LoadSettings(); inited = true; }
-  if (!synced && WiFi.status() == WL_CONNECTED) { v2SyncContent(); synced = true; }
+  if (!synced && WiFi.status() == WL_CONNECTED) {  // sync auto au boot, en tache de fond
+    synced = true;
+    if (!_syncRunning) xTaskCreate(_v2SyncTask, "v2sync", 16384, nullptr, 1, nullptr);
+  }
   if (millis() - lastCheck < 1000) return;              // 1x / s
   lastCheck = millis();
   if (dfplayer.isRunning()) return;                     // ne pas couper une lecture
@@ -257,6 +287,7 @@ V2_ROUTES = '''server.on("/api/firmware/version", HTTP_GET, handleFirmwareVersio
   server.on("/api/azkarcoran", HTTP_GET, handleGetAzkarCoran);
   server.on("/api/azkarcoran", HTTP_POST, handleSetAzkarCoran);
   server.on("/api/content/sync", HTTP_POST, handleContentSync);
+  server.on("/api/content/status", HTTP_GET, handleContentStatus);
   server.on("/api/audio/list", HTTP_GET, handleAudioList);'''
 
 
@@ -313,7 +344,7 @@ def main():
     t = apply(t, "void handlePlayTrack();",
                  "void handlePlayTrack();\n"
                  "void handleGetAzkarCoran();\nvoid handleSetAzkarCoran();\n"
-                 "void handleContentSync();\nvoid handleAudioList();")
+                 "void handleContentSync();\nvoid handleContentStatus();\nvoid handleAudioList();")
 
     os.makedirs(DST_DIR, exist_ok=True)
     open(DST, "w", encoding="utf-8").write(t)

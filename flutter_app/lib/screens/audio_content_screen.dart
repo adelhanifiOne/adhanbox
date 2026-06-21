@@ -46,14 +46,31 @@ class _AudioContentScreenState extends ConsumerState<AudioContentScreen> {
     try {
       final api = ref.read(adhanboxApiProvider);
       if (api == null) throw Exception('Aucun appareil connecté');
-      final added = await api.syncContent();
+      await api.syncContent(); // lance la synchro en tâche de fond sur le device
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text(added > 0
-                ? '$added nouveau(x) fichier(s) téléchargé(s) ✓'
-                : 'Déjà à jour ✓')));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text(
+                'Synchronisation lancée… les fichiers apparaissent au fur et à mesure')));
       }
-      await _refresh();
+      // On interroge l'état + on rafraîchit la liste jusqu'à la fin (~3 min max).
+      for (int i = 0; i < 45; i++) {
+        await Future.delayed(const Duration(seconds: 4));
+        if (!mounted) return;
+        await _refresh();
+        try {
+          final st = await api.getContentStatus();
+          if (st['running'] == false) {
+            final added = (st['added'] ?? 0) as int;
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                  content: Text(added > 0
+                      ? '$added fichier(s) téléchargé(s) ✓'
+                      : 'Déjà à jour ✓')));
+            }
+            break;
+          }
+        } catch (_) {/* device occupé, on réessaie */}
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)

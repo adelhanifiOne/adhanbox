@@ -587,16 +587,25 @@ class AdhanBoxAPI {
     throw Exception('Failed to list audio: ${response.statusCode}');
   }
 
-  /// Force une synchronisation du contenu -> nombre de fichiers ajoutés.
-  Future<int> syncContent() async {
-    final response = await http
+  /// Déclenche la synchro (le device télécharge en tâche de fond).
+  Future<void> syncContent() async {
+    final r = await http
         .post(Uri.parse('$baseUrl/api/content/sync'), headers: _authHeaders)
-        .timeout(const Duration(seconds: 30));
-    if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-      return (data is Map && data['added'] is int) ? data['added'] as int : 0;
+        .timeout(const Duration(seconds: 10));
+    if (r.statusCode != 200) {
+      throw Exception('Failed to start sync: ${r.statusCode}');
     }
-    throw Exception('Failed to sync content: ${response.statusCode}');
+  }
+
+  /// État de la synchro en cours : {"running":bool, "added":int}.
+  Future<Map<String, dynamic>> getContentStatus() async {
+    final r = await http
+        .get(Uri.parse('$baseUrl/api/content/status'))
+        .timeout(timeout);
+    if (r.statusCode == 200) {
+      return jsonDecode(r.body) as Map<String, dynamic>;
+    }
+    throw Exception('Failed to get sync status: ${r.statusCode}');
   }
 
   // ===== WIFI =====
