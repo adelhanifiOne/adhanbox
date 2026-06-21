@@ -138,7 +138,7 @@ class _BLEWifiScanCB : public BLECharacteristicCallbacks {
       }
       WiFi.scanDelete();
       vTaskDelete(nullptr);
-    }, "ble_wifi_scan", 8192, nullptr, 1, nullptr);
+    }, "ble_wifi_scan", 16384, nullptr, 1, nullptr);
   }
 };
 #else

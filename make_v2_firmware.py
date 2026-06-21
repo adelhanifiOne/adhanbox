@@ -352,6 +352,11 @@ def main():
     t = apply(t, 'server.on("/api/firmware/version", HTTP_GET, handleFirmwareVersion);',
                  V2_ROUTES)
 
+    # 10z) la tache BLE wifi-scan deborde sa pile (8KB) -> crash pendant la
+    #      provisioning (scanNetworks + JSON + notify). On l'agrandit.
+    t = apply(t, '"ble_wifi_scan", 8192, nullptr, 1, nullptr',
+                 '"ble_wifi_scan", 16384, nullptr, 1, nullptr')
+
     # 10a) le "wait for errors" post-lecture (800ms) coupait le debut de l'adhan
     #      en I2S -> on pompe le decodeur pendant cette fenetre.
     t = apply(t,
