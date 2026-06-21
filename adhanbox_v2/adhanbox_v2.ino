@@ -4051,7 +4051,7 @@ void _v2SyncTask(void*) {
 void handleContentSync() {
   if (!_syncRunning) {
     _syncAdded = 0;
-    xTaskCreate(_v2SyncTask, "v2sync", 24576, nullptr, 1, nullptr);  // stack large (TLS)
+    xTaskCreate(_v2SyncTask, "v2sync", 32768, nullptr, 1, nullptr);  // stack large (TLS)
   }
   char buf[64];
   snprintf(buf, sizeof(buf), "{\"status\":\"%s\"}", _syncRunning ? "running" : "started");
@@ -4072,7 +4072,7 @@ void v2Tick() {
   if (!inited) { v2LoadSettings(); inited = true; }
   if (!synced && WiFi.status() == WL_CONNECTED) {  // sync auto au boot, en tache de fond
     synced = true;
-    if (!_syncRunning) xTaskCreate(_v2SyncTask, "v2sync", 24576, nullptr, 1, nullptr);
+    if (!_syncRunning) xTaskCreate(_v2SyncTask, "v2sync", 32768, nullptr, 1, nullptr);
   }
   if (millis() - lastCheck < 1000) return;              // 1x / s
   lastCheck = millis();

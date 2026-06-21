@@ -1,8 +1,7 @@
-# AdhanBox V2 - manifeste de contenu audio (sync auto WiFi)
-# Format: chemin|URL   (le device telecharge les fichiers MANQUANTS)
+# AdhanBox V2 - manifeste de contenu audio (sync auto WiFi) - tout en HTTPS
+# Format: chemin|URL
 
-# --- Adhans pour la priere (joues par NUMERO de piste) ---
-# 0001 = duaa apres adhan | 0002 = adhan normal | 0003 = adhan Fajr | 0004+ = autres adhans
+# --- Adhans (joues par NUMERO) : 0001=duaa 0002=adhan 0003=fajr 0004+=autres ---
 /mp3/0001.mp3|https://archive.org/download/adhan.notifications/Dua_after_Adhan.mp3
 /mp3/0002.mp3|https://islamcan.com/audio/adhan/azan2.mp3
 /mp3/0003.mp3|https://archive.org/download/adhan.notifications/Mishary_Rashid_al_Afasy_Fajr_Adhan.mp3
@@ -19,7 +18,7 @@
 /mp3/0014.mp3|https://islamcan.com/audio/adhan/azan12.mp3
 /mp3/0015.mp3|https://islamcan.com/audio/adhan/azan13.mp3
 
-# --- Azkar / Coran / Duaa (joues par CHEMIN) ---
+# --- Azkar / Coran (joues par CHEMIN) ---
 /azkar/sabah.mp3|https://archive.org/download/sheikh-mishary-rashid-alafasy-azkar/Sheikh%20Mishary%20Rashid%20Alafasy%20-%20%D8%A3%D8%B0%D9%83%D8%A7%D8%B1%20%D8%A7%D9%84%D8%B5%D8%A8%D8%A7%D8%AD.mp3
 /azkar/masaa.mp3|https://archive.org/download/sheikh-mishary-rashid-alafasy-azkar/Sheikh%20Mishary%20Rashid%20Alafasy%20-%20%D8%A3%D8%B0%D9%83%D8%A7%D8%B1%20%D8%A7%D9%84%D9%85%D8%B3%D8%A7%D8%A1.mp3
 /quran/al-mulk.mp3|https://server8.mp3quran.net/afs/067.mp3
