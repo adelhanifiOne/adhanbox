@@ -164,19 +164,9 @@ class _AdhanConfigScreenState extends ConsumerState<AdhanConfigScreen> {
           );
         }
       }
-    } catch (e) {
-      // Si c'est juste un timeout au chargement, on affiche un snackbar discret
-      // plutôt qu'un bandeau rouge permanent — les valeurs par défaut restent affichées
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Appareil injoignable, valeurs par défaut affichées'),
-            backgroundColor: Colors.orange[800],
-            behavior: SnackBarBehavior.floating,
-            duration: const Duration(seconds: 3),
-          ),
-        );
-      }
+    } catch (_) {
+      // Appareil injoignable au chargement : on garde silencieusement les
+      // valeurs par défaut (plus de bandeau orange).
     }
     if (mounted) setState(() => _isLoading = false);
   }
