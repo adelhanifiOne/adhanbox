@@ -193,6 +193,9 @@ static const char *V2_CONTENT_URL =
 
 int v2SyncContent() {
   if (WiFi.status() != WL_CONNECTED) return -1;
+#if ENABLE_BLE
+  if (_bleActive) stopBLEProvisioning();   // libere la RAM BLE (~60KB) avant le TLS
+#endif
   WiFiClientSecure cli; cli.setInsecure();
   HTTPClient http;
   if (!http.begin(cli, V2_CONTENT_URL)) return -1;
@@ -344,6 +347,11 @@ def main():
     # 9) enregistrer les routes HTTP V2
     t = apply(t, 'server.on("/api/firmware/version", HTTP_GET, handleFirmwareVersion);',
                  V2_ROUTES)
+
+    # 10b) stopBLEProvisioning libere AUSSI la RAM du BLE (~60KB) -> dispo pour le TLS
+    t = apply(t,
+        "  BLEDevice::stopAdvertising();\n  _bleCredsReady = false;",
+        "  BLEDevice::stopAdvertising();\n  BLEDevice::deinit(true);   // [V2] libere la RAM BLE\n  _bleCredsReady = false;")
 
     # 10) declarations anticipees (les routes sont enregistrees AVANT le module V2)
     t = apply(t, "void handlePlayTrack();",

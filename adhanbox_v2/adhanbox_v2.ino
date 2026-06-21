@@ -2698,6 +2698,7 @@ void stopBLEProvisioning() {
     delay(300);  // laisser les callbacks onDisconnect se terminer
   }
   BLEDevice::stopAdvertising();
+  BLEDevice::deinit(true);   // [V2] libere la RAM BLE
   _bleCredsReady = false;
   _bleClientConn = false;
   Serial.println("[BLE] provisioning stopped");
@@ -3988,6 +3989,9 @@ static const char *V2_CONTENT_URL =
 
 int v2SyncContent() {
   if (WiFi.status() != WL_CONNECTED) return -1;
+#if ENABLE_BLE
+  if (_bleActive) stopBLEProvisioning();   // libere la RAM BLE (~60KB) avant le TLS
+#endif
   WiFiClientSecure cli; cli.setInsecure();
   HTTPClient http;
   if (!http.begin(cli, V2_CONTENT_URL)) return -1;
