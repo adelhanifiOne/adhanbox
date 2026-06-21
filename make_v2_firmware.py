@@ -187,6 +187,7 @@ void handleAudioList() {
 
 // Sync de contenu : telecharge les fichiers MANQUANTS listes dans un manifeste
 // texte (1 ligne = "chemin|url"). Permet d'ajouter des duaas/sons a distance.
+String _syncMsg = "(idle)";   // diagnostic visible via /api/content/status
 static const char *V2_CONTENT_URL =
   "https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/audio_content.txt";
 
@@ -196,7 +197,9 @@ int v2SyncContent() {
   HTTPClient http;
   if (!http.begin(cli, V2_CONTENT_URL)) return -1;
   http.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
-  if (http.GET() != 200) { http.end(); return -1; }
+  int mc = http.GET();
+  _syncMsg = "manifest=" + String(mc) + " heap=" + String(ESP.getFreeHeap());
+  if (mc != 200) { http.end(); return -1; }
   String man = http.getString();
   http.end();
 
@@ -216,9 +219,11 @@ int v2SyncContent() {
       if (path[i] == '/') { String d = path.substring(0, i); if (!SD.exists(d)) SD.mkdir(d); }
     WiFiClientSecure c2; c2.setInsecure();
     HTTPClient h2;
-    if (!h2.begin(c2, url)) continue;
+    if (!h2.begin(c2, url)) { _syncMsg += " " + path + "=beginFail"; continue; }
     h2.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
-    if (h2.GET() == 200) {
+    int gc = h2.GET();
+    _syncMsg += " " + path + "=" + String(gc);
+    if (gc == 200) {
       String tmp = path + ".part";
       File f = SD.open(tmp, FILE_WRITE);
       if (f) {
@@ -226,8 +231,8 @@ int v2SyncContent() {
         f.close();
         if (SD.exists(path)) SD.remove(path);
         SD.rename(tmp, path);                 // renomme seulement si complet
-        added++; Serial.printf("[sync] + %s\n", path.c_str());
-      }
+        added++; _syncMsg += "(ok)"; Serial.printf("[sync] + %s\n", path.c_str());
+      } else { _syncMsg += "(openFail)"; }
     }
     h2.end();
   }
@@ -254,10 +259,10 @@ void handleContentSync() {
   server.send(200, "application/json", buf);
 }
 void handleContentStatus() {
-  char buf[64];
-  snprintf(buf, sizeof(buf), "{\"running\":%s,\"added\":%d}",
-           _syncRunning ? "true" : "false", _syncAdded);
-  server.send(200, "application/json", buf);
+  String j = "{\"running\":" + String(_syncRunning ? "true" : "false") +
+             ",\"added\":" + String(_syncAdded) +
+             ",\"msg\":\"" + _syncMsg + "\"}";
+  server.send(200, "application/json", j);
 }
 
 // Scheduler appele depuis loop() : joue azkar (heure fixe) + coran (auto)
