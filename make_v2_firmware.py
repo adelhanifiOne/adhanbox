@@ -109,6 +109,9 @@ V2_MODULE = r'''
 // ============ AdhanBox V2 : Azkar / Coran + sync de contenu ============
 #include <HTTPClient.h>
 
+// Pile de la tache loop() agrandie (decodage MP3 = gourmand en pile)
+SET_LOOP_TASK_STACK_SIZE(16384);
+
 struct V2Settings {
   bool sabahEn; int sabahH, sabahM;   // Azkar matin  (heure fixe)
   bool masaaEn; int masaaH, masaaM;   // Azkar soir   (heure fixe)
@@ -259,7 +262,7 @@ void _v2SyncTask(void*) {
 void handleContentSync() {
   if (!_syncRunning) {
     _syncAdded = 0;
-    xTaskCreate(_v2SyncTask, "v2sync", 16384, nullptr, 1, nullptr);  // stack large (TLS)
+    xTaskCreate(_v2SyncTask, "v2sync", 24576, nullptr, 1, nullptr);  // stack large (TLS)
   }
   char buf[64];
   snprintf(buf, sizeof(buf), "{\"status\":\"%s\"}", _syncRunning ? "running" : "started");
@@ -280,7 +283,7 @@ void v2Tick() {
   if (!inited) { v2LoadSettings(); inited = true; }
   if (!synced && WiFi.status() == WL_CONNECTED) {  // sync auto au boot, en tache de fond
     synced = true;
-    if (!_syncRunning) xTaskCreate(_v2SyncTask, "v2sync", 16384, nullptr, 1, nullptr);
+    if (!_syncRunning) xTaskCreate(_v2SyncTask, "v2sync", 24576, nullptr, 1, nullptr);
   }
   if (millis() - lastCheck < 1000) return;              // 1x / s
   lastCheck = millis();
