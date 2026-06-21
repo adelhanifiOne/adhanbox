@@ -270,7 +270,7 @@ class DFPlayerCompat {
     stop();
     if (!SD.exists(path)) return false;
     src = new AudioFileSourceSD(path);
-    buf = new AudioFileSourceBuffer(src, 8192);   // saute l'ID3 + lecture fluide
+    buf = new AudioFileSourceBuffer(src, 32768);  // gros buffer -> evite les coupures (underruns)
     String p = path; p.toLowerCase();
     if (p.endsWith(".wav")) { wav = new AudioGeneratorWAV(); return wav->begin(buf, out); }
     mp3 = new AudioGeneratorMP3(); return mp3->begin(buf, out);
@@ -3638,12 +3638,8 @@ void playTrack(int track) {
   // Wait briefly to catch immediate DFPlayer errors (FileIndexOut / TimeOut)
   unsigned long start = millis();
   while (millis() - start < 800) {
-    if (dfLastError != DFERR_NONE) {
-      // If an error occurs even after recovery, log and stop trying
-      Serial.printf("DFPlayer error after play request: %d\n", dfLastError);
-      break;
-    }
-    delay(50);
+    dfplayer.pump();   // [V2] decode pendant l'attente -> debut de l'adhan non coupe
+    delay(2);
   }
 }
 

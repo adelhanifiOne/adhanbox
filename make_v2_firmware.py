@@ -72,7 +72,7 @@ class DFPlayerCompat {
     stop();
     if (!SD.exists(path)) return false;
     src = new AudioFileSourceSD(path);
-    buf = new AudioFileSourceBuffer(src, 8192);   // saute l'ID3 + lecture fluide
+    buf = new AudioFileSourceBuffer(src, 32768);  // gros buffer -> evite les coupures (underruns)
     String p = path; p.toLowerCase();
     if (p.endsWith(".wav")) { wav = new AudioGeneratorWAV(); return wav->begin(buf, out); }
     mp3 = new AudioGeneratorMP3(); return mp3->begin(buf, out);
@@ -351,6 +351,22 @@ def main():
     # 9) enregistrer les routes HTTP V2
     t = apply(t, 'server.on("/api/firmware/version", HTTP_GET, handleFirmwareVersion);',
                  V2_ROUTES)
+
+    # 10a) le "wait for errors" post-lecture (800ms) coupait le debut de l'adhan
+    #      en I2S -> on pompe le decodeur pendant cette fenetre.
+    t = apply(t,
+        "  while (millis() - start < 800) {\n"
+        "    if (dfLastError != DFERR_NONE) {\n"
+        "      // If an error occurs even after recovery, log and stop trying\n"
+        "      Serial.printf(\"DFPlayer error after play request: %d\\n\", dfLastError);\n"
+        "      break;\n"
+        "    }\n"
+        "    delay(50);\n"
+        "  }",
+        "  while (millis() - start < 800) {\n"
+        "    dfplayer.pump();   // [V2] decode pendant l'attente -> debut de l'adhan non coupe\n"
+        "    delay(2);\n"
+        "  }")
 
     # 10b) stopBLEProvisioning libere AUSSI la RAM du BLE (~60KB) -> dispo pour le TLS
     t = apply(t,
