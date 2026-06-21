@@ -199,6 +199,8 @@ int v2SyncContent() {
   WiFiClientSecure cli; cli.setInsecure();
   HTTPClient http;
   if (!http.begin(cli, V2_CONTENT_URL)) return -1;
+  http.setConnectTimeout(15000);
+  http.setTimeout(15000);
   http.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
   int mc = http.GET();
   _syncMsg = "manifest=" + String(mc) + " heap=" + String(ESP.getFreeHeap());
@@ -223,6 +225,8 @@ int v2SyncContent() {
     WiFiClientSecure c2; c2.setInsecure();
     HTTPClient h2;
     if (!h2.begin(c2, url)) { _syncMsg += " " + path + "=beginFail"; continue; }
+    h2.setConnectTimeout(15000);
+    h2.setTimeout(30000);                    // gros fichiers + serveurs lents (archive.org)
     h2.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
     int gc = h2.GET();
     _syncMsg += " " + path + "=" + String(gc);
