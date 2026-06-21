@@ -1,0 +1,14 @@
+# AdhanBox V2 — manifeste de contenu audio (sync auto par WiFi)
+# Format : chemin_sur_la_SD|URL   (le device telecharge les fichiers MANQUANTS)
+
+# --- Coran ---
+/quran/al-kahf.mp3|https://server8.mp3quran.net/afs/018.mp3
+/quran/al-mulk.mp3|https://server8.mp3quran.net/afs/067.mp3
+
+# --- Azkar (matin / soir) ---
+/azkar/sabah.mp3|https://archive.org/download/sheikh-mishary-rashid-alafasy-azkar/Sheikh%20Mishary%20Rashid%20Alafasy%20-%20%D8%A3%D8%B0%D9%83%D8%A7%D8%B1%20%D8%A7%D9%84%D8%B5%D8%A8%D8%A7%D8%AD.mp3
+/azkar/masaa.mp3|https://archive.org/download/sheikh-mishary-rashid-alafasy-azkar/Sheikh%20Mishary%20Rashid%20Alafasy%20-%20%D8%A3%D8%B0%D9%83%D8%A7%D8%B1%20%D8%A7%D9%84%D9%85%D8%B3%D8%A7%D8%A1.mp3
+
+# --- Duaa apres l'adhan ---
+/dua/dua-adhan.mp3|https://archive.org/download/adhan.notifications/Dua_after_Adhan.mp3
+
