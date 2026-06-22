@@ -1,0 +1,75 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+*{margin:0;padding:0;box-sizing:border-box;font-family:-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;-webkit-font-smoothing:antialiased;}
+html,body{width:1242px;height:2688px;overflow:hidden;}
+body{background:linear-gradient(165deg,#0b6b4f 0%,#08533d 18%,#0a1422 46%);}
+.cap{padding:150px 96px 0;text-align:center;}
+.cap h1{font-size:86px;line-height:1.08;font-weight:800;color:#fff;letter-spacing:-1.5px;}
+.cap h1 .ac{color:#9ff5d4;}
+.cap p{margin-top:34px;font-size:40px;color:#d6f5e9;font-weight:500;line-height:1.3;}
+/* Cadre téléphone */
+.phone{position:absolute;left:50%;transform:translateX(-50%);top:760px;width:980px;height:1850px;
+  background:#0a1422;border-radius:78px;border:16px solid #1c2735;
+  box-shadow:0 50px 120px rgba(0,0,0,.55), 0 0 0 6px rgba(255,255,255,.04);overflow:hidden;}
+.notch{position:absolute;top:0;left:50%;transform:translateX(-50%);width:300px;height:42px;
+  background:#1c2735;border-radius:0 0 28px 28px;z-index:5;}
+.scr{position:absolute;inset:0;background:#0a1422;color:#e9eef3;display:flex;flex-direction:column;}
+.hdr{background:#0b6b4f;padding:64px 44px 30px;display:flex;align-items:center;gap:26px;}
+.hdr .bk{font-size:46px;color:#fff;opacity:.9;}
+.hdr h2{font-size:48px;color:#fff;font-weight:700;}
+.body{padding:40px 44px;display:flex;flex-direction:column;gap:30px;overflow:hidden;}
+/* Carte prière */
+.card{background:#141f2e;border:2px solid #22303f;border-radius:34px;padding:34px;}
+.crow{display:flex;align-items:center;gap:26px;}
+.ic{width:88px;height:88px;border-radius:24px;display:flex;align-items:center;justify-content:center;font-size:44px;}
+.nm{font-size:46px;font-weight:600;flex:1;}
+.play{width:74px;height:74px;border-radius:50%;background:#10b981;display:flex;align-items:center;justify-content:center;font-size:36px;color:#04130d;}
+.sw{width:118px;height:66px;border-radius:33px;background:#10b981;position:relative;}
+.sw::after{content:"";position:absolute;top:6px;right:6px;width:54px;height:54px;border-radius:50%;background:#fff;}
+.sep{height:2px;background:#22303f;margin:30px -34px;}
+.lbl{font-size:32px;color:#8b9bab;margin-bottom:16px;}
+.drop{background:#0a1422;border:2px solid #22303f;border-radius:22px;padding:30px 32px;font-size:42px;display:flex;justify-content:space-between;align-items:center;}
+.chk{display:flex;align-items:center;gap:24px;font-size:38px;color:#e9eef3;margin-top:30px;}
+.cbox{width:56px;height:56px;border-radius:14px;background:#10b981;display:flex;align-items:center;justify-content:center;color:#fff;font-size:36px;}
+.vrow{display:flex;align-items:center;gap:26px;margin-top:30px;}
+.track{flex:1;height:14px;border-radius:7px;background:linear-gradient(90deg,#10b981 60%,#22303f 60%);position:relative;}
+.knob{position:absolute;top:50%;left:60%;transform:translate(-50%,-50%);width:54px;height:54px;border-radius:50%;background:#10b981;box-shadow:0 0 0 10px rgba(16,185,129,.18);}
+.vval{font-size:34px;font-weight:700;color:#10b981;}
+.muted{color:#8b9bab;}
+/* liste horaires */
+.ptime{display:flex;justify-content:space-between;align-items:center;padding:36px 4px;border-bottom:2px solid #22303f;}
+.ptime .l{display:flex;align-items:center;gap:26px;font-size:46px;}
+.ptime .t{font-size:50px;font-weight:700;}
+.ptime.active .t{color:#10b981;}
+.next{background:linear-gradient(135deg,#0b6b4f,#0a4a37);border-radius:34px;padding:46px;text-align:center;margin-bottom:8px;}
+.next .k{font-size:34px;color:#bdf0dd;letter-spacing:2px;}
+.next .big{font-size:96px;font-weight:800;color:#fff;margin-top:10px;}
+.next .s{font-size:38px;color:#d6f5e9;margin-top:6px;}
+/* LEDs */
+.ledgrid{display:flex;flex-wrap:wrap;gap:24px;justify-content:center;padding:14px 0;}
+.led{width:120px;height:120px;border-radius:50%;}
+.tile{background:#141f2e;border:2px solid #22303f;border-radius:28px;padding:34px;display:flex;align-items:center;gap:26px;font-size:40px;}
+.dot{width:60px;height:60px;border-radius:50%;}
+/* setup */
+.step{display:flex;align-items:center;gap:30px;background:#141f2e;border:2px solid #22303f;border-radius:30px;padding:38px;}
+.num{width:84px;height:84px;border-radius:50%;background:#10b981;color:#04130d;font-size:44px;font-weight:800;display:flex;align-items:center;justify-content:center;}
+.step .st{font-size:42px;font-weight:600;}
+.step .sd{font-size:32px;color:#8b9bab;margin-top:8px;}
+.bigbtn{margin-top:14px;background:#10b981;color:#04130d;font-size:46px;font-weight:700;text-align:center;padding:42px;border-radius:30px;}
+</style></head><body>
+<div class="cap"><h1>Réglez le volume <span class="ac">en direct</span></h1><p>Volume général ou par prière, avec écoute immédiate.</p></div>
+<div class="phone"><div class="notch"></div><div class="scr"><div class="hdr"><span class="bk">‹</span><h2>Appel à la prière</h2></div>
+<div class="body">
+  <div class="card"><div class="crow"><div class="ic" style="background:#134e3a;color:#10b981">🔊</div>
+    <div class="nm">Volume général</div><div class="vval">22 / 30</div></div>
+    <div class="vrow"><span class="muted" style="font-size:40px">🔈</span><div class="track"><div class="knob"></div></div><span style="font-size:40px;color:#10b981">🔊</span></div>
+  </div>
+  <div class="card"><div class="crow">
+      <div class="ic" style="background:#3b3a6b;color:#c7c6ff">🌅</div>
+      <div class="nm">Fajr</div><div class="play">▶</div><div class="sw"></div></div>
+      <div class="sep"></div>
+      <div class="lbl">Adhan</div>
+      <div class="drop">Adhan 1 <span class="muted">▾</span></div>
+      <div class="chk"><div class="cbox">✓</div> Jouer la Doua après l'adhan</div>
+    </div>
+</div></div></div>
+</body></html>
