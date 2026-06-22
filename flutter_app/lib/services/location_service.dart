@@ -5,7 +5,7 @@ import 'package:permission_handler/permission_handler.dart';
 /// Service pour gérer la localisation GPS
 class LocationService {
   /// Vérifie et demande les permissions de localisation
-  Future<bool> checkAndRequestPermission() async {
+  Future<bool> checkAndRequestPermission({bool openSettings = false}) async {
     // Vérifie si les services de localisation sont activés
     final serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
@@ -20,8 +20,10 @@ class LocationService {
     }
 
     if (permission.isPermanentlyDenied) {
-      // Ouvre les paramètres pour que l'utilisateur active manuellement
-      await openAppSettings();
+      if (openSettings) {
+        // Ouvre les paramètres pour que l'utilisateur active manuellement
+        await openAppSettings();
+      }
       return false;
     }
 
@@ -29,9 +31,9 @@ class LocationService {
   }
 
   /// Obtient la position actuelle
-  Future<Position?> getCurrentLocation() async {
+  Future<Position?> getCurrentLocation({bool openSettings = false}) async {
     try {
-      final hasPermission = await checkAndRequestPermission();
+      final hasPermission = await checkAndRequestPermission(openSettings: openSettings);
       if (!hasPermission) {
         return null;
       }

@@ -30,7 +30,7 @@ class _LedControlScreenState extends ConsumerState<LedControlScreen> {
     _Scenario(id: 9, label: 'Dégradé',     icon: Icons.gradient_rounded, color: Color(0xFF6366F1)),
     _Scenario(id: 10, label: 'Prière',     icon: Icons.mosque_rounded, color: Color(0xFF059669)),
     _Scenario(id: 11, label: 'Respiration',icon: Icons.air_rounded, color: Color(0xFF06B6D4)),
-    _Scenario(id: 12, label: 'Fête',       icon: Icons.celebration_rounded, color: Color(0xFFF97316)),
+    _Scenario(id: 12, label: 'Bougie',     icon: Icons.local_fire_department_rounded, color: Color(0xFFF59E0B)),
   ];
 
   @override
@@ -64,9 +64,12 @@ class _LedControlScreenState extends ConsumerState<LedControlScreen> {
                     isSending: _isSendingBrightness,
                     onChanged: (v) async {
                       setState(() { _brightness = v; _isSendingBrightness = true; });
-                      final api = ref.read(adhanboxApiProvider);
-                      if (api != null) await api.setLedBrightness(v.toInt());
-                      if (mounted) setState(() => _isSendingBrightness = false);
+                      try {
+                        final api = ref.read(adhanboxApiProvider);
+                        if (api != null) await api.setLedBrightness(v.toInt());
+                      } catch (_) {} finally {
+                        if (mounted) setState(() => _isSendingBrightness = false);
+                      }
                     },
                   ),
 
@@ -99,9 +102,12 @@ class _LedControlScreenState extends ConsumerState<LedControlScreen> {
                     isSending: isSelected && _isSendingScenario,
                     onTap: () async {
                       setState(() { _selectedScenario = i; _isSendingScenario = true; });
-                      final api = ref.read(adhanboxApiProvider);
-                      if (api != null) await api.setLedScenario(sc.id);
-                      if (mounted) setState(() => _isSendingScenario = false);
+                      try {
+                        final api = ref.read(adhanboxApiProvider);
+                        if (api != null) await api.setLedScenario(sc.id);
+                      } catch (_) {} finally {
+                        if (mounted) setState(() => _isSendingScenario = false);
+                      }
                     },
                   ).animate().fadeIn(delay: Duration(milliseconds: 30 * i)).scale(
                     begin: const Offset(0.9, 0.9),
