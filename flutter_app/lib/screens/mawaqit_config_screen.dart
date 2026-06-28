@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
 import 'package:geolocator/geolocator.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../providers/adhanbox_provider.dart';
 import '../theme/app_theme.dart';
 import 'device_setup_screen.dart';
@@ -85,7 +86,16 @@ class _MawaqitConfigScreenState extends ConsumerState<MawaqitConfigScreen> {
   void initState() {
     super.initState();
     _searchController = TextEditingController();
+    _loadConfiguredMosque();
     _autoDetectAndSearch();
+  }
+
+  Future<void> _loadConfiguredMosque() async {
+    final prefs = await SharedPreferences.getInstance();
+    final name = prefs.getString(kMawaqitMosqueNameKey);
+    if (name != null && name.isNotEmpty && mounted) {
+      setState(() => _configuredMosque = name);
+    }
   }
 
   @override
@@ -429,6 +439,10 @@ class _MawaqitConfigScreenState extends ConsumerState<MawaqitConfigScreen> {
       ref.invalidate(deviceStatusProvider);
 
       setState(() { _configuredMosque = mosque.name; });
+      // Persiste le nom pour l'afficher sur la page Prière
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(kMawaqitMosqueNameKey, mosque.name);
+      ref.invalidate(configuredMosqueProvider);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(

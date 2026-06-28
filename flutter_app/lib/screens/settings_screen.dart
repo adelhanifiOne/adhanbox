@@ -1,8 +1,10 @@
+import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
+import 'package:url_launcher/url_launcher.dart';
 import '../providers/adhanbox_provider.dart';
 import '../services/location_service.dart';
 import '../services/wifi_service.dart';
@@ -283,6 +285,36 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
                 const SizedBox(height: 20),
 
+                // ── SOUTENIR ADHANBOX ──
+                _SectionHeader('Soutenir AdhanBox'),
+                _SettingsCard(
+                  children: [
+                    _ActionTile(
+                      icon: Icons.star_rounded,
+                      iconColor: const Color(0xFFF59E0B),
+                      title: 'Laisser un avis',
+                      subtitle: 'Notez l\'application sur le store',
+                      onTap: _leaveReview,
+                    ),
+                    _CardDivider(),
+                    _ActionTile(
+                      icon: Icons.favorite_rounded,
+                      iconColor: const Color(0xFFEC4899),
+                      title: 'Soutenir le développeur',
+                      subtitle: 'Offrez-moi un café ☕',
+                      onTap: () => _launchExternal('https://buymeacoffee.com/overlayprayers'),
+                    ),
+                    _CardDivider(),
+                    _ActionTile(
+                      icon: Icons.shopping_bag_rounded,
+                      iconColor: AppTheme.emerald,
+                      title: 'Commander un AdhanBox',
+                      subtitle: 'Découvrez nos offres',
+                      onTap: () => _launchExternal('https://adelhanifione.github.io/adhanbox/#offres'),
+                    ),
+                  ],
+                ).animate().fadeIn(delay: 280.ms).slideY(begin: 0.06),
+
                 // ── ASSISTANCE ──
                 _SectionHeader('Assistance'),
                 _SettingsCard(
@@ -315,6 +347,22 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         ],
       ),
     );
+  }
+
+  Future<void> _launchExternal(String url) async {
+    final uri = Uri.parse(url);
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+      if (mounted) _showError('Impossible d\'ouvrir le lien.');
+    }
+  }
+
+  Future<void> _leaveReview() async {
+    // Ouvre la fiche du store correspondant à la plateforme.
+    // iOS : remplacer id000000000 par l'identifiant App Store une fois connu.
+    final url = Platform.isIOS
+        ? 'https://apps.apple.com/app/id0000000000?action=write-review'
+        : 'https://play.google.com/store/apps/details?id=com.adhanbox.app';
+    await _launchExternal(url);
   }
 
   Future<void> _showWiFiPicker() async {
