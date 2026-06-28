@@ -63,6 +63,8 @@ class _AdhanConfigScreenState extends ConsumerState<AdhanConfigScreen> {
   String? _playingKey;
   int _globalVolume = 20;
   Timer? _volumeDebounce;
+  Timer? _saveDebounce;
+  bool _savedRecently = false;
 
   static const _prayerMeta = {
     'fajr':    _PrayerMeta('Fajr',    Icons.wb_twilight_rounded),
@@ -81,7 +83,15 @@ class _AdhanConfigScreenState extends ConsumerState<AdhanConfigScreen> {
   @override
   void dispose() {
     _volumeDebounce?.cancel();
+    _saveDebounce?.cancel();
     super.dispose();
+  }
+
+  /// Enregistrement automatique débouncé : appelé à chaque modification
+  /// (adhan, volume, doua, on/off). Plus de bouton « Enregistrer ».
+  void _autoSave() {
+    _saveDebounce?.cancel();
+    _saveDebounce = Timer(const Duration(milliseconds: 500), _save);
   }
 
   void _onGlobalVolumeChanged(int vol) {
@@ -172,9 +182,9 @@ class _AdhanConfigScreenState extends ConsumerState<AdhanConfigScreen> {
   }
 
   Future<void> _save() async {
+    if (_deviceIp == null) return;
     setState(() { _isSaving = true; _errorMessage = null; });
     try {
-      if (_deviceIp == null) throw Exception('Aucun appareil connecté');
       final payload = {
         for (final k in _selectedTracks.keys) '${k}_track': _selectedTracks[k],
         for (final k in _playDuaa.keys) '${k}_duaa': _playDuaa[k],
@@ -194,16 +204,15 @@ class _AdhanConfigScreenState extends ConsumerState<AdhanConfigScreen> {
       if (r.statusCode < 200 || r.statusCode >= 300) {
         throw Exception('Échec (HTTP ${r.statusCode})');
       }
+      // Feedback discret « Enregistré ✓ » qui s'efface tout seul
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Configuration enregistrée'),
-            backgroundColor: AppTheme.emerald,
-          ),
-        );
+        setState(() => _savedRecently = true);
+        Future.delayed(const Duration(seconds: 2), () {
+          if (mounted) setState(() => _savedRecently = false);
+        });
       }
     } catch (e) {
-      setState(() => _errorMessage = 'Impossible de sauvegarder: $e');
+      if (mounted) setState(() => _errorMessage = 'Impossible de sauvegarder: $e');
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
@@ -252,14 +261,11 @@ class _AdhanConfigScreenState extends ConsumerState<AdhanConfigScreen> {
         slivers: [
           SliverAppBar(
             pinned: true,
+            automaticallyImplyLeading: false,
             backgroundColor: AppTheme.emeraldDeep,
             title: Text(
               'Appel à la prière',
               style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 20),
-            ),
-            leading: IconButton(
-              icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
-              onPressed: () => Navigator.pop(context),
             ),
           ),
           if (_isLoading)
@@ -302,10 +308,10 @@ class _AdhanConfigScreenState extends ConsumerState<AdhanConfigScreen> {
                         playDuaa: _playDuaa[key]!,
                         enabled: _enabledPrayers[key]!,
                         volume: _selectedVolumes[key]!,
-                        onTrackChanged: (v) => setState(() => _selectedTracks[key] = v),
-                        onDuaaChanged: (v) => setState(() => _playDuaa[key] = v),
-                        onEnabledChanged: (v) => setState(() => _enabledPrayers[key] = v),
-                        onVolumeChanged: (v) => setState(() => _selectedVolumes[key] = v),
+                        onTrackChanged: (v) { setState(() => _selectedTracks[key] = v); _autoSave(); },
+                        onDuaaChanged: (v) { setState(() => _playDuaa[key] = v); _autoSave(); },
+                        onEnabledChanged: (v) { setState(() => _enabledPrayers[key] = v); _autoSave(); },
+                        onVolumeChanged: (v) { setState(() => _selectedVolumes[key] = v); _autoSave(); },
                         isPlaying: _playingKey == key,
                         onPreview: () => _playPreview(key, _selectedTracks[key]!, _selectedVolumes[key]!),
                         onStop: _stopPreview,
@@ -313,21 +319,32 @@ class _AdhanConfigScreenState extends ConsumerState<AdhanConfigScreen> {
                     );
                   }),
 
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 16),
 
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: _isSaving ? null : _save,
-                      style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16)),
-                      child: _isSaving
-                          ? const SizedBox(
-                              width: 20, height: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                  // Indicateur d'enregistrement automatique (plus de bouton)
+                  Center(
+                    child: AnimatedOpacity(
+                      opacity: (_isSaving || _savedRecently) ? 1 : 0,
+                      duration: const Duration(milliseconds: 250),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (_isSaving)
+                            const SizedBox(
+                              width: 14, height: 14,
+                              child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.emerald),
                             )
-                          : const Text('Enregistrer'),
+                          else
+                            const Icon(Icons.check_circle_rounded, size: 16, color: AppTheme.emerald),
+                          const SizedBox(width: 8),
+                          Text(
+                            _isSaving ? 'Enregistrement…' : 'Enregistré',
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppTheme.emerald),
+                          ),
+                        ],
+                      ),
                     ),
-                  ).animate().fadeIn(delay: 350.ms),
+                  ),
                 ]),
               ),
             ),
