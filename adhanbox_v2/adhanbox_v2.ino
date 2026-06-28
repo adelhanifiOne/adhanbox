@@ -338,6 +338,9 @@ int prayerPrevLedScenario = -1;
 // 8    : dynamic hue (all LEDs same color, hue cycling)
 // 9    : dynamic palette fade (all LEDs fade between palette colors)
 int ledScenario = 8;  // start with dynamic hue by default
+// Couleur RGB libre (roue chromatique de l'app). Quand active, prime sur le scénario.
+bool ledCustomActive = false;
+uint8_t ledCustomR = 255, ledCustomG = 200, ledCustomB = 0;
 bool isPlaying = false;
 // ledc PWM channel for LED brightness
 const int LEDC_CHANNEL = 0;
@@ -365,6 +368,7 @@ void handleGetVolume();
 void handleSetBrightness();
 void handleGetBrightness();
 void handleSetLedScenario();
+void handleSetLedRgb();
 void handleConnectWifi();
 void handleScanWifi();
 void handleDisconnectWifi();
@@ -1443,6 +1447,7 @@ void handleSetLedScenario() {
   }
 
   ledScenario = scenario;
+  ledCustomActive = false;  // un scénario prime sur la couleur libre
   if (ledScenario == 0) {
     setLedDuty(0);
     if (useAddressableLEDs) stripSetAll(0, 0, 0);
@@ -1452,10 +1457,44 @@ void handleSetLedScenario() {
 
   prefs.begin("adhancfg", false);
   prefs.putInt("led_scenario", ledScenario);
+  prefs.putBool("led_custom", false);
   prefs.end();
 
   Serial.printf("LED scenario set to %d via API\n", scenario);
   server.send(200, "application/json", String("{\"scenario\":") + scenario + "}");
+}
+
+// Couleur RGB libre : POST JSON {"r":0-255,"g":0-255,"b":0-255}
+void handleSetLedRgb() {
+  if (server.method() != HTTP_POST) {
+    server.send(405, "text/plain", "Method not allowed");
+    return;
+  }
+  String body = getRequestBody();
+  double dr = parseJsonValue(body, "r");
+  double dg = parseJsonValue(body, "g");
+  double db = parseJsonValue(body, "b");
+  if (isnan(dr) || isnan(dg) || isnan(db)) {
+    server.send(400, "text/plain", "Invalid payload");
+    return;
+  }
+  ledCustomR = (uint8_t)constrain((int)round(dr), 0, 255);
+  ledCustomG = (uint8_t)constrain((int)round(dg), 0, 255);
+  ledCustomB = (uint8_t)constrain((int)round(db), 0, 255);
+  ledCustomActive = true;
+  if (ledScenario == 0) ledScenario = 1;  // sort de l'état éteint
+  if (useAddressableLEDs) stripSetAll(ledCustomR, ledCustomG, ledCustomB);
+
+  prefs.begin("adhancfg", false);
+  prefs.putBool("led_custom", true);
+  prefs.putInt("led_cr", ledCustomR);
+  prefs.putInt("led_cg", ledCustomG);
+  prefs.putInt("led_cb", ledCustomB);
+  prefs.end();
+
+  Serial.printf("LED RGB set to %d,%d,%d via API\n", ledCustomR, ledCustomG, ledCustomB);
+  server.send(200, "application/json",
+              String("{\"r\":") + ledCustomR + ",\"g\":" + ledCustomG + ",\"b\":" + ledCustomB + "}");
 }
 
 // LED test handler: starts a short blink for 5 seconds and returns status
@@ -2903,6 +2942,7 @@ void setupServerRoutes() {
   server.on("/api/led/brightness", HTTP_POST, handleSetBrightness);
   server.on("/api/led/brightness", HTTP_GET, handleGetBrightness);
   server.on("/api/led/scenario", HTTP_POST, handleSetLedScenario);
+  server.on("/api/led/rgb", HTTP_POST, handleSetLedRgb);
   server.on("/api/mqtt/config", HTTP_GET, handleMqttConfig);
   server.on("/api/mqtt/config", HTTP_POST, handleMqttConfig);
   server.on("/api/wifi/status", HTTP_GET, handleWifiStatus);
@@ -4106,6 +4146,10 @@ void setup() {
   forcePlayTrack1 = prefs.getBool("force_t1", false);
   ledBrightness = prefs.getInt("brightness", 50);
   ledScenario = prefs.getInt("led_scenario", 8);
+  ledCustomActive = prefs.getBool("led_custom", false);
+  ledCustomR = (uint8_t)prefs.getInt("led_cr", 255);
+  ledCustomG = (uint8_t)prefs.getInt("led_cg", 200);
+  ledCustomB = (uint8_t)prefs.getInt("led_cb", 0);
   prefs.end();
 
   // Initialize DFPlayer over Serial2 (using fire-and-forget, no ACK to prevent boot hangs)
@@ -4590,6 +4634,9 @@ void loop() {
           leds.setPixelColor(i, leds.Color(r_adj, g_adj, b_adj));
         }
         leds.show();
+      } else if (ledCustomActive) {
+        // Couleur RGB libre choisie depuis la roue chromatique
+        stripSetAll(ledCustomR, ledCustomG, ledCustomB);
       } else {
         // New scene handling: static colors, blink (reserved), dynamic unified scenes
         if (ledScenario >= 0 && ledScenario < NUM_STATIC_COLORS) {

@@ -88,8 +88,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final themeMode = ref.watch(themeModeProvider);
-    // Fonctions réservées au matériel V2 (firmware >= 2.x)
-    final isV2 = ref.watch(isV2DeviceProvider).value ?? false;
     final deviceIp = ref.watch(currentDeviceIpProvider) ?? '';
     final api = ref.read(adhanboxApiProvider);
     final localVersionAsync = ref.watch(deviceFirmwareVersionProvider);
@@ -231,8 +229,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
                 const SizedBox(height: 20),
 
-                // ── AUDIO & RÉCITATIONS (V2 uniquement) ──
-                if (isV2) ...[
+                // ── AUDIO & RÉCITATIONS (toujours visible) ──
+                ...[
                   _SectionHeader('Audio & Récitations'),
                   _SettingsCard(
                     children: [
