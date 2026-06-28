@@ -450,6 +450,24 @@ class AdhanBoxAPI {
     }
   }
 
+  /// Couleur RGB libre (roue chromatique). Nécessite le firmware ≥ 1.4.7.
+  Future<void> setLedRgb(int r, int g, int b) async {
+    try {
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/api/led/rgb'),
+            headers: _authHeaders,
+            body: jsonEncode({'r': r, 'g': g, 'b': b}),
+          )
+          .timeout(timeout);
+      if (response.statusCode != 200) {
+        throw Exception('Failed to set LED rgb: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('API Error: $e');
+    }
+  }
+
   Future<void> setLedBrightness(int brightness) async {
     try {
       final response = await http

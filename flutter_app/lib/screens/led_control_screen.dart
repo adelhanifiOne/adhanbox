@@ -6,9 +6,8 @@ import 'package:google_fonts/google_fonts.dart';
 import '../providers/adhanbox_provider.dart';
 import '../theme/app_theme.dart';
 
-// Scène 0 = éteint. Scènes 1-6 = couleurs fixes du firmware. 8-12 = animations.
 const int _kSceneOff = 0;
-const int _kSceneDefault = 6; // jaune par défaut à l'allumage
+const int _kSceneDefault = 6; // jaune par défaut
 
 class LedControlScreen extends ConsumerStatefulWidget {
   const LedControlScreen({Key? key}) : super(key: key);
@@ -18,25 +17,14 @@ class LedControlScreen extends ConsumerStatefulWidget {
 }
 
 class _LedControlScreenState extends ConsumerState<LedControlScreen> {
-  // Scène actuellement affichée (0 = éteint)
-  int _currentScene = _kSceneOff;
-  // Dernière scène allumée, restaurée quand on rallume
+  int _currentScene = _kSceneOff;     // 0 = éteint
   int _lastOnScene = _kSceneDefault;
+  Color? _customColor;                // couleur RGB libre active (prime sur la scène)
+  Color _lastOnColor = const Color(0xFFF59E0B);
   double _brightness = 50;
   bool _isSendingBrightness = false;
   int _tab = 0; // 0 = Couleur, 1 = Scénarios
 
-  // Les 6 couleurs disponibles (placées sur la roue chromatique)
-  static const _colors = [
-    _Scene(id: 1, label: 'Rouge',  color: Color(0xFFEF4444)),
-    _Scene(id: 6, label: 'Jaune',  color: Color(0xFFF59E0B)),
-    _Scene(id: 5, label: 'Vert',   color: Color(0xFF10B981)),
-    _Scene(id: 3, label: 'Bleu',   color: Color(0xFF3B82F6)),
-    _Scene(id: 4, label: 'Violet', color: Color(0xFF8B5CF6)),
-    _Scene(id: 2, label: 'Rose',   color: Color(0xFFEC4899)),
-  ];
-
-  // Les scénarios animés
   static const _scenarios = [
     _Scene(id: 8,  label: 'Arc-en-ciel', color: Color(0xFFEC4899), icon: Icons.auto_awesome_rounded),
     _Scene(id: 9,  label: 'Dégradé',     color: Color(0xFF6366F1), icon: Icons.gradient_rounded),
@@ -45,13 +33,16 @@ class _LedControlScreenState extends ConsumerState<LedControlScreen> {
     _Scene(id: 12, label: 'Bougie',      color: Color(0xFFF59E0B), icon: Icons.local_fire_department_rounded),
   ];
 
-  bool get _isOn => _currentScene != _kSceneOff;
+  bool get _isOn => _customColor != null || _currentScene != _kSceneOff;
 
-  _Scene get _activeScene {
-    final all = [..._colors, ..._scenarios];
-    return all.firstWhere((s) => s.id == _currentScene,
-        orElse: () => const _Scene(id: 0, label: 'Éteint', color: Color(0xFF475569)));
+  String get _stateLabel {
+    if (!_isOn) return 'Éteint';
+    if (_customColor != null) return 'Couleur personnalisée';
+    final s = _scenarios.where((e) => e.id == _currentScene);
+    return s.isNotEmpty ? s.first.label : 'Allumé';
   }
+
+  Color get _previewColor => _customColor ?? const Color(0xFFF59E0B);
 
   @override
   void initState() {
@@ -66,21 +57,12 @@ class _LedControlScreenState extends ConsumerState<LedControlScreen> {
       final b = await api.getLedBrightness();
       if (mounted) setState(() => _brightness = b.toDouble());
     } catch (_) {}
-    try {
-      final status = await api.getLedStatus();
-      final sc = (status['scenario'] as num?)?.toInt();
-      if (sc != null && mounted) {
-        setState(() {
-          _currentScene = sc;
-          if (sc != _kSceneOff) _lastOnScene = sc;
-        });
-      }
-    } catch (_) {}
   }
 
   Future<void> _applyScene(int scene) async {
     setState(() {
       _currentScene = scene;
+      _customColor = null;
       if (scene != _kSceneOff) _lastOnScene = scene;
     });
     final api = ref.read(adhanboxApiProvider);
@@ -90,8 +72,30 @@ class _LedControlScreenState extends ConsumerState<LedControlScreen> {
     } catch (_) {}
   }
 
+  Future<void> _applyColor(Color c) async {
+    setState(() {
+      _customColor = c;
+      _lastOnColor = c;
+      if (_currentScene == _kSceneOff) _currentScene = 1;
+    });
+    final api = ref.read(adhanboxApiProvider);
+    if (api == null) return;
+    try {
+      await api.setLedRgb(c.red, c.green, c.blue);
+    } catch (_) {}
+  }
+
   void _togglePower() {
-    _applyScene(_isOn ? _kSceneOff : _lastOnScene);
+    if (_isOn) {
+      _applyScene(_kSceneOff);
+    } else {
+      // Restaure la dernière couleur si on était en mode couleur, sinon la dernière scène
+      if (_tab == 0) {
+        _applyColor(_lastOnColor);
+      } else {
+        _applyScene(_lastOnScene == _kSceneOff ? _kSceneDefault : _lastOnScene);
+      }
+    }
   }
 
   @override
@@ -109,17 +113,15 @@ class _LedControlScreenState extends ConsumerState<LedControlScreen> {
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
             sliver: SliverList(
               delegate: SliverChildListDelegate([
-                // ── Aperçu ──
-                _LedPreview(scene: _activeScene, brightness: _brightness, isOn: _isOn)
+                _LedPreview(color: _previewColor, label: _stateLabel, brightness: _brightness, isOn: _isOn, isScenario: _customColor == null && _currentScene == 8)
                     .animate().fadeIn(duration: 350.ms),
                 const SizedBox(height: 24),
 
-                // ── Bouton power ──
                 Center(child: _PowerButton(isOn: _isOn, onTap: _togglePower)),
                 const SizedBox(height: 8),
                 Center(
                   child: Text(
-                    _isOn ? 'Allumé · ${_activeScene.label}' : 'Éteint',
+                    _isOn ? 'Allumé · $_stateLabel' : 'Éteint',
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       color: _isOn ? AppTheme.emerald : (isDark ? AppTheme.darkTextMuted : AppTheme.lightTextMuted),
                       fontWeight: FontWeight.w600,
@@ -128,7 +130,6 @@ class _LedControlScreenState extends ConsumerState<LedControlScreen> {
                 ),
                 const SizedBox(height: 24),
 
-                // ── Luminosité ──
                 Text('Luminosité', style: Theme.of(context).textTheme.headlineSmall),
                 const SizedBox(height: 12),
                 _BrightnessSlider(
@@ -146,7 +147,6 @@ class _LedControlScreenState extends ConsumerState<LedControlScreen> {
                 ),
                 const SizedBox(height: 28),
 
-                // ── Onglets Couleur / Scénarios ──
                 _SegTabs(
                   index: _tab,
                   labels: const ['Couleur', 'Scénarios'],
@@ -155,17 +155,9 @@ class _LedControlScreenState extends ConsumerState<LedControlScreen> {
                 const SizedBox(height: 20),
 
                 if (_tab == 0)
-                  _ColorWheel(
-                    colors: _colors,
-                    selectedId: _currentScene,
-                    onPick: _applyScene,
-                  )
+                  _HsvWheel(selected: _customColor, onPick: _applyColor)
                 else
-                  _ScenarioGrid(
-                    scenarios: _scenarios,
-                    selectedId: _currentScene,
-                    onPick: _applyScene,
-                  ),
+                  _ScenarioGrid(scenarios: _scenarios, selectedId: _customColor == null ? _currentScene : -1, onPick: _applyScene),
               ]),
             ),
           ),
@@ -188,24 +180,15 @@ class _PowerButton extends StatelessWidget {
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 250),
-        width: 110,
-        height: 110,
+        width: 110, height: 110,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           color: isOn ? AppTheme.emerald : (isDark ? AppTheme.darkCard : AppTheme.lightCard),
-          border: Border.all(
-            color: isOn ? AppTheme.emerald : (isDark ? AppTheme.darkBorder : AppTheme.lightBorder),
-            width: 2,
-          ),
-          boxShadow: isOn
-              ? [BoxShadow(color: AppTheme.emerald.withOpacity(0.45), blurRadius: 28, spreadRadius: 4)]
-              : [],
+          border: Border.all(color: isOn ? AppTheme.emerald : (isDark ? AppTheme.darkBorder : AppTheme.lightBorder), width: 2),
+          boxShadow: isOn ? [BoxShadow(color: AppTheme.emerald.withOpacity(0.45), blurRadius: 28, spreadRadius: 4)] : [],
         ),
-        child: Icon(
-          Icons.power_settings_new_rounded,
-          size: 48,
-          color: isOn ? Colors.white : (isDark ? AppTheme.darkTextMuted : AppTheme.lightTextMuted),
-        ),
+        child: Icon(Icons.power_settings_new_rounded, size: 48,
+            color: isOn ? Colors.white : (isDark ? AppTheme.darkTextMuted : AppTheme.lightTextMuted)),
       ),
     );
   }
@@ -237,18 +220,10 @@ class _SegTabs extends StatelessWidget {
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
                 padding: const EdgeInsets.symmetric(vertical: 12),
-                decoration: BoxDecoration(
-                  color: sel ? AppTheme.emerald : Colors.transparent,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Text(
-                  labels[i],
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.inter(
-                    fontWeight: FontWeight.w600,
-                    color: sel ? Colors.white : (isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary),
-                  ),
-                ),
+                decoration: BoxDecoration(color: sel ? AppTheme.emerald : Colors.transparent, borderRadius: BorderRadius.circular(10)),
+                child: Text(labels[i], textAlign: TextAlign.center,
+                    style: GoogleFonts.inter(fontWeight: FontWeight.w600,
+                        color: sel ? Colors.white : (isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary))),
               ),
             ),
           );
@@ -258,94 +233,92 @@ class _SegTabs extends StatelessWidget {
   }
 }
 
-// ─────────────────────────── COLOR WHEEL ───────────────────────────
-// Roue chromatique : tape n'importe où, ça s'aligne sur la couleur
-// disponible la plus proche (le firmware ne gère que ces teintes).
-class _ColorWheel extends StatelessWidget {
-  final List<_Scene> colors;
-  final int selectedId;
-  final ValueChanged<int> onPick;
-  const _ColorWheel({required this.colors, required this.selectedId, required this.onPick});
+// ─────────────────────────── HSV COLOR WHEEL ───────────────────────────
+// Vraie roue chromatique : angle = teinte, distance au centre = saturation.
+class _HsvWheel extends StatefulWidget {
+  final Color? selected;
+  final ValueChanged<Color> onPick;
+  const _HsvWheel({required this.selected, required this.onPick});
 
-  void _handle(Offset local, Size size) {
-    final center = Offset(size.width / 2, size.height / 2);
-    final v = local - center;
-    if (v.distance < 8) return;
-    // Angle du toucher (0 = droite, sens horaire)
+  @override
+  State<_HsvWheel> createState() => _HsvWheelState();
+}
+
+class _HsvWheelState extends State<_HsvWheel> {
+  Offset? _marker; // position relative du marqueur (-1..1)
+
+  void _handle(Offset local, double size) {
+    final radius = size / 2;
+    final center = Offset(radius, radius);
+    var v = local - center;
+    final dist = v.distance.clamp(0.0, radius);
+    if (v.distance > radius) v = v * (radius / v.distance);
     var angle = math.atan2(v.dy, v.dx);
     if (angle < 0) angle += 2 * math.pi;
-    final step = 2 * math.pi / colors.length;
-    final idx = (((angle + step / 2) / step).floor()) % colors.length;
-    onPick(colors[idx].id);
+    final hue = angle * 180 / math.pi; // 0..360
+    final sat = (dist / radius).clamp(0.0, 1.0);
+    final color = HSVColor.fromAHSV(1, hue, sat, 1).toColor();
+    setState(() => _marker = Offset(v.dx / radius, v.dy / radius));
+    widget.onPick(color);
   }
 
   @override
   Widget build(BuildContext context) {
-    const size = 240.0;
+    const size = 250.0;
     return Center(
-      child: LayoutBuilder(builder: (ctx, _) {
-        return GestureDetector(
-          onTapDown: (d) => _handle(d.localPosition, const Size(size, size)),
-          onPanUpdate: (d) => _handle(d.localPosition, const Size(size, size)),
-          child: SizedBox(
-            width: size,
-            height: size,
-            child: CustomPaint(
-              painter: _WheelPainter(colors: colors, selectedId: selectedId),
-            ),
-          ),
-        );
-      }),
+      child: GestureDetector(
+        onTapDown: (d) => _handle(d.localPosition, size),
+        onPanUpdate: (d) => _handle(d.localPosition, size),
+        child: SizedBox(
+          width: size, height: size,
+          child: CustomPaint(painter: _WheelPainter(marker: _marker, selected: widget.selected)),
+        ),
+      ),
     );
   }
 }
 
 class _WheelPainter extends CustomPainter {
-  final List<_Scene> colors;
-  final int selectedId;
-  _WheelPainter({required this.colors, required this.selectedId});
+  final Offset? marker;
+  final Color? selected;
+  _WheelPainter({required this.marker, required this.selected});
 
   @override
   void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height / 2);
     final radius = size.width / 2;
-    final ringWidth = radius * 0.34;
-    final step = 2 * math.pi / colors.length;
+    final center = Offset(radius, radius);
 
-    // Anneau coloré segmenté
-    for (var i = 0; i < colors.length; i++) {
-      final start = i * step - step / 2;
+    // Roue : balayage de teintes (conique) + dégradé radial vers le blanc au centre
+    const steps = 360;
+    for (var i = 0; i < steps; i++) {
+      final a0 = (i - 0.5) * math.pi / 180;
+      final sweep = 1.2 * math.pi / 180;
       final paint = Paint()
+        ..shader = RadialGradient(
+          colors: [Colors.white, HSVColor.fromAHSV(1, i.toDouble(), 1, 1).toColor()],
+        ).createShader(Rect.fromCircle(center: center, radius: radius));
+      paint.style = PaintingStyle.fill;
+      final path = Path()
+        ..moveTo(center.dx, center.dy)
+        ..arcTo(Rect.fromCircle(center: center, radius: radius), a0, sweep, false)
+        ..close();
+      canvas.drawPath(path, paint);
+    }
+
+    // Marqueur de sélection
+    if (marker != null) {
+      final pos = center + Offset(marker!.dx * radius, marker!.dy * radius);
+      canvas.drawCircle(pos, 16, Paint()..color = Colors.white);
+      canvas.drawCircle(pos, 13, Paint()..color = selected ?? Colors.white);
+      canvas.drawCircle(pos, 16, Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = ringWidth
-        ..color = colors[i].color;
-      canvas.drawArc(
-        Rect.fromCircle(center: center, radius: radius - ringWidth / 2),
-        start, step, false, paint,
-      );
+        ..strokeWidth = 3
+        ..color = Colors.black26);
     }
-
-    // Pastilles + marqueur de sélection
-    for (var i = 0; i < colors.length; i++) {
-      final ang = i * step;
-      final r = radius - ringWidth / 2;
-      final pos = center + Offset(math.cos(ang) * r, math.sin(ang) * r);
-      final selected = colors[i].id == selectedId;
-      if (selected) {
-        canvas.drawCircle(pos, ringWidth * 0.42, Paint()..color = Colors.white);
-        canvas.drawCircle(pos, ringWidth * 0.30, Paint()..color = colors[i].color);
-      }
-    }
-
-    // Centre : couleur active ou gris
-    final active = colors.where((c) => c.id == selectedId);
-    final centerColor = active.isNotEmpty ? active.first.color : const Color(0xFF475569);
-    canvas.drawCircle(center, radius - ringWidth - 10,
-        Paint()..color = centerColor.withOpacity(active.isNotEmpty ? 1 : 0.25));
   }
 
   @override
-  bool shouldRepaint(covariant _WheelPainter old) => old.selectedId != selectedId;
+  bool shouldRepaint(covariant _WheelPainter old) => old.marker != marker || old.selected != selected;
 }
 
 // ─────────────────────────── SCENARIO GRID ───────────────────────────
@@ -361,8 +334,7 @@ class _ScenarioGrid extends StatelessWidget {
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 3, crossAxisSpacing: 10, mainAxisSpacing: 10, childAspectRatio: 0.95,
-      ),
+        crossAxisCount: 3, crossAxisSpacing: 10, mainAxisSpacing: 10, childAspectRatio: 0.95),
       itemCount: scenarios.length,
       itemBuilder: (ctx, i) {
         final sc = scenarios[i];
@@ -375,22 +347,15 @@ class _ScenarioGrid extends StatelessWidget {
             decoration: BoxDecoration(
               color: selected ? sc.color.withOpacity(isDark ? 0.22 : 0.14) : (isDark ? AppTheme.darkCard : AppTheme.lightCard),
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: selected ? sc.color.withOpacity(0.7) : (isDark ? AppTheme.darkBorder : AppTheme.lightBorder),
-                width: selected ? 2 : 1,
-              ),
+              border: Border.all(color: selected ? sc.color.withOpacity(0.7) : (isDark ? AppTheme.darkBorder : AppTheme.lightBorder), width: selected ? 2 : 1),
             ),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Icon(sc.icon ?? Icons.circle, size: 30, color: sc.color),
                 const SizedBox(height: 8),
-                Text(sc.label,
-                    style: GoogleFonts.inter(
-                      fontSize: 12,
-                      fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
-                      color: selected ? sc.color : (isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary),
-                    )),
+                Text(sc.label, style: GoogleFonts.inter(fontSize: 12, fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
+                    color: selected ? sc.color : (isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary))),
               ],
             ),
           ),
@@ -402,10 +367,12 @@ class _ScenarioGrid extends StatelessWidget {
 
 // ─────────────────────────── LED PREVIEW ───────────────────────────
 class _LedPreview extends StatelessWidget {
-  final _Scene scene;
+  final Color color;
+  final String label;
   final double brightness;
   final bool isOn;
-  const _LedPreview({required this.scene, required this.brightness, required this.isOn});
+  final bool isScenario;
+  const _LedPreview({required this.color, required this.label, required this.brightness, required this.isOn, required this.isScenario});
 
   @override
   Widget build(BuildContext context) {
@@ -417,43 +384,22 @@ class _LedPreview extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: isDark ? AppTheme.darkBorder : AppTheme.lightBorder),
         gradient: !isOn
-            ? LinearGradient(colors: [
-                isDark ? AppTheme.darkCard : AppTheme.lightCard,
-                isDark ? AppTheme.darkSurface : AppTheme.lightBg,
-              ])
-            : (scene.id == 8
+            ? LinearGradient(colors: [isDark ? AppTheme.darkCard : AppTheme.lightCard, isDark ? AppTheme.darkSurface : AppTheme.lightBg])
+            : (isScenario
                 ? LinearGradient(colors: [
-                    Colors.red.withOpacity(opacity), Colors.orange.withOpacity(opacity),
-                    Colors.yellow.withOpacity(opacity), Colors.green.withOpacity(opacity),
-                    Colors.blue.withOpacity(opacity), Colors.purple.withOpacity(opacity),
-                  ])
-                : LinearGradient(
-                    colors: [scene.color.withOpacity(opacity), scene.color.withOpacity(opacity * 0.6)],
-                    begin: Alignment.topLeft, end: Alignment.bottomRight,
-                  )),
+                    Colors.red.withOpacity(opacity), Colors.orange.withOpacity(opacity), Colors.yellow.withOpacity(opacity),
+                    Colors.green.withOpacity(opacity), Colors.blue.withOpacity(opacity), Colors.purple.withOpacity(opacity)])
+                : LinearGradient(colors: [color.withOpacity(opacity), color.withOpacity(opacity * 0.6)],
+                    begin: Alignment.topLeft, end: Alignment.bottomRight)),
       ),
       child: Stack(children: [
         if (isOn)
-          Center(
-            child: Container(
-              width: 80, height: 80,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                boxShadow: [BoxShadow(color: scene.color.withOpacity(0.5 * opacity), blurRadius: 40, spreadRadius: 10)],
-              ),
-            ),
-          ),
-        Positioned(
-          left: 20, bottom: 16,
-          child: Text(
-            isOn ? scene.label : 'Éteint',
-            style: GoogleFonts.poppins(
-              color: isOn ? Colors.white : (isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary),
-              fontSize: 18, fontWeight: FontWeight.w600,
-              shadows: isOn ? [const Shadow(color: Colors.black26, blurRadius: 8)] : [],
-            ),
-          ),
-        ),
+          Center(child: Container(width: 80, height: 80,
+              decoration: BoxDecoration(shape: BoxShape.circle,
+                  boxShadow: [BoxShadow(color: color.withOpacity(0.5 * opacity), blurRadius: 40, spreadRadius: 10)]))),
+        Positioned(left: 20, bottom: 16, child: Text(isOn ? label : 'Éteint',
+            style: GoogleFonts.poppins(color: isOn ? Colors.white : (isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary),
+                fontSize: 18, fontWeight: FontWeight.w600, shadows: isOn ? [const Shadow(color: Colors.black26, blurRadius: 8)] : []))),
       ]),
     );
   }
@@ -476,24 +422,15 @@ class _BrightnessSlider extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: isDark ? AppTheme.darkBorder : AppTheme.lightBorder),
       ),
-      child: Row(
-        children: [
-          const Icon(Icons.brightness_low_rounded, size: 20, color: AppTheme.darkTextMuted),
-          Expanded(
-            child: Slider(
-              value: brightness, min: 0, max: 100, divisions: 20, onChanged: onChanged,
-            ),
-          ),
-          const Icon(Icons.brightness_high_rounded, size: 20, color: AppTheme.darkTextPrimary),
-          const SizedBox(width: 12),
-          SizedBox(
-            width: 48,
-            child: isSending
-                ? const Center(child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.emerald)))
-                : Text('${brightness.toInt()}%', style: Theme.of(context).textTheme.titleMedium, textAlign: TextAlign.center),
-          ),
-        ],
-      ),
+      child: Row(children: [
+        const Icon(Icons.brightness_low_rounded, size: 20, color: AppTheme.darkTextMuted),
+        Expanded(child: Slider(value: brightness, min: 0, max: 100, divisions: 20, onChanged: onChanged)),
+        const Icon(Icons.brightness_high_rounded, size: 20, color: AppTheme.darkTextPrimary),
+        const SizedBox(width: 12),
+        SizedBox(width: 48, child: isSending
+            ? const Center(child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.emerald)))
+            : Text('${brightness.toInt()}%', style: Theme.of(context).textTheme.titleMedium, textAlign: TextAlign.center)),
+      ]),
     );
   }
 }
