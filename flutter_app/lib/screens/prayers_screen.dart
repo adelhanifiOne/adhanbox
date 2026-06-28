@@ -551,6 +551,9 @@ class _MosqueSyncCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
+    final mosqueName = ref.watch(configuredMosqueProvider).valueOrNull;
+    final hasMosque = mosqueName != null && mosqueName.isNotEmpty;
+
     return GestureDetector(
       onTap: () async {
         await Navigator.of(context).push(
@@ -558,6 +561,7 @@ class _MosqueSyncCard extends ConsumerWidget {
         );
         ref.invalidate(prayerTimesProvider);
         ref.invalidate(adjustedPrayerTimesProvider);
+        ref.invalidate(configuredMosqueProvider);
       },
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -587,14 +591,18 @@ class _MosqueSyncCard extends ConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Mosquée de référence',
+                    hasMosque ? mosqueName : 'Mosquée de référence',
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
                       color: AppTheme.emerald,
                     ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    'Synchroniser avec votre mosquée locale',
+                    hasMosque
+                        ? 'Mosquée synchronisée · modifier'
+                        : 'Synchroniser avec votre mosquée locale',
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ],

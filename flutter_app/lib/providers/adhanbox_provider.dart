@@ -421,3 +421,13 @@ final latestFirmwareVersionProvider =
   }
   throw Exception('Impossible de vérifier les mises à jour');
 });
+
+/// Nom de la mosquée Mawaqit configurée (persisté localement).
+/// Affiché sur la page Prière. Invalidé après reconfiguration.
+const kMawaqitMosqueNameKey = 'mawaqit_mosque_name';
+
+final configuredMosqueProvider = FutureProvider<String?>((ref) async {
+  final prefs = await SharedPreferences.getInstance();
+  final name = prefs.getString(kMawaqitMosqueNameKey);
+  return (name != null && name.isNotEmpty) ? name : null;
+});
