@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'screens/prayers_screen.dart';
 import 'screens/led_control_screen.dart';
 import 'screens/adhan_config_screen.dart';
+import 'screens/azkar_coran_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/tutorial_screen.dart';
 import 'theme/app_theme.dart';
@@ -184,14 +185,16 @@ class _MainNavState extends ConsumerState<MainNav> {
     PrayersScreen(),
     LedControlScreen(),
     AdhanConfigScreen(),
+    AzkarCoranScreen(),
     SettingsScreen(),
   ];
 
   static const _items = [
-    _NavItem(icon: Icons.mosque_rounded,     label: 'Prières'),
-    _NavItem(icon: Icons.light_rounded,      label: 'Lumière'),
-    _NavItem(icon: Icons.music_note_rounded, label: 'Adhan'),
-    _NavItem(icon: Icons.tune_rounded,       label: 'Réglages'),
+    _NavItem(icon: Icons.mosque_rounded,       label: 'Prières'),
+    _NavItem(icon: Icons.light_rounded,        label: 'Lumière'),
+    _NavItem(icon: Icons.music_note_rounded,   label: 'Adhan'),
+    _NavItem(icon: Icons.auto_stories_rounded, label: 'Récitations'),
+    _NavItem(icon: Icons.tune_rounded,         label: 'Réglages'),
   ];
 
   @override

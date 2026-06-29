@@ -12,7 +12,6 @@ import '../theme/app_theme.dart';
 import '../main.dart';
 import 'privacy_policy_screen.dart';
 import 'device_setup_screen.dart';
-import 'azkar_coran_screen.dart';
 import 'audio_content_screen.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
@@ -234,17 +233,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   _SectionHeader('Audio & Récitations'),
                   _SettingsCard(
                     children: [
-                      _ActionTile(
-                        icon: Icons.mosque_rounded,
-                        iconColor: AppTheme.emerald,
-                        title: 'Azkar & Coran',
-                        subtitle: 'Horaires des azkar, Al-Kahf, Al-Mulk',
-                        onTap: () => Navigator.of(context).push(
-                          MaterialPageRoute(
-                              builder: (_) => const AzkarCoranScreen()),
-                        ),
-                      ),
-                      _CardDivider(),
                       _ActionTile(
                         icon: Icons.library_music_rounded,
                         iconColor: Colors.blue,
