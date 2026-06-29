@@ -3944,54 +3944,69 @@ void handleMqttConfig() {
 // Pile de la tache loop() agrandie (decodage MP3 = gourmand en pile)
 SET_LOOP_TASK_STACK_SIZE(16384);
 
-struct V2Settings {
-  bool sabahEn; int sabahH, sabahM;   // Azkar matin  (heure fixe)
-  bool masaaEn; int masaaH, masaaM;   // Azkar soir   (heure fixe)
-  bool kahfEn;  int kahfH,  kahfM;    // Al-Kahf : vendredi a cette heure
-  bool mulkEn;  int mulkH,  mulkM;    // Al-Mulk : chaque soir a cette heure
-} v2cfg;
+// Une automatisation : actif, heure, volume (0-30), jours (bitmask bit0=Dim..bit6=Sam)
+struct V2Item { bool en; int h, m, vol, days; };
+struct { V2Item sabah, masaa, kahf, mulk; } v2cfg;
 
+void v2LoadOne(const char *p, V2Item &it, int defH, int defM, int defDays) {
+  char k[16];
+  snprintf(k, sizeof(k), "%sEn", p); it.en   = prefs.getBool(k, false);
+  snprintf(k, sizeof(k), "%sH",  p); it.h    = prefs.getInt(k, defH);
+  snprintf(k, sizeof(k), "%sM",  p); it.m    = prefs.getInt(k, defM);
+  snprintf(k, sizeof(k), "%sV",  p); it.vol  = prefs.getInt(k, 20);
+  snprintf(k, sizeof(k), "%sD",  p); it.days = prefs.getInt(k, defDays);
+}
+void v2SaveOne(const char *p, const V2Item &it) {
+  char k[16];
+  snprintf(k, sizeof(k), "%sEn", p); prefs.putBool(k, it.en);
+  snprintf(k, sizeof(k), "%sH",  p); prefs.putInt(k, it.h);
+  snprintf(k, sizeof(k), "%sM",  p); prefs.putInt(k, it.m);
+  snprintf(k, sizeof(k), "%sV",  p); prefs.putInt(k, it.vol);
+  snprintf(k, sizeof(k), "%sD",  p); prefs.putInt(k, it.days);
+}
 void v2LoadSettings() {
   prefs.begin("v2cfg", true);
-  v2cfg.sabahEn = prefs.getBool("saEn", false); v2cfg.sabahH = prefs.getInt("saH", 7);  v2cfg.sabahM = prefs.getInt("saM", 0);
-  v2cfg.masaaEn = prefs.getBool("maEn", false); v2cfg.masaaH = prefs.getInt("maH", 18); v2cfg.masaaM = prefs.getInt("maM", 0);
-  v2cfg.kahfEn  = prefs.getBool("kaEn", false); v2cfg.kahfH  = prefs.getInt("kaH", 9);  v2cfg.kahfM  = prefs.getInt("kaM", 0);
-  v2cfg.mulkEn  = prefs.getBool("muEn", false); v2cfg.mulkH  = prefs.getInt("muH", 22); v2cfg.mulkM  = prefs.getInt("muM", 0);
+  v2LoadOne("sa", v2cfg.sabah, 7,  0, 0x7F);   // tous les jours
+  v2LoadOne("ma", v2cfg.masaa, 18, 0, 0x7F);
+  v2LoadOne("ka", v2cfg.kahf,  9,  0, 0x20);   // 0x20 = vendredi (bit5)
+  v2LoadOne("mu", v2cfg.mulk,  22, 0, 0x7F);
   prefs.end();
 }
 void v2SaveSettings() {
   prefs.begin("v2cfg", false);
-  prefs.putBool("saEn", v2cfg.sabahEn); prefs.putInt("saH", v2cfg.sabahH); prefs.putInt("saM", v2cfg.sabahM);
-  prefs.putBool("maEn", v2cfg.masaaEn); prefs.putInt("maH", v2cfg.masaaH); prefs.putInt("maM", v2cfg.masaaM);
-  prefs.putBool("kaEn", v2cfg.kahfEn);  prefs.putInt("kaH", v2cfg.kahfH);  prefs.putInt("kaM", v2cfg.kahfM);
-  prefs.putBool("muEn", v2cfg.mulkEn);  prefs.putInt("muH", v2cfg.mulkH);  prefs.putInt("muM", v2cfg.mulkM);
+  v2SaveOne("sa", v2cfg.sabah); v2SaveOne("ma", v2cfg.masaa);
+  v2SaveOne("ka", v2cfg.kahf);  v2SaveOne("mu", v2cfg.mulk);
   prefs.end();
 }
 
+String v2ItemJson(const char *name, const V2Item &it) {
+  char b[160];
+  snprintf(b, sizeof(b), "\"%s\":{\"en\":%d,\"h\":%d,\"m\":%d,\"vol\":%d,\"days\":%d}",
+           name, it.en, it.h, it.m, it.vol, it.days);
+  return String(b);
+}
 void handleGetAzkarCoran() {
-  char buf[340];
-  snprintf(buf, sizeof(buf),
-    "{\"sabah\":{\"en\":%d,\"h\":%d,\"m\":%d},"
-    "\"masaa\":{\"en\":%d,\"h\":%d,\"m\":%d},"
-    "\"kahf\":{\"en\":%d,\"h\":%d,\"m\":%d},"
-    "\"mulk\":{\"en\":%d,\"h\":%d,\"m\":%d}}",
-    v2cfg.sabahEn, v2cfg.sabahH, v2cfg.sabahM,
-    v2cfg.masaaEn, v2cfg.masaaH, v2cfg.masaaM,
-    v2cfg.kahfEn,  v2cfg.kahfH,  v2cfg.kahfM,
-    v2cfg.mulkEn,  v2cfg.mulkH,  v2cfg.mulkM);
-  server.send(200, "application/json", buf);
+  String j = "{" + v2ItemJson("sabah", v2cfg.sabah) + "," + v2ItemJson("masaa", v2cfg.masaa)
+           + "," + v2ItemJson("kahf", v2cfg.kahf) + "," + v2ItemJson("mulk", v2cfg.mulk) + "}";
+  server.send(200, "application/json", j);
 }
 
 static int v2arg(const String &b, const char *k, int def) {
   double v = parseJsonValue(b, k);
-  return isnan(v) ? def : (int)v;            // app envoie en=1/0 (pas true/false)
+  return isnan(v) ? def : (int)v;            // app envoie en/jours en entiers
+}
+void v2SetOne(const String &b, const char *pfx, V2Item &it) {
+  char k[24];
+  snprintf(k, sizeof(k), "%s_en",   pfx); it.en   = v2arg(b, k, it.en);
+  snprintf(k, sizeof(k), "%s_h",    pfx); it.h    = v2arg(b, k, it.h);
+  snprintf(k, sizeof(k), "%s_m",    pfx); it.m    = v2arg(b, k, it.m);
+  snprintf(k, sizeof(k), "%s_vol",  pfx); it.vol  = v2arg(b, k, it.vol);
+  snprintf(k, sizeof(k), "%s_days", pfx); it.days = v2arg(b, k, it.days);
 }
 void handleSetAzkarCoran() {
   String b = getRequestBody();
-  v2cfg.sabahEn = v2arg(b, "sabah_en", v2cfg.sabahEn); v2cfg.sabahH = v2arg(b, "sabah_h", v2cfg.sabahH); v2cfg.sabahM = v2arg(b, "sabah_m", v2cfg.sabahM);
-  v2cfg.masaaEn = v2arg(b, "masaa_en", v2cfg.masaaEn); v2cfg.masaaH = v2arg(b, "masaa_h", v2cfg.masaaH); v2cfg.masaaM = v2arg(b, "masaa_m", v2cfg.masaaM);
-  v2cfg.kahfEn  = v2arg(b, "kahf_en",  v2cfg.kahfEn);  v2cfg.kahfH  = v2arg(b, "kahf_h",  v2cfg.kahfH);  v2cfg.kahfM  = v2arg(b, "kahf_m",  v2cfg.kahfM);
-  v2cfg.mulkEn  = v2arg(b, "mulk_en",  v2cfg.mulkEn);  v2cfg.mulkH  = v2arg(b, "mulk_h",  v2cfg.mulkH);  v2cfg.mulkM  = v2arg(b, "mulk_m",  v2cfg.mulkM);
+  v2SetOne(b, "sabah", v2cfg.sabah); v2SetOne(b, "masaa", v2cfg.masaa);
+  v2SetOne(b, "kahf",  v2cfg.kahf);  v2SetOne(b, "mulk",  v2cfg.mulk);
   v2SaveSettings();
   server.send(200, "text/plain", "OK");
 }
@@ -4104,7 +4119,18 @@ void handleContentStatus() {
   server.send(200, "application/json", j);
 }
 
-// Scheduler appele depuis loop() : joue azkar (heure fixe) + coran (auto)
+// Joue une automatisation si : active, bonne heure, bon jour, pas deja jouee aujourd'hui.
+void v2Fire(V2Item &it, int h, int m, int dow, int d, int &fired, const char *path) {
+  if (dfplayer.isRunning()) return;             // une lecture est deja en cours
+  if (!it.en || h != it.h || m != it.m) return;
+  if (!((it.days >> dow) & 1)) return;          // pas programmee ce jour
+  if (fired == d) return;                       // deja jouee aujourd'hui
+  fired = d;
+  dfplayer.volume(it.vol);                       // volume propre a l'automatisation
+  dfplayer.playPath(path);
+}
+
+// Scheduler appele depuis loop() : joue azkar + coran selon les automatisations
 void v2Tick() {
   static bool inited = false, synced = false;
   static unsigned long lastCheck = 0;
@@ -4118,11 +4144,11 @@ void v2Tick() {
   lastCheck = millis();
   if (dfplayer.isRunning()) return;                     // ne pas couper une lecture
   DateTime now = rtc.now();
-  int h = now.hour(), m = now.minute(), d = now.day(), dow = now.dayOfTheWeek(); // 5 = vendredi
-  if      (v2cfg.sabahEn && h == v2cfg.sabahH && m == v2cfg.sabahM && fSabah != d) { fSabah = d; dfplayer.playPath("/azkar/sabah.mp3"); }
-  else if (v2cfg.masaaEn && h == v2cfg.masaaH && m == v2cfg.masaaM && fMasaa != d) { fMasaa = d; dfplayer.playPath("/azkar/masaa.mp3"); }
-  else if (v2cfg.kahfEn  && dow == 5 && h == v2cfg.kahfH && m == v2cfg.kahfM && fKahf != d) { fKahf = d; dfplayer.playPath("/quran/al-kahf.mp3"); }
-  else if (v2cfg.mulkEn  && h == v2cfg.mulkH && m == v2cfg.mulkM && fMulk != d) { fMulk = d; dfplayer.playPath("/quran/al-mulk.mp3"); }
+  int h = now.hour(), m = now.minute(), d = now.day(), dow = now.dayOfTheWeek(); // 0=Dim..6=Sam
+  v2Fire(v2cfg.sabah, h, m, dow, d, fSabah, "/azkar/sabah.mp3");
+  v2Fire(v2cfg.masaa, h, m, dow, d, fMasaa, "/azkar/masaa.mp3");
+  v2Fire(v2cfg.kahf,  h, m, dow, d, fKahf,  "/quran/al-kahf.mp3");
+  v2Fire(v2cfg.mulk,  h, m, dow, d, fMulk,  "/quran/al-mulk.mp3");
 }
 // ======================= fin module V2 =======================
 

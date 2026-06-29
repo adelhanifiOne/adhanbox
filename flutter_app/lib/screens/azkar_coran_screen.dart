@@ -1,35 +1,51 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/adhanbox_provider.dart';
 
-/// Réglages V2 : Azkar (heures fixes) + Coran (Al-Kahf vendredi / Al-Mulk soir).
+/// Automatisations Azkar & Coran (V2) : par automatisation -> on/off, heure,
+/// volume, jours de la semaine. Auto-save (pas de bouton Enregistrer).
 class AzkarCoranScreen extends ConsumerStatefulWidget {
-  const AzkarCoranScreen({Key? key}) : super(key: key);
+  const AzkarCoranScreen({super.key});
 
   @override
   ConsumerState<AzkarCoranScreen> createState() => _AzkarCoranScreenState();
 }
 
+/// jours = bitmask, bit0=Dimanche … bit6=Samedi (convention RTClib du firmware)
 class _Item {
   bool enabled;
   TimeOfDay time;
-  _Item(this.enabled, this.time);
+  int volume; // 0-30
+  int days; // bitmask
+  _Item(this.enabled, this.time, this.volume, this.days);
 }
 
 class _AzkarCoranScreenState extends ConsumerState<AzkarCoranScreen> {
   bool _loading = true;
-  bool _saving = false;
   String? _error;
+  String _saveState = ''; // '', 'saving', 'saved'
+  Timer? _saveTimer;
 
-  final _sabah = _Item(false, const TimeOfDay(hour: 7, minute: 0));
-  final _masaa = _Item(false, const TimeOfDay(hour: 18, minute: 0));
-  final _kahf = _Item(false, const TimeOfDay(hour: 9, minute: 0));
-  final _mulk = _Item(false, const TimeOfDay(hour: 22, minute: 0));
+  // valeurs par défaut (écrasées par le GET)
+  final _sabah = _Item(false, const TimeOfDay(hour: 7, minute: 0), 20, 0x7F);
+  final _masaa = _Item(false, const TimeOfDay(hour: 18, minute: 0), 20, 0x7F);
+  final _kahf = _Item(false, const TimeOfDay(hour: 9, minute: 0), 20, 0x20); // vendredi
+  final _mulk = _Item(false, const TimeOfDay(hour: 22, minute: 0), 20, 0x7F);
+
+  // libellés des jours (index = bit) : 0=Dim … 6=Sam
+  static const _dayLabels = ['D', 'L', 'M', 'M', 'J', 'V', 'S'];
 
   @override
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void dispose() {
+    _saveTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -48,6 +64,8 @@ class _AzkarCoranScreenState extends ConsumerState<AzkarCoranScreen> {
           it.time = TimeOfDay(
               hour: (m['h'] ?? it.time.hour) as int,
               minute: (m['m'] ?? it.time.minute) as int);
+          it.volume = (m['vol'] ?? it.volume) as int;
+          it.days = (m['days'] ?? it.days) as int;
         }
       }
 
@@ -61,77 +79,164 @@ class _AzkarCoranScreenState extends ConsumerState<AzkarCoranScreen> {
     if (mounted) setState(() => _loading = false);
   }
 
+  /// Auto-save débouncé : tout changement programme un envoi 600 ms plus tard.
+  void _scheduleSave() {
+    setState(() => _saveState = 'saving');
+    _saveTimer?.cancel();
+    _saveTimer = Timer(const Duration(milliseconds: 600), _save);
+  }
+
   Future<void> _save() async {
-    setState(() => _saving = true);
+    Map<String, dynamic> f(String p, _Item it) => {
+          '${p}_en': it.enabled ? 1 : 0,
+          '${p}_h': it.time.hour,
+          '${p}_m': it.time.minute,
+          '${p}_vol': it.volume,
+          '${p}_days': it.days,
+        };
     try {
       final api = ref.read(adhanboxApiProvider);
       if (api == null) throw Exception('Aucun appareil connecté');
       await api.setAzkarCoran({
-        'sabah_en': _sabah.enabled ? 1 : 0,
-        'sabah_h': _sabah.time.hour,
-        'sabah_m': _sabah.time.minute,
-        'masaa_en': _masaa.enabled ? 1 : 0,
-        'masaa_h': _masaa.time.hour,
-        'masaa_m': _masaa.time.minute,
-        'kahf_en': _kahf.enabled ? 1 : 0,
-        'kahf_h': _kahf.time.hour,
-        'kahf_m': _kahf.time.minute,
-        'mulk_en': _mulk.enabled ? 1 : 0,
-        'mulk_h': _mulk.time.hour,
-        'mulk_m': _mulk.time.minute,
+        ...f('sabah', _sabah),
+        ...f('masaa', _masaa),
+        ...f('kahf', _kahf),
+        ...f('mulk', _mulk),
       });
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Réglages enregistrés ✓')));
-      }
+      if (mounted) setState(() => _saveState = 'saved');
     } catch (e) {
       if (mounted) {
+        setState(() => _saveState = '');
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Erreur : $e')));
+            .showSnackBar(SnackBar(content: Text('Erreur enregistrement : $e')));
       }
     }
-    if (mounted) setState(() => _saving = false);
   }
 
   Future<void> _pickTime(_Item it) async {
     final t = await showTimePicker(context: context, initialTime: it.time);
-    if (t != null) setState(() => it.time = t);
+    if (t != null) {
+      setState(() => it.time = t);
+      _scheduleSave();
+    }
   }
 
-  Widget _tile({
+  Widget _card({
     required IconData icon,
     required String title,
     required String subtitle,
     required _Item item,
   }) {
+    final theme = Theme.of(context);
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 6),
       child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Row(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(icon, size: 28),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+            Row(
+              children: [
+                Icon(icon, size: 26),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(title, style: theme.textTheme.titleMedium),
+                      Text(subtitle, style: theme.textTheme.bodySmall),
+                    ],
+                  ),
+                ),
+                Switch(
+                  value: item.enabled,
+                  onChanged: (v) {
+                    setState(() => item.enabled = v);
+                    _scheduleSave();
+                  },
+                ),
+              ],
+            ),
+            if (item.enabled) ...[
+              const Divider(height: 20),
+              // Heure
+              Row(
                 children: [
-                  Text(title,
-                      style: Theme.of(context).textTheme.titleMedium),
-                  Text(subtitle,
-                      style: Theme.of(context).textTheme.bodySmall),
+                  const Icon(Icons.schedule_rounded, size: 20),
+                  const SizedBox(width: 8),
+                  const Text('Heure'),
+                  const Spacer(),
+                  TextButton(
+                    onPressed: () => _pickTime(item),
+                    child: Text(item.time.format(context),
+                        style: const TextStyle(fontSize: 18)),
+                  ),
                 ],
               ),
-            ),
-            TextButton(
-              onPressed: item.enabled ? () => _pickTime(item) : null,
-              child: Text(item.time.format(context),
-                  style: const TextStyle(fontSize: 18)),
-            ),
-            Switch(
-              value: item.enabled,
-              onChanged: (v) => setState(() => item.enabled = v),
-            ),
+              // Volume
+              Row(
+                children: [
+                  const Icon(Icons.volume_up_rounded, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Slider(
+                      value: item.volume.toDouble(),
+                      min: 0,
+                      max: 30,
+                      divisions: 30,
+                      label: '${item.volume}',
+                      onChanged: (v) =>
+                          setState(() => item.volume = v.round()),
+                      onChangeEnd: (_) => _scheduleSave(),
+                    ),
+                  ),
+                  SizedBox(
+                      width: 28,
+                      child: Text('${item.volume}',
+                          textAlign: TextAlign.end)),
+                ],
+              ),
+              const SizedBox(height: 8),
+              // Jours
+              Row(
+                children: [
+                  const Icon(Icons.calendar_today_rounded, size: 18),
+                  const SizedBox(width: 8),
+                  const Text('Jours'),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Wrap(
+                      spacing: 6,
+                      children: List.generate(7, (i) {
+                        final on = (item.days >> i) & 1 == 1;
+                        return GestureDetector(
+                          onTap: () {
+                            setState(() => item.days ^= (1 << i));
+                            _scheduleSave();
+                          },
+                          child: CircleAvatar(
+                            radius: 15,
+                            backgroundColor: on
+                                ? theme.colorScheme.primary
+                                : theme.disabledColor.withValues(alpha: 0.15),
+                            child: Text(
+                              _dayLabels[i],
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: on
+                                    ? theme.colorScheme.onPrimary
+                                    : theme.textTheme.bodyMedium?.color,
+                              ),
+                            ),
+                          ),
+                        );
+                      }),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ],
         ),
       ),
@@ -141,63 +246,67 @@ class _AzkarCoranScreenState extends ConsumerState<AzkarCoranScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Azkar & Coran')),
+      appBar: AppBar(
+        title: const Text('Azkar & Coran'),
+        actions: [
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.only(right: 16),
+              child: Text(
+                _saveState == 'saving'
+                    ? 'Enregistrement…'
+                    : _saveState == 'saved'
+                        ? 'Enregistré ✓'
+                        : '',
+                style: const TextStyle(fontSize: 13, color: Colors.green),
+              ),
+            ),
+          ),
+        ],
+      ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
               ? Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(_error!),
-                      const SizedBox(height: 12),
-                      ElevatedButton(
-                          onPressed: _load, child: const Text('Réessayer')),
-                    ],
-                  ),
-                )
+                  child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  Text(_error!),
+                  const SizedBox(height: 12),
+                  ElevatedButton(
+                      onPressed: _load, child: const Text('Réessayer')),
+                ]))
               : ListView(
                   padding: const EdgeInsets.all(16),
                   children: [
                     Text('Azkar',
                         style: Theme.of(context).textTheme.headlineSmall),
-                    _tile(
+                    _card(
                         icon: Icons.wb_sunny_rounded,
                         title: 'Azkar du matin (Sabah)',
-                        subtitle: 'Tous les jours à l’heure choisie',
+                        subtitle: 'Invocations du matin',
                         item: _sabah),
-                    _tile(
+                    _card(
                         icon: Icons.nights_stay_rounded,
                         title: 'Azkar du soir (Masaa)',
-                        subtitle: 'Tous les jours à l’heure choisie',
+                        subtitle: 'Invocations du soir',
                         item: _masaa),
                     const SizedBox(height: 16),
                     Text('Coran',
                         style: Theme.of(context).textTheme.headlineSmall),
-                    _tile(
+                    _card(
                         icon: Icons.menu_book_rounded,
                         title: 'Sourate Al-Kahf',
-                        subtitle: 'Chaque vendredi à l’heure choisie',
+                        subtitle: 'Traditionnellement le vendredi',
                         item: _kahf),
-                    _tile(
+                    _card(
                         icon: Icons.bedtime_rounded,
                         title: 'Sourate Al-Mulk',
-                        subtitle: 'Chaque soir à l’heure choisie',
+                        subtitle: 'Traditionnellement avant de dormir',
                         item: _mulk),
                     const SizedBox(height: 24),
-                    SizedBox(
-                      height: 50,
-                      child: ElevatedButton.icon(
-                        onPressed: _saving ? null : _save,
-                        icon: _saving
-                            ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child:
-                                    CircularProgressIndicator(strokeWidth: 2))
-                            : const Icon(Icons.save_rounded),
-                        label: const Text('Enregistrer'),
-                      ),
+                    Text(
+                      'Les modifications sont enregistrées automatiquement.',
+                      style: Theme.of(context).textTheme.bodySmall,
+                      textAlign: TextAlign.center,
                     ),
                   ],
                 ),
