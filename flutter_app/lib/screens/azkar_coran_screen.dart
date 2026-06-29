@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/adhanbox_provider.dart';
@@ -113,12 +114,44 @@ class _AzkarCoranScreenState extends ConsumerState<AzkarCoranScreen> {
     }
   }
 
-  Future<void> _pickTime(_Item it) async {
-    final t = await showTimePicker(context: context, initialTime: it.time);
-    if (t != null) {
-      setState(() => it.time = t);
-      _scheduleSave();
-    }
+  void _pickTime(_Item it) {
+    final initial = Duration(hours: it.time.hour, minutes: it.time.minute);
+    showModalBottomSheet(
+      context: context,
+      builder: (_) => SizedBox(
+        height: 260,
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Annuler')),
+                  TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('OK',
+                          style: TextStyle(fontWeight: FontWeight.bold))),
+                ],
+              ),
+            ),
+            Expanded(
+              child: CupertinoTimerPicker(
+                mode: CupertinoTimerPickerMode.hm,
+                initialTimerDuration: initial,
+                onTimerDurationChanged: (d) {
+                  setState(() => it.time =
+                      TimeOfDay(hour: d.inHours, minute: d.inMinutes % 60));
+                  _scheduleSave();
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _card({
