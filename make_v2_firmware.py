@@ -238,8 +238,15 @@ int v2SyncContent() {
     String path = line.substring(0, bar); path.trim();
     String url  = line.substring(bar + 1); url.trim();
     if (SD.exists(path)) continue;                       // deja present -> on saute
-    int sl = path.lastIndexOf('/');                      // creer le dossier parent
-    if (sl > 0) { String d = path.substring(0, sl); if (!SD.exists(d) && !SD.mkdir(d)) _syncMsg += "(mkdirFail)"; }
+    // creer les dossiers parents un par un (/a puis /a/b etc.)
+    for (int i = 1; i < (int)path.length(); i++) {
+      if (path[i] == '/') {
+        String d = path.substring(0, i);
+        if (!SD.exists(d)) {
+          if (!SD.mkdir(d)) { _syncMsg += "(mkdirFail:" + d + ")"; break; }
+        }
+      }
+    }
     WiFiClientSecure c2; c2.setInsecure();
     HTTPClient h2;
     if (!h2.begin(c2, url)) { _syncMsg += " " + path + "=beginFail"; continue; }
