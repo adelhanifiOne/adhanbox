@@ -1,0 +1,6 @@
+{
+  "version": "2.0.1",
+  "hardware": "v2",
+  "url": "https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/build_temp_v2/adhanbox_v2.ino.bin",
+  "changelog": "Fix sync gros fichiers (timeout 60s) + suppression fichier corrompu + mkdir récursif + stabilité pile"
+}
