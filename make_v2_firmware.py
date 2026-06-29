@@ -194,6 +194,12 @@ void v2ListDir(File dir, String &out, bool &first) {
     f.close();
   }
 }
+void handleAudioDelete() {
+  String path = server.arg("f");
+  if (path.length() && SD.exists(path)) { SD.remove(path); server.send(200, "text/plain", "deleted"); }
+  else server.send(404, "text/plain", "not found");
+}
+
 void handleAudioList() {
   String out = "[";
   bool first = true;
@@ -251,7 +257,7 @@ int v2SyncContent() {
     HTTPClient h2;
     if (!h2.begin(c2, url)) { _syncMsg += " " + path + "=beginFail"; continue; }
     h2.setConnectTimeout(15000);
-    h2.setTimeout(30000);                    // gros fichiers + serveurs lents (archive.org)
+    h2.setTimeout(60000);                    // 60s pour les gros fichiers archive.org (26Mo+)
     h2.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
     int gc = h2.GET();
     _syncMsg += " " + path + "=" + String(gc);
@@ -333,7 +339,8 @@ V2_ROUTES = '''server.on("/api/firmware/version", HTTP_GET, handleFirmwareVersio
   server.on("/api/azkarcoran", HTTP_POST, handleSetAzkarCoran);
   server.on("/api/content/sync", HTTP_POST, handleContentSync);
   server.on("/api/content/status", HTTP_GET, handleContentStatus);
-  server.on("/api/audio/list", HTTP_GET, handleAudioList);'''
+  server.on("/api/audio/list", HTTP_GET, handleAudioList);
+  server.on("/api/audio/delete", HTTP_GET, handleAudioDelete);'''
 
 
 def apply(text, old, new, expect=1):
@@ -415,7 +422,7 @@ def main():
     t = apply(t, "void handlePlayTrack();",
                  "void handlePlayTrack();\n"
                  "void handleGetAzkarCoran();\nvoid handleSetAzkarCoran();\n"
-                 "void handleContentSync();\nvoid handleContentStatus();\nvoid handleAudioList();")
+                 "void handleContentSync();\nvoid handleContentStatus();\nvoid handleAudioDelete();\nvoid handleAudioList();")
 
     os.makedirs(DST_DIR, exist_ok=True)
     open(DST, "w", encoding="utf-8").write(t)

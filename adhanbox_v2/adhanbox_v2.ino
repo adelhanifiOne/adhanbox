@@ -359,6 +359,7 @@ void handleGetAzkarCoran();
 void handleSetAzkarCoran();
 void handleContentSync();
 void handleContentStatus();
+void handleAudioDelete();
 void handleAudioList();
 void handleStopPlay();
 bool tryRecoverDFPlayer(int retries);
@@ -2952,6 +2953,7 @@ void setupServerRoutes() {
   server.on("/api/content/sync", HTTP_POST, handleContentSync);
   server.on("/api/content/status", HTTP_GET, handleContentStatus);
   server.on("/api/audio/list", HTTP_GET, handleAudioList);
+  server.on("/api/audio/delete", HTTP_GET, handleAudioDelete);
   server.on("/api/device/info", HTTP_GET, handleDeviceInfo);
   server.on("/ota/upload", HTTP_POST, handleOtaUploadComplete, handleOtaUpload);
   server.on("/update", HTTP_GET, handleUpdatePage);
@@ -4026,6 +4028,12 @@ void v2ListDir(File dir, String &out, bool &first) {
     f.close();
   }
 }
+void handleAudioDelete() {
+  String path = server.arg("f");
+  if (path.length() && SD.exists(path)) { SD.remove(path); server.send(200, "text/plain", "deleted"); }
+  else server.send(404, "text/plain", "not found");
+}
+
 void handleAudioList() {
   String out = "[";
   bool first = true;
@@ -4083,7 +4091,7 @@ int v2SyncContent() {
     HTTPClient h2;
     if (!h2.begin(c2, url)) { _syncMsg += " " + path + "=beginFail"; continue; }
     h2.setConnectTimeout(15000);
-    h2.setTimeout(30000);                    // gros fichiers + serveurs lents (archive.org)
+    h2.setTimeout(60000);                    // 60s pour les gros fichiers archive.org (26Mo+)
     h2.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
     int gc = h2.GET();
     _syncMsg += " " + path + "=" + String(gc);
