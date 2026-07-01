@@ -2,7 +2,7 @@
 // - Starts an AP when a long-press is detected on CONFIG_BUTTON_PIN
 // - Serves a small webpage that requests navigator.geolocation and POSTs lat/lon
 // - Stores lat/lon/accuracy/timestamp in Preferences (NVS)
-//Version: 2.0.2 (AdhanBox V2 / HW v2)
+//Version: 2.0.3 (AdhanBox V2 / HW v2)
 #include <Arduino.h>
 #include <Wire.h>
 #include <WiFi.h>
@@ -190,7 +190,7 @@ static unsigned long wifiConnectStart = 0;
 
 // Addressable LED configuration
 #ifndef LED_NUM
-#define LED_NUM 16  // change to the number of LEDs on your strip (updated to 60)
+#define LED_NUM 25  // change to the number of LEDs on your strip
 #endif
 const uint8_t LED_START_INDEX = 0;  // start from first pixel (all LEDs enabled)
 // Data pin for addressable strip (default user wiring)
@@ -4020,7 +4020,7 @@ void v2Tick() {
 void setup() {
   Serial.begin(115200);
   delay(100);
-  Serial.println("AdhanBox V2 firmware v2.0.1 starting...");
+  Serial.println("AdhanBox V2 firmware v2.0.3 starting...");
 
   pinMode(CONFIG_BUTTON_PIN, INPUT_PULLUP);
 
