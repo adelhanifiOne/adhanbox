@@ -19,8 +19,8 @@
 /mp3/0015.mp3|https://islamcan.com/audio/adhan/azan13.mp3
 
 # --- Azkar / Coran (joues par CHEMIN) ---
-/azkar/sabah.mp3|https://archive.org/download/sheikh-mishary-rashid-alafasy-azkar/Sheikh%20Mishary%20Rashid%20Alafasy%20-%20%D8%A3%D8%B0%D9%83%D8%A7%D8%B1%20%D8%A7%D9%84%D8%B5%D8%A8%D8%A7%D8%AD.mp3
-/azkar/masaa.mp3|https://archive.org/download/sheikh-mishary-rashid-alafasy-azkar/Sheikh%20Mishary%20Rashid%20Alafasy%20-%20%D8%A3%D8%B0%D9%83%D8%A7%D8%B1%20%D8%A7%D9%84%D9%85%D8%B3%D8%A7%D8%A1.mp3
-/quran/al-mulk.mp3|https://server8.mp3quran.net/afs/067.mp3
-/quran/al-kahf.mp3|https://server8.mp3quran.net/afs/018.mp3
+# /azkar/sabah.mp3|https://archive.org/download/sheikh-mishary-rashid-alafasy-azkar/Sheikh%20Mishary%20Rashid%20Alafasy%20-%20%D8%A3%D8%B0%D9%83%D8%A7%D8%B1%20%D8%A7%D9%84%D8%B5%D8%A8%D8%A7%D8%AD.mp3
+# /azkar/masaa.mp3|https://archive.org/download/sheikh-mishary-rashid-alafasy-azkar/Sheikh%20Mishary%20Rashid%20Alafasy%20-%20%D8%A3%D8%B0%D9%83%D8%A7%D8%B1%20%D8%A7%D9%84%D9%85%D8%B3%D8%A7%D8%A1.mp3
+# /quran/al-mulk.mp3|https://server8.mp3quran.net/afs/067.mp3
+# /quran/al-kahf.mp3|https://server8.mp3quran.net/afs/018.mp3
 
