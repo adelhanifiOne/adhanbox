@@ -1,6 +1,6 @@
 {
-  "version": "2.0.4",
+  "version": "2.0.5",
   "hardware": "v2",
   "url": "https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/build_temp_v2/adhanbox_v2.ino.bin",
-  "changelog": "Fix version rapportee au device (OTA) + bandeau 25 LEDs"
+  "changelog": "Fix coupures audio periodiques : desactivation du modem-sleep WiFi"
 }

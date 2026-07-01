@@ -2,7 +2,7 @@
 // - Starts an AP when a long-press is detected on CONFIG_BUTTON_PIN
 // - Serves a small webpage that requests navigator.geolocation and POSTs lat/lon
 // - Stores lat/lon/accuracy/timestamp in Preferences (NVS)
-//Version: 2.0.4 (AdhanBox V2 / HW v2)
+//Version: 2.0.5 (AdhanBox V2 / HW v2)
 #include <Arduino.h>
 #include <Wire.h>
 #include <WiFi.h>
@@ -1753,7 +1753,7 @@ void handleOtaUploadComplete() {
 // GET /api/firmware/version
 void handleFirmwareVersion() {
   server.send(200, "application/json",
-              "{\"version\":\"2.0.4\",\"hardware\":\"v2\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
+              "{\"version\":\"2.0.5\",\"hardware\":\"v2\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
 }
 
 // Returns true if the request carries the correct API key (or if token not yet set).
@@ -1775,7 +1775,7 @@ bool requireApiKey() {
 void handleDeviceInfo() {
   char buf[512];
   snprintf(buf, sizeof(buf),
-           "{\"version\":\"2.0.4\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
+           "{\"version\":\"2.0.5\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
            OTA_HOSTNAME, _apiToken.c_str(), _otaPass.c_str());
   server.send(200, "application/json", buf);
 }
@@ -4020,7 +4020,7 @@ void v2Tick() {
 void setup() {
   Serial.begin(115200);
   delay(100);
-  Serial.println("AdhanBox V2 firmware v2.0.4 starting...");
+  Serial.println("AdhanBox V2 firmware v2.0.5 starting...");
 
   pinMode(CONFIG_BUTTON_PIN, INPUT_PULLUP);
 
@@ -4318,6 +4318,16 @@ void setup() {
 void loop() {
   audio.pump();
   v2Tick();          // [V2] azkar/coran + sync contenu
+
+  // [V2] Desactive le modem-sleep WiFi des la 1ere connexion (tous chemins :
+  // boot, BLE, reconnexion). Le modem-sleep par defaut reveille le WiFi par
+  // intervalles et gele le CPU -> coupures audio I2S periodiques. Une fois.
+  static bool _wifiSleepDisabled = false;
+  if (!_wifiSleepDisabled && WiFi.status() == WL_CONNECTED) {
+    WiFi.setSleep(false);
+    _wifiSleepDisabled = true;
+    Serial.println("[WiFi] modem-sleep desactive (audio I2S stable)");
+  }
 #if ENABLE_BLE
   // Handle BLE provisioning credentials (received in BLE task, processed here)
   if (_bleActive) {
