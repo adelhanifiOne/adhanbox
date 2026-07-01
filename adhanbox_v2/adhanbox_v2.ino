@@ -2,7 +2,7 @@
 // - Starts an AP when a long-press is detected on CONFIG_BUTTON_PIN
 // - Serves a small webpage that requests navigator.geolocation and POSTs lat/lon
 // - Stores lat/lon/accuracy/timestamp in Preferences (NVS)
-//Version: 2.0.5 (AdhanBox V2 / HW v2)
+//Version: 2.0.6 (AdhanBox V2 / HW v2)
 #include <Arduino.h>
 #include <Wire.h>
 #include <WiFi.h>
@@ -1753,7 +1753,7 @@ void handleOtaUploadComplete() {
 // GET /api/firmware/version
 void handleFirmwareVersion() {
   server.send(200, "application/json",
-              "{\"version\":\"2.0.5\",\"hardware\":\"v2\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
+              "{\"version\":\"2.0.6\",\"hardware\":\"v2\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
 }
 
 // Returns true if the request carries the correct API key (or if token not yet set).
@@ -1775,7 +1775,7 @@ bool requireApiKey() {
 void handleDeviceInfo() {
   char buf[512];
   snprintf(buf, sizeof(buf),
-           "{\"version\":\"2.0.5\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
+           "{\"version\":\"2.0.6\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
            OTA_HOSTNAME, _apiToken.c_str(), _otaPass.c_str());
   server.send(200, "application/json", buf);
 }
@@ -3926,7 +3926,29 @@ int v2SyncContent() {
     if (bar < 0) continue;
     String path = line.substring(0, bar); path.trim();
     String url  = line.substring(bar + 1); url.trim();
-    if (SD.exists(path)) continue;                       // deja present -> on saute
+    // On ne skippe plus betement si le fichier existe : on lit le Content-Length
+    // et on ne (re)telecharge que si la taille sur SD ne correspond pas. Repare
+    // automatiquement les fichiers tronques par une sync precedente ratee.
+    WiFiClientSecure c2; c2.setInsecure();
+    HTTPClient h2;
+    if (!h2.begin(c2, url)) { _syncMsg += " " + path + "=beginFail"; continue; }
+    h2.setConnectTimeout(15000);
+    h2.setTimeout(60000);                    // 60s pour les gros fichiers archive.org (26Mo+)
+    h2.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
+    int gc = h2.GET();
+    int expected = h2.getSize();             // Content-Length (-1 si inconnu)
+    if (gc != 200) { _syncMsg += " " + path + "=" + String(gc); h2.end(); continue; }
+
+    // Deja present ET complet -> on saute
+    if (SD.exists(path)) {
+      File ex = SD.open(path, FILE_READ);
+      size_t have = ex ? ex.size() : 0;
+      if (ex) ex.close();
+      if (expected > 0 && have == (size_t)expected) {
+        _syncMsg += " " + path + "=present(" + String(have) + ")"; h2.end(); continue;
+      }
+      SD.remove(path);                       // version tronquee/incomplete -> on jette
+    }
     // creer les dossiers parents un par un (/a puis /a/b etc.)
     for (int i = 1; i < (int)path.length(); i++) {
       if (path[i] == '/') {
@@ -3936,21 +3958,17 @@ int v2SyncContent() {
         }
       }
     }
-    WiFiClientSecure c2; c2.setInsecure();
-    HTTPClient h2;
-    if (!h2.begin(c2, url)) { _syncMsg += " " + path + "=beginFail"; continue; }
-    h2.setConnectTimeout(15000);
-    h2.setTimeout(60000);                    // 60s pour les gros fichiers archive.org (26Mo+)
-    h2.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
-    int gc = h2.GET();
-    _syncMsg += " " + path + "=" + String(gc);
-    if (gc == 200) {
-      File f = SD.open(path, FILE_WRITE);
-      if (f) {
-        h2.writeToStream(&f);                 // streaming -> pas de gros buffer RAM
-        f.close();
-        added++; _syncMsg += "(ok)"; Serial.printf("[sync] + %s\n", path.c_str());
-      } else { _syncMsg += "(openFail)"; }
+    File f = SD.open(path, FILE_WRITE);
+    if (!f) { _syncMsg += " " + path + "=openFail"; h2.end(); continue; }
+    int written = h2.writeToStream(&f);      // streaming -> pas de gros buffer RAM
+    f.close();
+    if (expected > 0 && written != expected) {
+      SD.remove(path);                       // download incomplet -> on ne garde PAS de fichier tronque
+      _syncMsg += " " + path + "=TRUNC(" + String(written) + "/" + String(expected) + ")";
+      Serial.printf("[sync] TRONQUE %s (%d/%d octets) -> supprime\n", path.c_str(), written, expected);
+    } else {
+      added++; _syncMsg += " " + path + "=ok(" + String(written) + ")";
+      Serial.printf("[sync] + %s (%d octets)\n", path.c_str(), written);
     }
     h2.end();
   }
@@ -4020,7 +4038,7 @@ void v2Tick() {
 void setup() {
   Serial.begin(115200);
   delay(100);
-  Serial.println("AdhanBox V2 firmware v2.0.5 starting...");
+  Serial.println("AdhanBox V2 firmware v2.0.6 starting...");
 
   pinMode(CONFIG_BUTTON_PIN, INPUT_PULLUP);
 
