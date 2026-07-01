@@ -2,7 +2,7 @@
 // - Starts an AP when a long-press is detected on CONFIG_BUTTON_PIN
 // - Serves a small webpage that requests navigator.geolocation and POSTs lat/lon
 // - Stores lat/lon/accuracy/timestamp in Preferences (NVS)
-//Version: 2.0.1 (AdhanBox V2 / HW v2)
+//Version: 2.0.2 (AdhanBox V2 / HW v2)
 #include <Arduino.h>
 #include <Wire.h>
 #include <WiFi.h>
@@ -222,8 +222,7 @@ const byte DNS_PORT = 53;
 
 RTC_DS3231 rtc;
 bool rtcPresent = false;
-// ===== AdhanBox V2 : moteur audio I2S + SD (remplace le DFPlayer) =====
-// Broches V2
+// ===== AdhanBox V2 : moteur audio I2S + microSD =====
 #define I2S_DIN_PIN   1
 #define I2S_LRC_PIN   2
 #define I2S_BCLK_PIN  3
@@ -232,9 +231,7 @@ bool rtcPresent = false;
 #define SD_SCK_PIN    12
 #define SD_MISO_PIN   13
 
-// Shim : expose la meme API que DFRobotDFPlayerMini (begin/volume/stop/
-// playMp3Folder/available/read/readType) mais joue /mp3/NNNN.mp3 en I2S.
-class DFPlayerCompat {
+class I2SAudio {
   SPIClass spi{FSPI};
   AudioOutputI2S        *out = nullptr;
   AudioGeneratorMP3     *mp3 = nullptr;
@@ -242,22 +239,24 @@ class DFPlayerCompat {
   AudioFileSourceSD     *src = nullptr;
   AudioFileSourceBuffer *buf = nullptr;
   float gain = 0.5f;
-  bool  sdOk = false;
+  bool  _sdOk = false;
  public:
-  bool begin(Stream &s, bool isACK = true, bool doReset = true) {
-    (void)s; (void)isACK; (void)doReset;
+  bool begin() {
     spi.begin(SD_SCK_PIN, SD_MISO_PIN, SD_MOSI_PIN, SD_CS_PIN);
-    sdOk = SD.begin(SD_CS_PIN, spi);
+    _sdOk = SD.begin(SD_CS_PIN, spi);
+    Serial.printf("[SD] %s\n", _sdOk ? "OK" : "FAIL - verifier carte et cablage");
     if (!out) {
       out = new AudioOutputI2S();
       out->SetPinout(I2S_BCLK_PIN, I2S_LRC_PIN, I2S_DIN_PIN);
       out->SetGain(gain);
+      Serial.println("[I2S] OK");
     }
-    return sdOk;          // "DFPlayer dispo" == "SD montee"
+    return _sdOk;
   }
-  void volume(int v) {                       // 0..30 (echelle DFPlayer) -> gain
+  bool sdOk() const { return _sdOk; }
+  void volume(int v) {
     if (v < 0) v = 0; if (v > 30) v = 30;
-    gain = (v / 30.0f) * 0.8f;               // 0.8 max pour eviter le clipping
+    gain = (v / 30.0f) * 0.8f;
     if (out) out->SetGain(gain);
   }
   void stop() {
@@ -268,47 +267,26 @@ class DFPlayerCompat {
   }
   bool playPath(const char *path) {
     stop();
-    if (!SD.exists(path)) return false;
+    if (!_sdOk || !SD.exists(path)) return false;
     src = new AudioFileSourceSD(path);
-    buf = new AudioFileSourceBuffer(src, 8192);   // 8KB : sur pour la RAM interne (I2S DMA)
+    buf = new AudioFileSourceBuffer(src, 8192);
     String p = path; p.toLowerCase();
     if (p.endsWith(".wav")) { wav = new AudioGeneratorWAV(); return wav->begin(buf, out); }
     mp3 = new AudioGeneratorMP3(); return mp3->begin(buf, out);
   }
-  void playMp3Folder(int track) {            // compat DFPlayer : /mp3/NNNN.mp3
+  void playTrackNum(int track) {
     char path[24];
     snprintf(path, sizeof(path), "/mp3/%04d.mp3", track);
     if (!playPath(path)) { snprintf(path, sizeof(path), "/MP3/%04d.mp3", track); playPath(path); }
   }
   bool isRunning() { return (mp3 && mp3->isRunning()) || (wav && wav->isRunning()); }
-  void pump() {                              // a appeler dans le loop() principal
+  void pump() {
     if (mp3 && mp3->isRunning()) { if (!mp3->loop()) stop(); }
     if (wav && wav->isRunning()) { if (!wav->loop()) stop(); }
   }
-  // API DFPlayer non utilisee en V2 (pas d'evenements serie)
-  bool    available() { return false; }
-  uint8_t readType()  { return 0; }
-  int     read()      { return 0; }
 };
 
-DFPlayerCompat dfplayer;
-
-// Constantes d'evenements DFPlayer (compat printDetail ; non utilisees en V2)
-enum {
-  TimeOut = 1, WrongStack, DFPlayerCardInserted, DFPlayerCardRemoved,
-  DFPlayerCardOnline, DFPlayerPlayFinished, DFPlayerError, DFPlayerUSBInserted,
-  DFPlayerUSBRemoved, Busy, Sleeping, SerialWrongStack, CheckSumNotMatch,
-  FileIndexOut, FileMismatch, Advertise
-};
-bool dfAvailable = false;
-// If DFPlayer reports missing files, avoid repeatedly attempting to play
-bool dfFileMissing = false;
-// Last DFPlayer error observed (set by printDetail)
-volatile int dfLastError = 0;
-#define DFERR_NONE 0
-#define DFERR_TIMEOUT 1
-#define DFERR_FILEINDEXOUT 2
-#define DFERR_OTHER 3
+I2SAudio audio;
 
 // DS3231 interrupt pin (connect INT/SQW -> this pin)
 #ifndef DS3231_INT_PIN
@@ -362,7 +340,7 @@ void handleContentStatus();
 void handleAudioDelete();
 void handleAudioList();
 void handleStopPlay();
-bool tryRecoverDFPlayer(int retries);
+bool tryReinitSD();
 void playTrack(int track);
 void handleSetVolume();
 void handleGetVolume();
@@ -517,16 +495,6 @@ const int SCENE_BREATH = 11;
 const int SCENE_CANDLE = 12;
 const int TOTAL_SCENES = 13;
 
-// DFPlayer pin mapping requested: DFPlayer on GPIO1 and GPIO2
-// DFPlayer TX -> ESP RX (GPIO1)  // <-- WARNING: GPIO1 is also UART0 TX (console)
-// DFPlayer RX <- ESP TX (GPIO2)
-// The DFPlayer TX (5V) MUST be level-shifted / use a resistor divider before GPIO1.
-#define DFPLAYER_RX_PIN 2  // ESP RX (connect to DFPlayer TX through divider)
-#define DFPLAYER_TX_PIN 1  // ESP TX (connect to DFPlayer RX)
-
-// Move LED data pin to a free GPIO to avoid conflicts with UART0
-// User wired the LED data line to GPIO13
-// (already defined above)
 
 // Simple webpage (served from RAM) — improved multi‑page UI with CSS
 const char index_html[] PROGMEM = R"HTML(
@@ -1189,8 +1157,7 @@ void handleSetTZ() {
 
 void handlePlayTest() {
   server.send(200, "text/plain", "Playing test track");
-  // play track 1 as test
-  if (dfAvailable) dfplayer.playMp3Folder(1);
+  if (audio.sdOk()) playTrack(1);
 }
 
 // HTTP handlers implementing serial commands
@@ -1331,29 +1298,15 @@ void handlePlayTrack() {
   String t = server.arg("track");
   int track = t.length() ? t.toInt() : 1;
 
-  Serial.printf("handlePlayTrack: track=%d, dfAvailable=%d\n", track, dfAvailable);
-
-  if (!dfAvailable) {
-    Serial.println("DFPlayer not available, attempting recovery...");
-    if (!tryRecoverDFPlayer(3)) {
-      server.send(503, "text/plain", "DFPlayer not available and recovery failed");
-      return;
-    }
+  if (!audio.sdOk()) {
+    server.send(503, "text/plain", "SD non disponible");
+    return;
   }
-
-  if (dfAvailable) {
-    String v = server.arg("volume");
-    if (v.length()) {
-      int vol = constrain(v.toInt(), 0, 30);
-      dfplayer.volume(vol);
-    }
-    Serial.printf("Playing track %d\n", track);
-    dfplayer.playMp3Folder(track);
-    isPlaying = true;
-    server.send(200, "text/plain", "Playing");
-  } else {
-    server.send(503, "text/plain", "DFPlayer not available");
-  }
+  String v = server.arg("volume");
+  if (v.length()) audio.volume(constrain(v.toInt(), 0, 30));
+  Serial.printf("Playing track %d\n", track);
+  playTrack(track);
+  server.send(200, "text/plain", "Playing");
 }
 
 void handleStopPlay() {
@@ -1379,7 +1332,7 @@ void handleSetVolume() {
   prefs.begin("adhancfg", false);
   prefs.putInt("volume", vol);
   prefs.end();
-  if (dfAvailable) { dfplayer.volume(vol); }
+  audio.volume(vol);
   server.send(200, "text/plain", "OK");
   Serial.printf("Volume set to %d via HTTP\n", vol);
 }
@@ -3624,186 +3577,82 @@ void scheduleNextPrayerAlarm() {
   }
 }
 
-// Try to (re)initialize the DFPlayer module and clear missing-file state.
-bool tryRecoverDFPlayer(int retries = 2) {
+// Reinitialise la SD (utile si la carte etait absente au boot)
+bool tryReinitSD(int retries = 2) {
   for (int i = 0; i < retries; i++) {
-    Serial.printf("Attempting DFPlayer reinit (%d/%d)\n", i + 1, retries);
-    // re-init over Serial2; ask the library to reset the module on first attempt
-    if (dfplayer.begin(Serial2, /*isACK=*/true, /*doReset=*/(i == 0))) {
-      dfAvailable = true;
-      dfFileMissing = false;
-      dfLastError = DFERR_NONE;
-      Serial.println("DFPlayer reinitialized successfully");
-      // restore volume
+    Serial.printf("[SD] Tentative reinit (%d/%d)\n", i + 1, retries);
+    if (audio.begin()) {
       prefs.begin("adhancfg", true);
-      int storedVol = prefs.getInt("volume", 20);
+      int storedVol = constrain(prefs.getInt("volume", 20), 0, 30);
       prefs.end();
-      storedVol = constrain(storedVol, 0, 30);
-      dfplayer.volume(storedVol);
-      Serial.printf("DFPlayer volume restored to %d\n", storedVol);
+      audio.volume(storedVol);
       return true;
     }
     delay(250);
   }
-  dfAvailable = false;
-  dfLastError = DFERR_OTHER;
-  Serial.println("DFPlayer reinit attempts failed");
+  Serial.println("[SD] Reinit echouee");
   return false;
 }
 
-// Play a track number on DFPlayer (1-based)
-// For prayer adhan: Fajr plays track 3, others play track 2, then track 1 (duaa) plays after
+// Lance la lecture d'un track (1-based, /mp3/NNNN.mp3)
 void playTrack(int track) {
-  // Always attempt to ensure DFPlayer available
-  if (!dfAvailable) {
-    Serial.println("DFPlayer not available, attempting reinit...");
-    if (!tryRecoverDFPlayer(2)) {
-      Serial.println("Cannot play: DFPlayer unavailable");
+  if (!audio.sdOk()) {
+    Serial.println("[Audio] SD non disponible, tentative reinit...");
+    if (!tryReinitSD(2)) {
+      Serial.println("[Audio] Lecture impossible : SD indisponible");
       return;
     }
   }
-
-  // If the DFPlayer previously reported missing files, try to recover
-  if (dfFileMissing) {
-    Serial.println("DFPlayer previously reported missing files; attempting recovery before play");
-    tryRecoverDFPlayer(2);
-    // clear the missing flag to allow play attempts
-    dfFileMissing = false;
-  }
-
-  Serial.printf("Playing track %d\n", track);
-  // Clear last DFPlayer error and request play
-  dfLastError = DFERR_NONE;
-  dfplayer.playMp3Folder(track);
+  Serial.printf("[Audio] Lecture track %d\n", track);
+  audio.playTrackNum(track);
   isPlaying = true;
 
-  // Wait briefly to catch immediate DFPlayer errors (FileIndexOut / TimeOut)
+  // Pompe audio 800ms pour eviter de couper le debut de l'adhan
   unsigned long start = millis();
   while (millis() - start < 800) {
-    dfplayer.pump();   // [V2] decode pendant l'attente -> debut de l'adhan non coupe
+    audio.pump();
     delay(2);
   }
 }
 
 void stopPlay() {
-  // Cancel pending duaa BEFORE stopping so the PlayFinished event (if fired by stop) doesn't trigger it
   shouldPlayDuaaAfterAdhan = false;
   adhanTrackBeforeDuaa = 0;
-  // Restore LED scenario if prayer scene was active
   if (prayerPrevLedScenario >= 0) {
     ledScenario = prayerPrevLedScenario;
     prayerPrevLedScenario = -1;
-    Serial.printf("LED restored to scenario %d after stop\n", ledScenario);
+    Serial.printf("[Audio] LED restaure scenario %d apres stop\n", ledScenario);
   }
-  if (dfAvailable) {
-    dfplayer.stop();
-    Serial.println("Stopped playback");
-    isPlaying = false;
-    prefs.begin("adhancfg", true);
-    int storedVol = prefs.getInt("volume", 20);
-    prefs.end();
-    dfplayer.volume(storedVol);
-    Serial.printf("DFPlayer volume restored to %d on stop\n", storedVol);
-  }
+  audio.stop();
+  isPlaying = false;
+  prefs.begin("adhancfg", true);
+  int storedVol = constrain(prefs.getInt("volume", 20), 0, 30);
+  prefs.end();
+  audio.volume(storedVol);
+  Serial.println("[Audio] Lecture stoppee");
 }
 
-// Print DFPlayer event/error details (copied/adapted from DFPlayer example)
-void printDetail(uint8_t type, int value) {
-  switch (type) {
-    case TimeOut:
-      Serial.println(F("Time Out!"));
-      dfLastError = DFERR_TIMEOUT;
-      break;
-    case WrongStack:
-      Serial.println(F("Stack Wrong!"));
-      break;
-    case DFPlayerCardInserted:
-      Serial.println(F("Card Inserted!"));
-      dfFileMissing = false;
-      dfLastError = DFERR_NONE;
-      break;
-    case DFPlayerCardRemoved:
-      Serial.println(F("Card Removed!"));
-      break;
-    case DFPlayerCardOnline:
-      Serial.println(F("Card Online!"));
-      dfLastError = DFERR_NONE;
-      break;
-    case DFPlayerUSBInserted:
-      Serial.println(F("USB Inserted!"));
-      break;
-    case DFPlayerUSBRemoved:
-      Serial.println(F("USB Removed!"));
-      break;
-    case DFPlayerPlayFinished:
-      Serial.print(F("Number:"));
-      Serial.print(value);
-      Serial.println(F(" Play Finished!"));
-      isPlaying = false;
-      dfLastError = DFERR_NONE;
-      // Play duaa (track 1) after adhan finishes.
-      // NOTE: we do NOT compare value==adhanTrackBeforeDuaa because some DFPlayer
-      // clones report a global file index instead of the MP3-folder track number,
-      // making the comparison unreliable. stopPlay() resets shouldPlayDuaaAfterAdhan
-      // to prevent duaa from firing after a manual stop.
-      if (shouldPlayDuaaAfterAdhan && adhanTrackBeforeDuaa > 0) {
-        int playedAdhanTrack = adhanTrackBeforeDuaa;
-        shouldPlayDuaaAfterAdhan = false;
-        adhanTrackBeforeDuaa = 0;
-        Serial.printf("Adhan (track %d) finished, playing duaa (track 1)...\n", playedAdhanTrack);
-        delay(500);  // short pause before duaa
-        playTrack(1);
-      } else {
-        // All playback done (adhan only, or duaa just finished) — restore LED
-        if (prayerPrevLedScenario >= 0) {
-          ledScenario = prayerPrevLedScenario;
-          prayerPrevLedScenario = -1;
-          Serial.printf("LED restored to scenario %d after playback\n", ledScenario);
-        }
-        // Restore volume
-        prefs.begin("adhancfg", true);
-        int storedVol = prefs.getInt("volume", 20);
-        prefs.end();
-        if (dfAvailable) {
-          dfplayer.volume(storedVol);
-          Serial.printf("DFPlayer volume restored to %d after playback\n", storedVol);
-        }
-      }
-      break;
-    case DFPlayerError:
-      Serial.print(F("DFPlayerError:"));
-      switch (value) {
-        case Busy:
-          Serial.println(F("Card not found"));
-          break;
-        case Sleeping:
-          Serial.println(F("Sleeping"));
-          break;
-        case SerialWrongStack:
-          Serial.println(F("Get Wrong Stack"));
-          break;
-        case CheckSumNotMatch:
-          Serial.println(F("Check Sum Not Match"));
-          break;
-        case FileIndexOut:
-          Serial.println(F("File Index Out of Bound"));
-          dfFileMissing = true;
-          dfLastError = DFERR_FILEINDEXOUT;
-          break;
-        case FileMismatch:
-          Serial.println(F("Cannot Find File"));
-          break;
-        case Advertise:
-          Serial.println(F("In Advertise"));
-          break;
-        default:
-          Serial.println(F("Unknown DFPlayer error"));
-          dfLastError = DFERR_OTHER;
-          break;
-      }
-      break;
-    default:
-      break;
+// Appelee depuis loop() quand la lecture I2S se termine naturellement
+void onPlaybackFinished() {
+  isPlaying = false;
+  if (shouldPlayDuaaAfterAdhan && adhanTrackBeforeDuaa > 0) {
+    int adhanTrack = adhanTrackBeforeDuaa;
+    shouldPlayDuaaAfterAdhan = false;
+    adhanTrackBeforeDuaa = 0;
+    Serial.printf("[Audio] Adhan (track %d) termine, lecture duaa (track 1)\n", adhanTrack);
+    delay(500);
+    playTrack(1);
+  } else {
+    if (prayerPrevLedScenario >= 0) {
+      ledScenario = prayerPrevLedScenario;
+      prayerPrevLedScenario = -1;
+      Serial.printf("[Audio] LED restaure scenario %d apres lecture\n", ledScenario);
+    }
+    prefs.begin("adhancfg", true);
+    int storedVol = constrain(prefs.getInt("volume", 20), 0, 30);
+    prefs.end();
+    audio.volume(storedVol);
+    Serial.println("[Audio] Lecture terminee");
   }
 }
 
@@ -3841,7 +3690,7 @@ void mqttCallback(char *topic, byte *payload, unsigned int len) {
 
   } else if (strcmp(topic, TOPIC_AUDIO_VOLUME) == 0) {
     int vol = constrain(atoi(msg), 0, 30);
-    if (dfAvailable) dfplayer.volume(vol);
+    audio.volume(vol);
     prefs.begin("adhancfg", false);
     prefs.putInt("volume", vol);
     prefs.end();
@@ -4136,13 +3985,14 @@ void handleContentStatus() {
 
 // Joue une automatisation si : active, bonne heure, bon jour, pas deja jouee aujourd'hui.
 void v2Fire(V2Item &it, int h, int m, int dow, int d, int &fired, const char *path) {
-  if (dfplayer.isRunning()) return;             // une lecture est deja en cours
+  if (audio.isRunning()) return;
   if (!it.en || h != it.h || m != it.m) return;
-  if (!((it.days >> dow) & 1)) return;          // pas programmee ce jour
-  if (fired == d) return;                       // deja jouee aujourd'hui
+  if (!((it.days >> dow) & 1)) return;
+  if (fired == d) return;
   fired = d;
-  dfplayer.volume(it.vol);                       // volume propre a l'automatisation
-  dfplayer.playPath(path);
+  audio.volume(it.vol);
+  audio.playPath(path);
+  isPlaying = true;
 }
 
 // Scheduler appele depuis loop() : joue azkar + coran selon les automatisations
@@ -4157,7 +4007,7 @@ void v2Tick() {
   }
   if (millis() - lastCheck < 1000) return;              // 1x / s
   lastCheck = millis();
-  if (dfplayer.isRunning()) return;                     // ne pas couper une lecture
+  if (audio.isRunning()) return;
   DateTime now = rtc.now();
   int h = now.hour(), m = now.minute(), d = now.day(), dow = now.dayOfTheWeek(); // 0=Dim..6=Sam
   v2Fire(v2cfg.sabah, h, m, dow, d, fSabah, "/azkar/sabah.mp3");
@@ -4170,18 +4020,11 @@ void v2Tick() {
 void setup() {
   Serial.begin(115200);
   delay(100);
-  Serial.println("AdhanBox config AP sketch starting...");
+  Serial.println("AdhanBox V2 firmware v2.0.1 starting...");
 
   pinMode(CONFIG_BUTTON_PIN, INPUT_PULLUP);
 
-  // Initialize Serial2 for DFPlayer on GPIO1 (RX) and GPIO2 (TX)
-  // Note: using GPIO1 may interfere with USB-serial console output.
-  // [V2] Serial2 desactive : GPIO1/2 utilises par l'I2S
-  // Serial2.begin(9600, SERIAL_8N1, DFPLAYER_RX_PIN, DFPLAYER_TX_PIN);
-  Serial.printf("Serial2 for DFPlayer configured RX=%d TX=%d\n", DFPLAYER_RX_PIN, DFPLAYER_TX_PIN);
-
-  // Initialize DFPlayer over Serial2 with ACK and reset (better detection)
-  // Load preferences first (always loaded on boot, independent of DFPlayer detection)
+  // Charge les preferences NVS
   prefs.begin("adhancfg", true);
   int storedVol = prefs.getInt("volume", 20);
   forcePlayTrack1 = prefs.getBool("force_t1", false);
@@ -4193,17 +4036,12 @@ void setup() {
   ledCustomB = (uint8_t)prefs.getInt("led_cb", 0);
   prefs.end();
 
-  // Initialize DFPlayer over Serial2 (using fire-and-forget, no ACK to prevent boot hangs)
-  if (dfplayer.begin(Serial2, /*isACK=*/false, /*doReset=*/true)) {
-    dfAvailable = true;
-    Serial.println("DFPlayer initialized");
+  // Initialise audio I2S + microSD
+  if (audio.begin()) {
     storedVol = constrain(storedVol, 0, 30);
-    dfplayer.volume(storedVol);
-    Serial.printf("DFPlayer volume set to %d\n", storedVol);
-    Serial.printf("forcePlayTrack1 preference = %s\n", forcePlayTrack1 ? "ON" : "OFF");
-  } else {
-    dfAvailable = false;
-    Serial.println("DFPlayer not detected. Check wiring and power.");
+    audio.volume(storedVol);
+    Serial.printf("[Audio] Volume initial : %d\n", storedVol);
+    Serial.printf("[Audio] forcePlayTrack1 = %s\n", forcePlayTrack1 ? "ON" : "OFF");
   }
 
   // Initialize I2C bus (Wire) for DS3231 + IP5306:
@@ -4478,7 +4316,7 @@ void setup() {
 }
 
 void loop() {
-  dfplayer.pump();   // [V2] pompe le decodage audio I2S
+  audio.pump();
   v2Tick();          // [V2] azkar/coran + sync contenu
 #if ENABLE_BLE
   // Handle BLE provisioning credentials (received in BLE task, processed here)
@@ -4598,13 +4436,11 @@ void loop() {
       } else {
         Serial.println("No prayer alarm scheduled.");
       }
-    } else if (cmd.equalsIgnoreCase("dfreset") || cmd.equalsIgnoreCase("dfreprobe") || cmd.equalsIgnoreCase("dfinit")) {
-      // Try to reinitialize the DFPlayer and clear missing-file state
-      dfFileMissing = false;  // clear previous FileIndexOut state before reprobe
-      if (tryRecoverDFPlayer(3)) {
-        Serial.println("DFPlayer recovered via serial command");
+    } else if (cmd.equalsIgnoreCase("sdreinit")) {
+      if (tryReinitSD(3)) {
+        Serial.println("[SD] Reinit OK via commande serie");
       } else {
-        Serial.println("DFPlayer recovery failed");
+        Serial.println("[SD] Reinit echouee");
       }
     } else if (cmd.startsWith("forcetrack1")) {
       // formats: forcetrack1 on | forcetrack1 off | forcetrack1 status
@@ -4638,9 +4474,10 @@ void loop() {
       stopPlay();
     }
   }
-  // Process DFPlayer responses (events/errors)
-  if (dfAvailable && dfplayer.available()) {
-    printDetail(dfplayer.readType(), dfplayer.read());
+  // Pompe audio I2S + detection fin de lecture
+  audio.pump();
+  if (isPlaying && !audio.isRunning()) {
+    onPlaybackFinished();
   }
   // Update LED pattern according to scenario
   static unsigned long lastLedTick = 0;
@@ -4864,10 +4701,8 @@ void loop() {
             else if (scheduledPrayerIndex == 5) prayerVol = prefs.getInt("ah_magh_vol", globalVol);
             else if (scheduledPrayerIndex == 6) prayerVol = prefs.getInt("ah_isha_vol", globalVol);
             prefs.end();
-            if (dfAvailable) {
-              dfplayer.volume(prayerVol);
-              Serial.printf("Temporary volume set to %d for prayer %d\n", prayerVol, scheduledPrayerIndex);
-            }
+            audio.volume(prayerVol);
+            Serial.printf("[Audio] Volume temporaire %d pour priere %d\n", prayerVol, scheduledPrayerIndex);
 
             // Protect against playing duaa as adhan
             if (trackToPlay == 1) trackToPlay = 2;
