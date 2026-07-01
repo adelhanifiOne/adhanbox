@@ -28,3 +28,4 @@ wifi_config.h
 
 # Logs
 *.log
+sd_preload/
