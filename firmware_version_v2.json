@@ -1,6 +1,6 @@
 {
-  "version": "2.0.8",
+  "version": "2.0.9",
   "hardware": "v2",
   "url": "https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/build_temp_v2/adhanbox_v2.ino.bin",
-  "changelog": "LED: fix flashs roue chromatique (rendu unique + save differee) + bouton tactile cycle scenarios (polarite auto, sort de la couleur libre)"
+  "changelog": "Test OTA via l'app (identique a 2.0.8)"
 }
