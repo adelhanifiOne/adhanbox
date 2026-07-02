@@ -2,7 +2,7 @@
 // - Starts an AP when a long-press is detected on CONFIG_BUTTON_PIN
 // - Serves a small webpage that requests navigator.geolocation and POSTs lat/lon
 // - Stores lat/lon/accuracy/timestamp in Preferences (NVS)
-//Version: 2.0.7 (AdhanBox V2 / HW v2)
+//Version: 2.0.8 (AdhanBox V2 / HW v2)
 #include <Arduino.h>
 #include <Wire.h>
 #include <WiFi.h>
@@ -319,6 +319,10 @@ int ledScenario = 8;  // start with dynamic hue by default
 // Couleur RGB libre (roue chromatique de l'app). Quand active, prime sur le scénario.
 bool ledCustomActive = false;
 uint8_t ledCustomR = 255, ledCustomG = 200, ledCustomB = 0;
+// [V2] Sauvegarde NVS differee de la couleur libre : la roue chromatique envoie
+// des dizaines de POST/s ; on ecrit la flash une seule fois apres la fin du geste.
+volatile bool _ledDirty = false;
+unsigned long _ledDirtyAt = 0;
 bool isPlaying = false;
 // ledc PWM channel for LED brightness
 const int LEDC_CHANNEL = 0;
@@ -1438,16 +1442,12 @@ void handleSetLedRgb() {
   ledCustomB = (uint8_t)constrain((int)round(db), 0, 255);
   ledCustomActive = true;
   if (ledScenario == 0) ledScenario = 1;  // sort de l'état éteint
-  if (useAddressableLEDs) stripSetAll(ledCustomR, ledCustomG, ledCustomB);
-
-  prefs.begin("adhancfg", false);
-  prefs.putBool("led_custom", true);
-  prefs.putInt("led_cr", ledCustomR);
-  prefs.putInt("led_cg", ledCustomG);
-  prefs.putInt("led_cb", ledCustomB);
-  prefs.end();
-
-  Serial.printf("LED RGB set to %d,%d,%d via API\n", ledCustomR, ledCustomG, ledCustomB);
+  // [V2] On NE rend PAS et on n'ecrit PAS la NVS ici : la roue chromatique
+  // envoie des dizaines de POST/s. Deux chemins de rendu concurrents (ici +
+  // la boucle) + les ecritures flash bloquantes provoquaient des flashs blancs
+  // WS2812. Un seul chemin de rendu (loop 50Hz) et sauvegarde differee.
+  _ledDirty = true;
+  _ledDirtyAt = millis();
   server.send(200, "application/json",
               String("{\"r\":") + ledCustomR + ",\"g\":" + ledCustomG + ",\"b\":" + ledCustomB + "}");
 }
@@ -1754,7 +1754,7 @@ void handleOtaUploadComplete() {
 // GET /api/firmware/version
 void handleFirmwareVersion() {
   server.send(200, "application/json",
-              "{\"version\":\"2.0.7\",\"hardware\":\"v2\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
+              "{\"version\":\"2.0.8\",\"hardware\":\"v2\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
 }
 
 // Returns true if the request carries the correct API key (or if token not yet set).
@@ -1776,7 +1776,7 @@ bool requireApiKey() {
 void handleDeviceInfo() {
   char buf[512];
   snprintf(buf, sizeof(buf),
-           "{\"version\":\"2.0.7\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
+           "{\"version\":\"2.0.8\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
            OTA_HOSTNAME, _apiToken.c_str(), _otaPass.c_str());
   server.send(200, "application/json", buf);
 }
@@ -2946,28 +2946,54 @@ void stopConfigAP() {
 
 // Gestion bouton : appui simple direct (pas de latence)
 // → stop adhan si en lecture, sinon cycle LED
+// [V2] Flush differe de la couleur libre (roue chromatique) : ecrit la NVS une
+// seule fois ~600ms apres le dernier changement, pas a chaque POST.
+void ledFlushSave(){
+  if(_ledDirty && (millis() - _ledDirtyAt) > 600){
+    _ledDirty = false;
+    prefs.begin("adhancfg", false);
+    prefs.putBool("led_custom", true);
+    prefs.putInt("led_cr", ledCustomR);
+    prefs.putInt("led_cg", ledCustomG);
+    prefs.putInt("led_cb", ledCustomB);
+    prefs.end();
+    Serial.printf("LED RGB sauvegarde %d,%d,%d\n", ledCustomR, ledCustomG, ledCustomB);
+  }
+}
+
 void checkConfigButton(){
-  static bool lastState = HIGH;
+  static bool inited = false;
+  static int idleLevel = HIGH;      // niveau de repos capture au 1er passage
+  static int lastState = HIGH;
   static unsigned long debounceTime = 0;
-  const unsigned long DEBOUNCE_MS = 100;  // anti-rebond
+  const unsigned long DEBOUNCE_MS = 150;  // anti-rebond
+  // Capture le niveau de repos au demarrage -> marche pour un TTP223 actif-haut
+  // (repos bas) comme pour un bouton actif-bas (repos haut), sans se soucier de
+  // la polarite. Un "appui" = niveau oppose au repos.
+  if(!inited){ idleLevel = digitalRead(CONFIG_BUTTON_PIN); lastState = idleLevel; inited = true; return; }
 
   int val = digitalRead(CONFIG_BUTTON_PIN);
   if(val != lastState && (millis() - debounceTime) > DEBOUNCE_MS){
     debounceTime = millis();
-    if(val == LOW){
-      // Appui détecté
+    bool pressed = (val != idleLevel);
+    lastState = val;
+    if(pressed){
       if(isPlaying){
         stopPlay();
-        ledScenario = 0; setLedDuty(0);
+        ledScenario = 0; ledCustomActive = false; setLedDuty(0);
         if(useAddressableLEDs) stripSetAll(0,0,0);
       } else {
+        ledCustomActive = false;   // le bouton reprend la main sur la couleur libre
         do {
           ledScenario = (ledScenario + 1) % TOTAL_SCENES;
-        } while(ledScenario == BLINK_INDEX);
+        } while(ledScenario == BLINK_INDEX || ledScenario == SCENE_PRAYER);  // sauter clignotant AP + scene priere
         if(ledScenario == 0){ setLedDuty(0); if(useAddressableLEDs) stripSetAll(0,0,0); }
+        prefs.begin("adhancfg", false);
+        prefs.putInt("led_scenario", ledScenario);
+        prefs.putBool("led_custom", false);
+        prefs.end();
       }
     }
-    lastState = val;
   }
 }
 
@@ -4056,7 +4082,7 @@ void v2Tick() {
 void setup() {
   Serial.begin(115200);
   delay(100);
-  Serial.println("AdhanBox V2 firmware v2.0.7 starting...");
+  Serial.println("AdhanBox V2 firmware v2.0.8 starting...");
 
   pinMode(CONFIG_BUTTON_PIN, INPUT_PULLUP);
 
@@ -4399,6 +4425,7 @@ void loop() {
 
   // If you have a config button connected, you can re-enable checkConfigButton();
   checkConfigButton();
+  ledFlushSave();   // [V2] sauvegarde differee de la couleur libre (anti-flash)
 
   // Simple serial command interface for testing without a button
   if (Serial.available()) {
