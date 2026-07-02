@@ -2,7 +2,7 @@
 // - Starts an AP when a long-press is detected on CONFIG_BUTTON_PIN
 // - Serves a small webpage that requests navigator.geolocation and POSTs lat/lon
 // - Stores lat/lon/accuracy/timestamp in Preferences (NVS)
-//Version: 2.0.6 (AdhanBox V2 / HW v2)
+//Version: 2.0.7 (AdhanBox V2 / HW v2)
 #include <Arduino.h>
 #include <Wire.h>
 #include <WiFi.h>
@@ -339,6 +339,7 @@ void handleContentSync();
 void handleContentStatus();
 void handleAudioDelete();
 void handleAudioList();
+void handlePlayFile();
 void handleStopPlay();
 bool tryReinitSD();
 void playTrack(int track);
@@ -1753,7 +1754,7 @@ void handleOtaUploadComplete() {
 // GET /api/firmware/version
 void handleFirmwareVersion() {
   server.send(200, "application/json",
-              "{\"version\":\"2.0.6\",\"hardware\":\"v2\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
+              "{\"version\":\"2.0.7\",\"hardware\":\"v2\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
 }
 
 // Returns true if the request carries the correct API key (or if token not yet set).
@@ -1775,7 +1776,7 @@ bool requireApiKey() {
 void handleDeviceInfo() {
   char buf[512];
   snprintf(buf, sizeof(buf),
-           "{\"version\":\"2.0.6\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
+           "{\"version\":\"2.0.7\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
            OTA_HOSTNAME, _apiToken.c_str(), _otaPass.c_str());
   server.send(200, "application/json", buf);
 }
@@ -2907,6 +2908,7 @@ void setupServerRoutes() {
   server.on("/api/content/status", HTTP_GET, handleContentStatus);
   server.on("/api/audio/list", HTTP_GET, handleAudioList);
   server.on("/api/audio/delete", HTTP_GET, handleAudioDelete);
+  server.on("/api/audio/play", HTTP_GET, handlePlayFile);
   server.on("/api/device/info", HTTP_GET, handleDeviceInfo);
   server.on("/ota/upload", HTTP_POST, handleOtaUploadComplete, handleOtaUpload);
   server.on("/update", HTTP_GET, handleUpdatePage);
@@ -3883,6 +3885,22 @@ void handleAudioDelete() {
   else server.send(404, "text/plain", "not found");
 }
 
+// Joue N'IMPORTE quel fichier par chemin (test azkar/coran a la demande).
+// Renvoie la taille du fichier + si le decodeur a demarre -> diagnostic.
+void handlePlayFile() {
+  String f = server.arg("f");
+  if (!f.length()) { server.send(400, "text/plain", "missing f"); return; }
+  if (!SD.exists(f)) { server.send(404, "application/json", "{\"error\":\"absent\",\"file\":\"" + f + "\"}"); return; }
+  File fh = SD.open(f); uint32_t sz = fh ? (uint32_t)fh.size() : 0; if (fh) fh.close();
+  String v = server.arg("volume");
+  if (v.length()) audio.volume(constrain(v.toInt(), 0, 30));
+  bool started = audio.playPath(f.c_str());
+  if (started) isPlaying = true;
+  String j = "{\"file\":\"" + f + "\",\"size\":" + String(sz) +
+             ",\"started\":" + (started ? "true" : "false") + "}";
+  server.send(200, "application/json", j);
+}
+
 void handleAudioList() {
   String out = "[";
   bool first = true;
@@ -4038,7 +4056,7 @@ void v2Tick() {
 void setup() {
   Serial.begin(115200);
   delay(100);
-  Serial.println("AdhanBox V2 firmware v2.0.6 starting...");
+  Serial.println("AdhanBox V2 firmware v2.0.7 starting...");
 
   pinMode(CONFIG_BUTTON_PIN, INPUT_PULLUP);
 
