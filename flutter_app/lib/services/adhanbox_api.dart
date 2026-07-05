@@ -190,6 +190,18 @@ class AdhanBoxAPI {
     } catch (_) {}
   }
 
+  /// Joue un fichier par chemin (Coran, azkar…) via /api/audio/play?f=...
+  /// Endpoint protege -> on envoie le token en header X-API-Key.
+  Future<void> playFile(String path, {int? volume}) async {
+    final q = <String, String>{'f': path, if (volume != null) 'volume': '$volume'};
+    final uri = Uri.parse('$baseUrl/api/audio/play').replace(queryParameters: q);
+    final headers = <String, String>{
+      if (apiKey != null && apiKey!.isNotEmpty) 'X-API-Key': apiKey!,
+    };
+    final r = await http.get(uri, headers: headers).timeout(timeout);
+    if (r.statusCode != 200) throw Exception('HTTP ${r.statusCode}');
+  }
+
   // ===== MAWAQIT =====
   Future<Map<String, dynamic>> getMawaqitTimes() async {
     try {

@@ -3,6 +3,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/adhanbox_provider.dart';
+import 'quran_player_screen.dart';
 
 /// Automatisations Azkar & Coran (V2) : par automatisation -> on/off, heure,
 /// volume, jours de la semaine. Auto-save (pas de bouton Enregistrer).
@@ -310,6 +311,19 @@ class _AzkarCoranScreenState extends ConsumerState<AzkarCoranScreen> {
               : ListView(
                   padding: const EdgeInsets.all(16),
                   children: [
+                    // Accès au lecteur Coran (récitateurs + 114 sourates)
+                    Card(
+                      margin: const EdgeInsets.only(bottom: 16),
+                      child: ListTile(
+                        leading: const Icon(Icons.menu_book_rounded, size: 28),
+                        title: const Text('Écouter le Coran',
+                            style: TextStyle(fontWeight: FontWeight.w600)),
+                        subtitle: const Text('Récitateurs et sourates au choix'),
+                        trailing: const Icon(Icons.chevron_right_rounded),
+                        onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                            builder: (_) => const QuranPlayerScreen())),
+                      ),
+                    ),
                     Text('Azkar',
                         style: Theme.of(context).textTheme.headlineSmall),
                     _card(

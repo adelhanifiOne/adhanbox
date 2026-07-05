@@ -8,27 +8,13 @@ import 'package:http/http.dart' as http;
 import '../providers/adhanbox_provider.dart';
 import '../theme/app_theme.dart';
 
+// Adhans de qualité (muezzins nommés). Fichiers /mp3/000N.mp3 sur la SD.
 const _trackNames = {
-  2:  'Adhan 1',
-  3:  'Adhan 2',
-  4:  'Adhan 1',
-  5:  'Adhan 2',
-  6:  'Adhan 3',
-  7:  'Adhan 4',
-  8:  'Adhan 5',
-  9:  'Adhan 6',
-  10: 'Adhan 7',
-  11: 'Adhan 8',
-  12: 'Adhan 9',
-  13: 'Adhan 10',
-  14: 'Adhan 11',
-  15: 'Adhan 12',
-  16: 'Adhan 13',
-  17: 'Adhan 14',
-  18: 'Adhan 15',
-  19: 'Adhan 16',
-  20: 'Adhan 17',
-  21: 'Adhan 18',
+  2: 'Ahmed al-Imadi',
+  3: 'Mishary al-Afasy (Fajr)',
+  4: 'Mokhtar Hadj Slimane',
+  5: 'Nasser al-Qatami',
+  6: 'Majed al-Hamathani',
 };
 
 class AdhanConfigScreen extends ConsumerStatefulWidget {
