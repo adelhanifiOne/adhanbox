@@ -1,6 +1,6 @@
 {
-  "version": "2.2.0",
+  "version": "2.3.1",
   "hardware": "v2",
   "url": "https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/build_temp_v2/adhanbox_v2.ino.bin",
-  "changelog": "Securite: rollback OTA automatique (un firmware defaillant revient seul a la version precedente, plus de cable USB)"
+  "changelog": "Securite renforcee + reconnexion WiFi automatique plus rapide et fiable"
 }
