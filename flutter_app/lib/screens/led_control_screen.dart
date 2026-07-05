@@ -1,6 +1,6 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../providers/adhanbox_provider.dart';
@@ -101,67 +101,90 @@ class _LedControlScreenState extends ConsumerState<LedControlScreen> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    // Layout FIXE (pas de scroll) : tout tient a l'ecran et le geste de la roue
+    // n'entre plus en conflit avec le defilement de la page.
     return Scaffold(
-      body: CustomScrollView(
-        slivers: [
-          SliverAppBar(
-            pinned: true,
-            automaticallyImplyLeading: false,
-            title: Text('Lumière', style: Theme.of(context).appBarTheme.titleTextStyle),
-          ),
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-            sliver: SliverList(
-              delegate: SliverChildListDelegate([
-                _LedPreview(color: _previewColor, label: _stateLabel, brightness: _brightness, isOn: _isOn, isScenario: _customColor == null && _currentScene == 8)
-                    .animate().fadeIn(duration: 350.ms),
-                const SizedBox(height: 24),
-
-                Center(child: _PowerButton(isOn: _isOn, onTap: _togglePower)),
-                const SizedBox(height: 8),
-                Center(
-                  child: Text(
-                    _isOn ? 'Allumé · $_stateLabel' : 'Éteint',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: _isOn ? AppTheme.emerald : (isDark ? AppTheme.darkTextMuted : AppTheme.lightTextMuted),
-                      fontWeight: FontWeight.w600,
+      appBar: AppBar(
+        automaticallyImplyLeading: false,
+        title: Text('Lumière', style: Theme.of(context).appBarTheme.titleTextStyle),
+      ),
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Ligne compacte : power + etat + pastille couleur
+              Row(
+                children: [
+                  _PowerButton(isOn: _isOn, onTap: _togglePower),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(_isOn ? 'Allumé' : 'Éteint',
+                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w700,
+                                color: _isOn ? AppTheme.emerald : (isDark ? AppTheme.darkTextMuted : AppTheme.lightTextMuted))),
+                        Text(_stateLabel,
+                            maxLines: 1, overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: isDark ? AppTheme.darkTextMuted : AppTheme.lightTextMuted)),
+                      ],
                     ),
                   ),
-                ),
-                const SizedBox(height: 24),
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 250),
+                    width: 46, height: 46,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: _isOn ? _previewColor : Colors.transparent,
+                      border: Border.all(color: isDark ? AppTheme.darkBorder : AppTheme.lightBorder, width: 2),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
 
-                Text('Luminosité', style: Theme.of(context).textTheme.headlineSmall),
-                const SizedBox(height: 12),
-                _BrightnessSlider(
-                  brightness: _brightness,
-                  isSending: _isSendingBrightness,
-                  onChanged: (v) async {
-                    setState(() { _brightness = v; _isSendingBrightness = true; });
-                    try {
-                      final api = ref.read(adhanboxApiProvider);
-                      if (api != null) await api.setLedBrightness(v.toInt());
-                    } catch (_) {} finally {
-                      if (mounted) setState(() => _isSendingBrightness = false);
-                    }
-                  },
-                ),
-                const SizedBox(height: 28),
+              _BrightnessSlider(
+                brightness: _brightness,
+                isSending: _isSendingBrightness,
+                onChanged: (v) async {
+                  setState(() { _brightness = v; _isSendingBrightness = true; });
+                  try {
+                    final api = ref.read(adhanboxApiProvider);
+                    if (api != null) await api.setLedBrightness(v.toInt());
+                  } catch (_) {} finally {
+                    if (mounted) setState(() => _isSendingBrightness = false);
+                  }
+                },
+              ),
+              const SizedBox(height: 12),
 
-                _SegTabs(
-                  index: _tab,
-                  labels: const ['Couleur', 'Scénarios'],
-                  onChanged: (i) => setState(() => _tab = i),
-                ),
-                const SizedBox(height: 20),
+              _SegTabs(
+                index: _tab,
+                labels: const ['Couleur', 'Scénarios'],
+                onChanged: (i) => setState(() => _tab = i),
+              ),
+              const SizedBox(height: 12),
 
-                if (_tab == 0)
-                  _HsvWheel(selected: _customColor, onPick: _applyColor)
-                else
-                  _ScenarioGrid(scenarios: _scenarios, selectedId: _customColor == null ? _currentScene : -1, onPick: _applyScene),
-              ]),
-            ),
+              // Zone principale : remplit l'espace restant (la roue s'adapte)
+              Expanded(
+                child: _tab == 0
+                    ? _HsvWheel(selected: _customColor, onPick: _applyColor)
+                    : Align(
+                        alignment: Alignment.topCenter,
+                        child: _ScenarioGrid(
+                            scenarios: _scenarios,
+                            selectedId: _customColor == null ? _currentScene : -1,
+                            onPick: _applyScene),
+                      ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -247,6 +270,43 @@ class _HsvWheel extends StatefulWidget {
 class _HsvWheelState extends State<_HsvWheel> {
   Offset? _marker; // position relative du marqueur (-1..1)
 
+  // Throttle des envois reseau : le marqueur suit le doigt en continu (fluide),
+  // mais on n'envoie au device qu'au plus toutes les 90ms, + un envoi final au
+  // relachement. Evite de noyer l'ESP de requetes (flashs / lag).
+  static const _throttle = Duration(milliseconds: 90);
+  DateTime _lastSent = DateTime.fromMillisecondsSinceEpoch(0);
+  Color? _pending;
+  Timer? _trailing;
+
+  @override
+  void dispose() {
+    _trailing?.cancel();
+    super.dispose();
+  }
+
+  void _emit(Color c) {
+    _pending = c;
+    final now = DateTime.now();
+    if (now.difference(_lastSent) >= _throttle) {
+      _lastSent = now;
+      _pending = null;
+      widget.onPick(c);
+    } else {
+      _trailing?.cancel();
+      _trailing = Timer(_throttle, _flush);
+    }
+  }
+
+  void _flush() {
+    _trailing?.cancel();
+    if (_pending != null) {
+      _lastSent = DateTime.now();
+      final c = _pending!;
+      _pending = null;
+      widget.onPick(c);
+    }
+  }
+
   void _handle(Offset local, double size) {
     final radius = size / 2;
     final center = Offset(radius, radius);
@@ -259,21 +319,27 @@ class _HsvWheelState extends State<_HsvWheel> {
     final sat = (dist / radius).clamp(0.0, 1.0);
     final color = HSVColor.fromAHSV(1, hue, sat, 1).toColor();
     setState(() => _marker = Offset(v.dx / radius, v.dy / radius));
-    widget.onPick(color);
+    _emit(color);
   }
 
   @override
   Widget build(BuildContext context) {
-    const size = 250.0;
-    return Center(
-      child: GestureDetector(
-        onTapDown: (d) => _handle(d.localPosition, size),
-        onPanUpdate: (d) => _handle(d.localPosition, size),
-        child: SizedBox(
-          width: size, height: size,
-          child: CustomPaint(painter: _WheelPainter(marker: _marker, selected: widget.selected)),
-        ),
-      ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Roue carree qui remplit l'espace disponible (max 300)
+        final size = math.min(math.min(constraints.maxWidth, constraints.maxHeight), 300.0);
+        return Center(
+          child: GestureDetector(
+            onTapDown: (d) => _handle(d.localPosition, size),
+            onPanUpdate: (d) => _handle(d.localPosition, size),
+            onPanEnd: (_) => _flush(),   // envoi final de la couleur choisie
+            child: SizedBox(
+              width: size, height: size,
+              child: CustomPaint(painter: _WheelPainter(marker: _marker, selected: widget.selected)),
+            ),
+          ),
+        );
+      },
     );
   }
 }
@@ -361,46 +427,6 @@ class _ScenarioGrid extends StatelessWidget {
           ),
         );
       },
-    );
-  }
-}
-
-// ─────────────────────────── LED PREVIEW ───────────────────────────
-class _LedPreview extends StatelessWidget {
-  final Color color;
-  final String label;
-  final double brightness;
-  final bool isOn;
-  final bool isScenario;
-  const _LedPreview({required this.color, required this.label, required this.brightness, required this.isOn, required this.isScenario});
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final opacity = (brightness / 100).clamp(0.15, 1.0);
-    return Container(
-      height: 120,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: isDark ? AppTheme.darkBorder : AppTheme.lightBorder),
-        gradient: !isOn
-            ? LinearGradient(colors: [isDark ? AppTheme.darkCard : AppTheme.lightCard, isDark ? AppTheme.darkSurface : AppTheme.lightBg])
-            : (isScenario
-                ? LinearGradient(colors: [
-                    Colors.red.withOpacity(opacity), Colors.orange.withOpacity(opacity), Colors.yellow.withOpacity(opacity),
-                    Colors.green.withOpacity(opacity), Colors.blue.withOpacity(opacity), Colors.purple.withOpacity(opacity)])
-                : LinearGradient(colors: [color.withOpacity(opacity), color.withOpacity(opacity * 0.6)],
-                    begin: Alignment.topLeft, end: Alignment.bottomRight)),
-      ),
-      child: Stack(children: [
-        if (isOn)
-          Center(child: Container(width: 80, height: 80,
-              decoration: BoxDecoration(shape: BoxShape.circle,
-                  boxShadow: [BoxShadow(color: color.withOpacity(0.5 * opacity), blurRadius: 40, spreadRadius: 10)]))),
-        Positioned(left: 20, bottom: 16, child: Text(isOn ? label : 'Éteint',
-            style: GoogleFonts.poppins(color: isOn ? Colors.white : (isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary),
-                fontSize: 18, fontWeight: FontWeight.w600, shadows: isOn ? [const Shadow(color: Colors.black26, blurRadius: 8)] : []))),
-      ]),
     );
   }
 }
