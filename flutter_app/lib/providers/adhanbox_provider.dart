@@ -196,31 +196,53 @@ Future<void> saveDeviceIp(WidgetRef ref, String ip, {String name = 'AdhanBox'}) 
   ref.invalidate(autoReconnectProvider);
 }
 
+/// Bascule l'appareil actif vers [d] et charge SON token (cache puis rafraîchi).
+Future<void> switchToDevice(WidgetRef ref, SavedDevice d) async {
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.setString('deviceIp', d.ip);
+  ref.read(currentDeviceIpProvider.notifier).state = d.ip;
+  // Token propre à CET appareil : cache d'abord, puis rafraîchi si joignable.
+  ref.read(adhanboxApiKeyProvider.notifier).state = prefs.getString('api_token_${d.ip}');
+  try {
+    final info = await AdhanBoxAPI(baseUrl: 'http://${d.ip}', timeout: const Duration(seconds: 3))
+        .getDeviceInfo();
+    final t = info['token'] as String?;
+    if (t != null && t.isNotEmpty) {
+      await prefs.setString('api_token_${d.ip}', t);
+      ref.read(adhanboxApiKeyProvider.notifier).state = t;
+    }
+  } catch (_) {}
+  ref.invalidate(deviceIpProvider);
+  ref.invalidate(savedDevicesProvider);
+  ref.invalidate(autoReconnectProvider);
+}
+
+/// Retire un appareil de la liste (+ son token). Bascule si c'était l'actif.
 Future<void> removeSavedDevice(WidgetRef ref, String ip) async {
   final prefs = await SharedPreferences.getInstance();
-  final listString = prefs.getString('savedDevices');
-  if (listString != null) {
+  List<SavedDevice> devices = [];
+  final s = prefs.getString('savedDevices');
+  if (s != null) {
     try {
-      final List decoded = jsonDecode(listString);
-      List<SavedDevice> devices = decoded.map((e) => SavedDevice.fromJson(e as Map<String, dynamic>)).toList();
-      devices.removeWhere((d) => d.ip == ip);
-      await prefs.setString('savedDevices', jsonEncode(devices.map((e) => e.toJson()).toList()));
-      
-      final currentIp = prefs.getString('deviceIp');
-      if (currentIp == ip) {
-          if (devices.isNotEmpty) {
-             final newIp = devices.first.ip;
-             await prefs.setString('deviceIp', newIp);
-             ref.read(currentDeviceIpProvider.notifier).state = newIp;
-          } else {
-             await prefs.remove('deviceIp');
-             ref.read(currentDeviceIpProvider.notifier).state = null;
-          }
-      }
-      ref.invalidate(savedDevicesProvider);
-      ref.invalidate(autoReconnectProvider);
+      final List decoded = jsonDecode(s);
+      devices = decoded.map((e) => SavedDevice.fromJson(e as Map<String, dynamic>)).toList();
     } catch (_) {}
   }
+  devices.removeWhere((e) => e.ip == ip);
+  await prefs.setString('savedDevices', jsonEncode(devices.map((e) => e.toJson()).toList()));
+  await prefs.remove('api_token_$ip');
+  if (ref.read(currentDeviceIpProvider) == ip) {
+    if (devices.isNotEmpty) {
+      await switchToDevice(ref, devices.first);
+    } else {
+      await prefs.remove('deviceIp');
+      ref.read(currentDeviceIpProvider.notifier).state = null;
+      ref.read(adhanboxApiKeyProvider.notifier).state = null;
+    }
+  }
+  ref.invalidate(deviceIpProvider);
+  ref.invalidate(savedDevicesProvider);
+  ref.invalidate(autoReconnectProvider);
 }
 
 // Provider pour le statut du device

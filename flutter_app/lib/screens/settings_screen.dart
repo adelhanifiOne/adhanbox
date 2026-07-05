@@ -104,56 +104,42 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             sliver: SliverList(
               delegate: SliverChildListDelegate([
 
-                // ── ÉTAT DE L'APPAREIL ──
-                _SectionHeader('Mon AdhanBox'),
-                _SettingsCard(
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 48, height: 48,
-                            decoration: BoxDecoration(
-                              color: AppTheme.emerald.withOpacity(0.12),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: const Icon(Icons.router_rounded, color: AppTheme.emerald, size: 24),
-                          ),
-                          const SizedBox(width: 14),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  deviceIp.isEmpty ? 'Non connecté' : 'AdhanBox connecté',
-                                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  deviceIp.isEmpty 
-                                      ? 'Associez votre appareil pour commencer.' 
-                                      : 'Fonctionne correctement sur votre réseau.',
-                                  style: Theme.of(context).textTheme.bodySmall,
-                                ),
-                              ],
-                            ),
-                          ),
-                          _StatusBadge(isConnected: deviceIp.isNotEmpty),
-                        ],
-                      ),
-                    ),
-                    if (deviceIp.isNotEmpty) ...[
-                      const Divider(height: 1, indent: 16, endIndent: 16),
-                      _FirmwareUpdateTile(
-                        localVersionAsync: localVersionAsync,
-                        latestVersionAsync: latestVersionAsync,
-                        onUpdatePressed: (latestVersion, url) => _runFirmwareUpdate(latestVersion, url),
-                      ),
-                    ],
-                  ],
+                // ── MES ADHANBOX (multi-appareils) ──
+                _SectionHeader('Mes AdhanBox'),
+                ref.watch(savedDevicesProvider).when(
+                  loading: () => _SettingsCard(children: const [
+                    Padding(padding: EdgeInsets.all(16), child: Text('Chargement…')),
+                  ]),
+                  error: (_, __) => const SizedBox.shrink(),
+                  data: (devices) {
+                    if (devices.isEmpty) {
+                      return _SettingsCard(children: [
+                        Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Row(children: [
+                            const Icon(Icons.router_rounded, color: AppTheme.darkTextMuted, size: 24),
+                            const SizedBox(width: 14),
+                            Expanded(child: Text('Non connecté — associez votre AdhanBox pour commencer.',
+                                style: Theme.of(context).textTheme.bodyMedium)),
+                          ]),
+                        ),
+                      ]);
+                    }
+                    return _SettingsCard(children: [
+                      for (int i = 0; i < devices.length; i++) ...[
+                        if (i > 0) _CardDivider(),
+                        _deviceTile(devices[i], devices[i].ip == deviceIp),
+                      ],
+                      if (deviceIp.isNotEmpty) ...[
+                        _CardDivider(),
+                        _FirmwareUpdateTile(
+                          localVersionAsync: localVersionAsync,
+                          latestVersionAsync: latestVersionAsync,
+                          onUpdatePressed: (latestVersion, url) => _runFirmwareUpdate(latestVersion, url),
+                        ),
+                      ],
+                    ]);
+                  },
                 ).animate().fadeIn(delay: 50.ms).slideY(begin: 0.06),
 
                 const SizedBox(height: 20),
@@ -508,6 +494,65 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
     );
+  }
+
+  // Une ligne d'appareil dans la liste multi-AdhanBox (basculer + retirer).
+  Widget _deviceTile(SavedDevice d, bool active) {
+    return ListTile(
+      leading: Container(
+        width: 44, height: 44,
+        decoration: BoxDecoration(
+          color: (active ? AppTheme.emerald : AppTheme.darkTextMuted).withOpacity(0.12),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Icon(Icons.router_rounded,
+            color: active ? AppTheme.emerald : AppTheme.darkTextMuted, size: 22),
+      ),
+      title: Text(d.name, style: const TextStyle(fontWeight: FontWeight.w600)),
+      subtitle: Text(active ? '${d.ip} · Actif' : d.ip,
+          style: TextStyle(color: active ? AppTheme.emerald : null, fontSize: 12)),
+      trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(active ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
+            color: active ? AppTheme.emerald : AppTheme.darkTextMuted, size: 20),
+        IconButton(
+          icon: const Icon(Icons.delete_outline_rounded, size: 20),
+          color: Colors.redAccent,
+          tooltip: 'Retirer',
+          onPressed: () => _confirmRemoveDevice(d),
+        ),
+      ]),
+      onTap: active
+          ? null
+          : () async {
+              await switchToDevice(ref, d);
+              if (mounted) {
+                setState(() {});
+                ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Appareil actif : ${d.name}')));
+              }
+            },
+    );
+  }
+
+  Future<void> _confirmRemoveDevice(SavedDevice d) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Retirer cet appareil ?'),
+        content: Text('${d.name} (${d.ip}) sera retiré de la liste. '
+            'Vous pourrez le ré-associer plus tard.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annuler')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Retirer', style: TextStyle(color: Colors.redAccent))),
+        ],
+      ),
+    );
+    if (ok == true) {
+      await removeSavedDevice(ref, d.ip);
+      if (mounted) setState(() {});
+    }
   }
 
   Future<void> _runFirmwareUpdate(String latestVersion, String url) async {
