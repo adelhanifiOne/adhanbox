@@ -287,7 +287,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       icon: Icons.favorite_rounded,
                       iconColor: const Color(0xFFEC4899),
                       title: 'Soutenir le développeur',
-                      subtitle: 'Offrez-moi un café ☕',
+                      subtitle: 'Contribuez au développement 💚',
                       onTap: () => _launchExternal('https://buymeacoffee.com/overlayprayers'),
                     ),
                     _CardDivider(),
