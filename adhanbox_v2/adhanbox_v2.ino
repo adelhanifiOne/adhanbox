@@ -2,7 +2,7 @@
 // - Starts an AP when a long-press is detected on CONFIG_BUTTON_PIN
 // - Serves a small webpage that requests navigator.geolocation and POSTs lat/lon
 // - Stores lat/lon/accuracy/timestamp in Preferences (NVS)
-//Version: 2.1.2 (AdhanBox V2 / HW v2)
+//Version: 2.2.0 (AdhanBox V2 / HW v2)
 #include <Arduino.h>
 #include <Wire.h>
 #include <WiFi.h>
@@ -39,6 +39,7 @@
 #include <time.h>
 #include <math.h>
 #include "esp_task_wdt.h"   // [SECU] watchdog materiel : reboot si le firmware freeze
+#include "esp_ota_ops.h"    // [SECU] rollback OTA : revient a la version precedente si le firmware boot-loop
 static volatile bool _wdtArmed = false;  // WDT arme seulement une fois loop() lance
 // BLE provisioning (first-boot WiFi setup without leaving the app)
 #define ENABLE_BLE 1
@@ -1775,7 +1776,7 @@ void handleOtaUploadComplete() {
 // GET /api/firmware/version
 void handleFirmwareVersion() {
   server.send(200, "application/json",
-              "{\"version\":\"2.1.2\",\"hardware\":\"v2\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
+              "{\"version\":\"2.2.0\",\"hardware\":\"v2\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
 }
 
 // Returns true if the request carries the correct API key (or if token not yet set).
@@ -1797,7 +1798,7 @@ bool requireApiKey() {
 void handleDeviceInfo() {
   char buf[512];
   snprintf(buf, sizeof(buf),
-           "{\"version\":\"2.1.2\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
+           "{\"version\":\"2.2.0\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
            OTA_HOSTNAME, _apiToken.c_str(), _otaPass.c_str());
   server.send(200, "application/json", buf);
 }
@@ -4108,7 +4109,7 @@ void v2Tick() {
 void setup() {
   Serial.begin(115200);
   delay(100);
-  Serial.println("AdhanBox V2 firmware v2.1.2 starting...");
+  Serial.println("AdhanBox V2 firmware v2.2.0 starting...");
 
   // [SECU] Watchdog materiel : on REGLE juste le timeout ici (30s, reboot sur
   // panic) et on DESABONNE les taches idle. L'abonnement de la tache loop() se
@@ -4285,6 +4286,17 @@ void setup() {
   if (rtcPresent) {
     Serial.println("Scheduling next prayer alarm on startup...");
     scheduleNextPrayerAlarm();
+  }
+
+  // [SECU] ROLLBACK OTA : arrive ici = les peripheriques critiques (audio/SD/I2C/
+  // RTC/LED) sont initialises sans crash -> on confirme le firmware "valide" et on
+  // annule le rollback. Si un OTA defaillant plante AVANT ce point (comme le boot
+  // loop de la 2.1.0), il ne se marque jamais valide et le bootloader revient tout
+  // seul a la version precedente au prochain reset (plus besoin de cable USB).
+  // Place ici (avant la phase provisioning longue) pour ne pas heurter le WDT
+  // bootloader (9s) pendant les 5 min possibles de provisioning BLE.
+  if (esp_ota_mark_app_valid_cancel_rollback() == ESP_OK) {
+    Serial.println("[OTA] firmware confirme valide (rollback annule)");
   }
 
   // ══════════════════════════════════════════════════════════════════════════
