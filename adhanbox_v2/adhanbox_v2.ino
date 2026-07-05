@@ -2,7 +2,7 @@
 // - Starts an AP when a long-press is detected on CONFIG_BUTTON_PIN
 // - Serves a small webpage that requests navigator.geolocation and POSTs lat/lon
 // - Stores lat/lon/accuracy/timestamp in Preferences (NVS)
-//Version: 2.2.0 (AdhanBox V2 / HW v2)
+//Version: 2.3.1 (AdhanBox V2 / HW v2)
 #include <Arduino.h>
 #include <Wire.h>
 #include <WiFi.h>
@@ -1798,7 +1798,7 @@ void handleOtaUploadComplete() {
 // GET /api/firmware/version
 void handleFirmwareVersion() {
   server.send(200, "application/json",
-              "{\"version\":\"2.2.0\",\"hardware\":\"v2\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
+              "{\"version\":\"2.3.1\",\"hardware\":\"v2\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
 }
 
 // Returns true if the request carries the correct API key (or if token not yet set).
@@ -1830,11 +1830,11 @@ void handleDeviceInfo() {
   char buf[512];
   if (pairingWindow || hasValidToken) {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"2.2.0\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
+             "{\"version\":\"2.3.1\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
              OTA_HOSTNAME, _apiToken.c_str(), _otaPass.c_str());
   } else {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"2.2.0\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"paired\":true}",
+             "{\"version\":\"2.3.1\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"paired\":true}",
              OTA_HOSTNAME);
   }
   server.send(200, "application/json", buf);
@@ -4146,7 +4146,7 @@ void v2Tick() {
 void setup() {
   Serial.begin(115200);
   delay(100);
-  Serial.println("AdhanBox V2 firmware v2.2.0 starting...");
+  Serial.println("AdhanBox V2 firmware v2.3.1 starting...");
 
   // [SECU] Watchdog materiel : on REGLE juste le timeout ici (30s, reboot sur
   // panic) et on DESABONNE les taches idle. L'abonnement de la tache loop() se
@@ -4341,7 +4341,34 @@ void setup() {
   // ══════════════════════════════════════════════════════════════════════════
   bool wifiConnected = false;
 
+  // [PROD] Reconnexion rapide : tenter D'ABORD le WiFi memorise (apres reboot ou
+  // coupure de courant). Le BLE provisioning n'est qu'un FALLBACK (pas de creds
+  // ou connexion echouee) -> fini les 5 min hors ligne a chaque redemarrage.
+  // (mark_valid est deja fait plus haut -> le WDT bootloader ne gene pas cette attente.)
+  {
+    prefs.begin("adhancfg", true);
+    String bootSSID = prefs.getString("wifi_ssid", "");
+    String bootPass = prefs.getString("wifi_pass", "");
+    prefs.end();
+    if (bootSSID.length() > 0) {
+      Serial.printf("Boot: tentative WiFi memorise (SSID=%s)...\n", bootSSID.c_str());
+      WiFi.mode(WIFI_STA);
+      WiFi.setAutoReconnect(true);
+      WiFi.begin(bootSSID.c_str(), bootPass.c_str());
+      unsigned long t0 = millis();
+      while (millis() - t0 < 15000 && WiFi.status() != WL_CONNECTED) delay(300);
+      if (WiFi.status() == WL_CONNECTED) {
+        wifiConnected = true;
+        wifiConnectState = WCS_CONNECTED;
+        Serial.printf("\n✓ WiFi memorise connecte ! IP=%s\n", WiFi.localIP().toString().c_str());
+      } else {
+        Serial.println("\n✗ WiFi memorise indisponible -> BLE provisioning.");
+      }
+    }
+  }
+
 #if ENABLE_BLE
+  if (!wifiConnected) {
   Serial.println("\n══ BLE provisioning actif ══");
   Serial.println("   Appui bouton = quitter | 5 min sans connexion = quitter auto");
   startBLEProvisioning();
@@ -4414,6 +4441,7 @@ void setup() {
     stopBLEProvisioning();
     delay(100);
   }
+  }  // fin du fallback : if (!wifiConnected) { BLE provisioning }
 #endif
 
   // ── Fonctionnement normal : connexion WiFi ou hors-ligne ──
@@ -4425,7 +4453,7 @@ void setup() {
   // Ne tenter le WiFi que si pas déjà connecté via BLE provisioning
   if (WiFi.status() == WL_CONNECTED) {
     wifiConnected = true;
-    Serial.printf("WiFi deja connecte (via BLE) — IP=%s\n", WiFi.localIP().toString().c_str());
+    Serial.printf("WiFi deja connecte — IP=%s\n", WiFi.localIP().toString().c_str());
   } else if (savedSSID.length() > 0) {
     Serial.printf("Tentative WiFi: SSID=%s\n", savedSSID.c_str());
     WiFi.mode(WIFI_STA);
