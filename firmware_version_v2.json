@@ -1,6 +1,6 @@
 {
-  "version": "2.1.0",
+  "version": "2.1.1",
   "hardware": "v2",
   "url": "https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/build_temp_v2/adhanbox_v2.ino.bin",
-  "changelog": "Securite: watchdog materiel (reboot si freeze) + auth token requise sur tous les endpoints d'action (WiFi, LED, volume, sync, delete...)"
+  "changelog": "Fix boot loop watchdog (abonnement dans loop() pas setup()) + secu 2.1.0"
 }

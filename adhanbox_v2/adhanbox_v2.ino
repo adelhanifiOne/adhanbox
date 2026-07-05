@@ -2,7 +2,7 @@
 // - Starts an AP when a long-press is detected on CONFIG_BUTTON_PIN
 // - Serves a small webpage that requests navigator.geolocation and POSTs lat/lon
 // - Stores lat/lon/accuracy/timestamp in Preferences (NVS)
-//Version: 2.1.0 (AdhanBox V2 / HW v2)
+//Version: 2.1.1 (AdhanBox V2 / HW v2)
 #include <Arduino.h>
 #include <Wire.h>
 #include <WiFi.h>
@@ -1774,7 +1774,7 @@ void handleOtaUploadComplete() {
 // GET /api/firmware/version
 void handleFirmwareVersion() {
   server.send(200, "application/json",
-              "{\"version\":\"2.1.0\",\"hardware\":\"v2\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
+              "{\"version\":\"2.1.1\",\"hardware\":\"v2\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
 }
 
 // Returns true if the request carries the correct API key (or if token not yet set).
@@ -1796,7 +1796,7 @@ bool requireApiKey() {
 void handleDeviceInfo() {
   char buf[512];
   snprintf(buf, sizeof(buf),
-           "{\"version\":\"2.1.0\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
+           "{\"version\":\"2.1.1\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
            OTA_HOSTNAME, _apiToken.c_str(), _otaPass.c_str());
   server.send(200, "application/json", buf);
 }
@@ -4107,15 +4107,15 @@ void v2Tick() {
 void setup() {
   Serial.begin(115200);
   delay(100);
-  Serial.println("AdhanBox V2 firmware v2.1.0 starting...");
+  Serial.println("AdhanBox V2 firmware v2.1.1 starting...");
 
-  // [SECU] Watchdog materiel : si la boucle principale se fige > 30s (deadlock,
-  // boucle infinie), l'appareil reboote tout seul -> plus d'adhan manque sans
-  // recuperation. 30s laisse passer les operations bloquantes legitimes (NTP 15s).
+  // [SECU] Watchdog materiel : on REGLE juste le timeout ici (30s, reboot sur
+  // panic) et on DESABONNE les taches idle. L'abonnement de la tache loop() se
+  // fait dans loop() lui-meme (1re iteration) -> setup(), meme long (WiFi, NTP,
+  // provisioning BLE 5 min), ne peut JAMAIS declencher le watchdog.
   {
     esp_task_wdt_config_t wdtCfg = { .timeout_ms = 30000, .idle_core_mask = 0, .trigger_panic = true };
-    esp_task_wdt_reconfigure(&wdtCfg);   // le core a deja init le WDT -> on reconfigure
-    esp_task_wdt_add(NULL);              // surveille la tache loop()
+    esp_task_wdt_reconfigure(&wdtCfg);
   }
 
   pinMode(CONFIG_BUTTON_PIN, INPUT_PULLUP);
@@ -4413,7 +4413,11 @@ void setup() {
 }
 
 void loop() {
-  esp_task_wdt_reset();   // [SECU] nourrit le watchdog a chaque tour (freeze -> reboot)
+  // [SECU] Abonne la tache loop() au watchdog a la 1re iteration seulement, puis
+  // la nourrit a chaque tour. Ainsi setup() ne peut pas declencher le WDT.
+  static bool _wdtArmed = false;
+  if (!_wdtArmed) { esp_task_wdt_add(NULL); _wdtArmed = true; }
+  esp_task_wdt_reset();
   audio.pump();
   v2Tick();          // [V2] azkar/coran + sync contenu
 
