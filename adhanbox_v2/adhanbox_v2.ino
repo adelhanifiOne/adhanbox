@@ -2,7 +2,7 @@
 // - Starts an AP when a long-press is detected on CONFIG_BUTTON_PIN
 // - Serves a small webpage that requests navigator.geolocation and POSTs lat/lon
 // - Stores lat/lon/accuracy/timestamp in Preferences (NVS)
-//Version: 2.1.1 (AdhanBox V2 / HW v2)
+//Version: 2.1.2 (AdhanBox V2 / HW v2)
 #include <Arduino.h>
 #include <Wire.h>
 #include <WiFi.h>
@@ -39,6 +39,7 @@
 #include <time.h>
 #include <math.h>
 #include "esp_task_wdt.h"   // [SECU] watchdog materiel : reboot si le firmware freeze
+static volatile bool _wdtArmed = false;  // WDT arme seulement une fois loop() lance
 // BLE provisioning (first-boot WiFi setup without leaving the app)
 #define ENABLE_BLE 1
 
@@ -1774,7 +1775,7 @@ void handleOtaUploadComplete() {
 // GET /api/firmware/version
 void handleFirmwareVersion() {
   server.send(200, "application/json",
-              "{\"version\":\"2.1.1\",\"hardware\":\"v2\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
+              "{\"version\":\"2.1.2\",\"hardware\":\"v2\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
 }
 
 // Returns true if the request carries the correct API key (or if token not yet set).
@@ -1796,7 +1797,7 @@ bool requireApiKey() {
 void handleDeviceInfo() {
   char buf[512];
   snprintf(buf, sizeof(buf),
-           "{\"version\":\"2.1.1\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
+           "{\"version\":\"2.1.2\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
            OTA_HOSTNAME, _apiToken.c_str(), _otaPass.c_str());
   server.send(200, "application/json", buf);
 }
@@ -2769,7 +2770,7 @@ void handleBLEProvisioning() {
   WiFi.begin(ssid.c_str(), pass.c_str());
 
   unsigned long t0 = millis();
-  while (millis() - t0 < 20000 && WiFi.status() != WL_CONNECTED) { esp_task_wdt_reset(); delay(300); }
+  while (millis() - t0 < 20000 && WiFi.status() != WL_CONNECTED) { if (_wdtArmed) esp_task_wdt_reset(); delay(300); }
 
   if (WiFi.status() == WL_CONNECTED) {
     String ip = WiFi.localIP().toString();
@@ -4107,7 +4108,7 @@ void v2Tick() {
 void setup() {
   Serial.begin(115200);
   delay(100);
-  Serial.println("AdhanBox V2 firmware v2.1.1 starting...");
+  Serial.println("AdhanBox V2 firmware v2.1.2 starting...");
 
   // [SECU] Watchdog materiel : on REGLE juste le timeout ici (30s, reboot sur
   // panic) et on DESABONNE les taches idle. L'abonnement de la tache loop() se
@@ -4306,7 +4307,7 @@ void setup() {
   bool bleHadClient = false;
 
   while (true) {
-    esp_task_wdt_reset();   // [SECU] nourrit le WDT pendant le provisioning (jusqu'a 5 min)
+    if (_wdtArmed) esp_task_wdt_reset();   // [SECU] nourrit le WDT si arme (provisioning depuis loop)
     unsigned long now = millis();
 
     // LED rouge clignotante
@@ -4415,7 +4416,6 @@ void setup() {
 void loop() {
   // [SECU] Abonne la tache loop() au watchdog a la 1re iteration seulement, puis
   // la nourrit a chaque tour. Ainsi setup() ne peut pas declencher le WDT.
-  static bool _wdtArmed = false;
   if (!_wdtArmed) { esp_task_wdt_add(NULL); _wdtArmed = true; }
   esp_task_wdt_reset();
   audio.pump();
