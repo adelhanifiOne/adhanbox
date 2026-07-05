@@ -768,7 +768,9 @@ class AdhanBoxAPI {
 
   Future<void> uploadFirmware(List<int> bytes) async {
     try {
-      final uri = Uri.parse('$baseUrl/ota/upload?token=${apiKey ?? ""}');
+      // size = taille exacte du .bin (firmware + trailer de signature 512o) :
+      // requis par le firmware OTA signé pour séparer firmware et signature.
+      final uri = Uri.parse('$baseUrl/ota/upload?token=${apiKey ?? ""}&size=${bytes.length}');
       final request = http.MultipartRequest('POST', uri);
       
       if (apiKey != null && apiKey!.isNotEmpty) {

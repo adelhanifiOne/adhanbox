@@ -81,6 +81,17 @@ def main():
         sys.exit(f"\n[ERREUR] Binaire {BIN} introuvable après compilation.")
     print(f"[OK] Binaire généré : {BIN}")
 
+    # 3b) [SECU] Signature OTA : le firmware (UPDATE_SIGN) REFUSE tout binaire non
+    # signe par la cle privee. On signe le .bin en place (firmware + trailer 512o)
+    # avant publication. Sans cette etape, l'OTA echoue cote device (verif KO).
+    if os.path.exists('keys/ota_private.pem'):
+        print("\nSignature OTA du binaire...")
+        if subprocess.run([sys.executable, 'sign_firmware.py', BIN]).returncode != 0:
+            sys.exit("\n[ERREUR] Signature echouee.")
+    else:
+        print("[ATTENTION] keys/ota_private.pem absent : binaire NON signe "
+              "(les devices en firmware signe le refuseront).")
+
     # 4) Git (uniquement les fichiers V2)
     print("\nPublication Git (canal V2)...")
     try:

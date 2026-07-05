@@ -1673,6 +1673,20 @@ void handleScanWifi() {
   server.send(200, "application/json", out);
 }
 
+#ifdef UPDATE_SIGN
+#include <Updater_Signing.h>
+// [SECU] Cle PUBLIQUE ECDSA P-256 pour verifier la signature des OTA. La cle
+// PRIVEE (keys/ota_private.pem) reste hors repo et sert a signer (sign_firmware.py).
+// Un firmware non signe par cette cle est REFUSE -> impossible de flasher a
+// distance un binaire malveillant, meme en possession du token.
+static const char OTA_PUBLIC_KEY[] = R"KEY(-----BEGIN PUBLIC KEY-----
+MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEe2grqFMJBQNxxMJ5r2v9f6GM1TZp
+vZhqqmANmLvW36L72tuB1dDT/1G5mxqn2Rk6n3dz2bCL7oeN+60HAfbmHQ==
+-----END PUBLIC KEY-----
+)KEY";
+static UpdaterECDSAVerifier *_otaVerifier = nullptr;
+#endif
+
 // OTA update via HTTP multipart upload (POST /ota/upload)
 void handleOtaUpload() {
   // Verify authorization at the start of the upload to prevent writing unauthorized chunks
@@ -1693,10 +1707,18 @@ void handleOtaUpload() {
 
   HTTPUpload &upload = server.upload();
   if (upload.status == UPLOAD_FILE_START) {
-    Serial.printf("OTA upload start: %s (%u bytes)\n", upload.filename.c_str(), upload.totalSize);
-    if (!Update.begin(UPDATE_SIZE_UNKNOWN)) {
-      Update.printError(Serial);
-    }
+    size_t total = (size_t)server.arg("size").toInt();  // taille du .bin signe (firmware+512)
+    Serial.printf("OTA upload start: %s (size=%u)\n", upload.filename.c_str(), (unsigned)total);
+#ifdef UPDATE_SIGN
+    // [SECU] Verification de signature obligatoire. Il faut connaitre la taille
+    // exacte (?size=) pour separer firmware et trailer de signature.
+    if (total == 0) { Serial.println("OTA REFUSE : ?size= manquant (requis pour la verif de signature)"); return; }
+    if (!_otaVerifier) _otaVerifier = new UpdaterECDSAVerifier((const uint8_t *)OTA_PUBLIC_KEY, sizeof(OTA_PUBLIC_KEY), HASH_SHA256);
+    Update.installSignature(_otaVerifier);
+    if (!Update.begin(total)) { Update.printError(Serial); }
+#else
+    if (!Update.begin(total ? total : UPDATE_SIZE_UNKNOWN)) { Update.printError(Serial); }
+#endif
   } else if (upload.status == UPLOAD_FILE_WRITE) {
     if (Update.write(upload.buf, upload.currentSize) != upload.currentSize) {
       Update.printError(Serial);
