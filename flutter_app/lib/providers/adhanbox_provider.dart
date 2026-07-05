@@ -72,20 +72,25 @@ final autoReconnectProvider = FutureProvider<String?>((ref) async {
 
   // Helper: charger le token API depuis le device ou prefs, et l'activer
   Future<void> loadApiToken(String ip) async {
+    String? token;
     try {
       final devApi = AdhanBoxAPI(baseUrl: 'http://$ip', timeout: const Duration(seconds: 3));
       final info = await devApi.getDeviceInfo();
-      final token = info['token'] as String?;
-      if (token != null && token.isNotEmpty) {
-        await prefs.setString('api_token_$ip', token);
-        ref.read(adhanboxApiKeyProvider.notifier).state = token;
-      }
+      token = info['token'] as String?;
     } catch (_) {
-      // Fallback si la box est injoignable mais qu'on a un jeton en cache
-      final token = prefs.getString('api_token_$ip');
-      if (token != null && token.isNotEmpty) {
-        ref.read(adhanboxApiKeyProvider.notifier).state = token;
-      }
+      // device injoignable -> on tentera le cache ci-dessous
+    }
+    // Le firmware n'expose le token que pendant la fenetre d'appairage. Hors de
+    // cette fenetre (usage normal) device/info ne renvoie plus de token : on
+    // retombe alors sur le jeton mis en cache lors du 1er appairage. Sinon on
+    // cache le nouveau jeton.
+    if (token != null && token.isNotEmpty) {
+      await prefs.setString('api_token_$ip', token);
+    } else {
+      token = prefs.getString('api_token_$ip');
+    }
+    if (token != null && token.isNotEmpty) {
+      ref.read(adhanboxApiKeyProvider.notifier).state = token;
     }
   }
 

@@ -1796,10 +1796,25 @@ bool requireApiKey() {
 // GET /api/device/info — unauthenticated bootstrap endpoint.
 // Returns the API token so the companion app can pair on first connection.
 void handleDeviceInfo() {
+  // [SECU] Le token (et ota_pass) ne sont exposes QUE pendant la fenetre
+  // d'appairage : mode AP, ou dans les 10 min apres le boot, ou si l'appelant
+  // presente deja un token valide. En service normal (device up > 10 min), le
+  // token n'est plus lisible sur le LAN -> un appareil tiers ne peut plus le
+  // recuperer pour contourner l'auth. L'app le cache lors du 1er appairage.
+  String key = server.header("X-API-Key");
+  if (key.length() == 0) key = server.arg("token");
+  bool hasValidToken = (_apiToken.length() > 0 && key == _apiToken);
+  bool pairingWindow = apRunning || (millis() < 10UL * 60UL * 1000UL);
   char buf[512];
-  snprintf(buf, sizeof(buf),
-           "{\"version\":\"2.2.0\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
-           OTA_HOSTNAME, _apiToken.c_str(), _otaPass.c_str());
+  if (pairingWindow || hasValidToken) {
+    snprintf(buf, sizeof(buf),
+             "{\"version\":\"2.2.0\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
+             OTA_HOSTNAME, _apiToken.c_str(), _otaPass.c_str());
+  } else {
+    snprintf(buf, sizeof(buf),
+             "{\"version\":\"2.2.0\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"paired\":true}",
+             OTA_HOSTNAME);
+  }
   server.send(200, "application/json", buf);
 }
 
