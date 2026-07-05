@@ -2,7 +2,7 @@
 // - Starts an AP when a long-press is detected on CONFIG_BUTTON_PIN
 // - Serves a small webpage that requests navigator.geolocation and POSTs lat/lon
 // - Stores lat/lon/accuracy/timestamp in Preferences (NVS)
-//Version: 2.0.10 (AdhanBox V2 / HW v2)
+//Version: 2.1.0 (AdhanBox V2 / HW v2)
 #include <Arduino.h>
 #include <Wire.h>
 #include <WiFi.h>
@@ -38,6 +38,7 @@
 #include <PubSubClient.h>
 #include <time.h>
 #include <math.h>
+#include "esp_task_wdt.h"   // [SECU] watchdog materiel : reboot si le firmware freeze
 // BLE provisioning (first-boot WiFi setup without leaving the app)
 #define ENABLE_BLE 1
 
@@ -1126,6 +1127,7 @@ void handleRoot() {
 }
 
 void handleSetLocation() {
+  if (!requireApiKey()) return;  // [SECU] auth requise
   if (server.method() != HTTP_POST) {
     server.send(405, "text/plain", "Method not allowed");
     return;
@@ -1187,6 +1189,7 @@ void handleSetRTC() {
 
 // Set RTC manually via POST JSON { "date": "YYYY-MM-DD", "time": "HH:MM:SS" }
 void handleSetRtcManual() {
+  if (!requireApiKey()) return;  // [SECU] auth requise
   if (server.method() != HTTP_POST) {
     server.send(405, "text/plain", "Method not allowed");
     return;
@@ -1246,6 +1249,7 @@ void handleSetRtcManual() {
 }
 
 void handleSetAlarmTest() {
+  if (!requireApiKey()) return;  // [SECU] auth requise
   if (!rtcPresent) {
     server.send(200, "text/plain", "RTC not present");
     return;
@@ -1271,6 +1275,7 @@ void handleSetAlarmTest() {
 }
 
 void handleCancelAlarms() {
+  if (!requireApiKey()) return;  // [SECU] auth requise
   ds3231DisableAlarms();
   server.send(200, "text/plain", "DS3231 alarms disabled");
 }
@@ -1329,6 +1334,7 @@ void handleStopPlay() {
 
 // Set volume via POST JSON {"vol":number}
 void handleSetVolume() {
+  if (!requireApiKey()) return;  // [SECU] auth requise
   if (server.method() != HTTP_POST) {
     server.send(405, "text/plain", "Method not allowed");
     return;
@@ -1362,6 +1368,7 @@ void handleGetVolume() {
 
 // Set brightness via POST JSON {"bright":number}
 void handleSetBrightness() {
+  if (!requireApiKey()) return;  // [SECU] auth requise
   if (server.method() != HTTP_POST) {
     server.send(405, "text/plain", "Method not allowed");
     return;
@@ -1397,6 +1404,7 @@ void handleGetBrightness() {
 
 // Set LED scenario via POST JSON {"scenario": number}
 void handleSetLedScenario() {
+  if (!requireApiKey()) return;  // [SECU] auth requise
   if (server.method() != HTTP_POST) {
     server.send(405, "text/plain", "Method not allowed");
     return;
@@ -1433,6 +1441,7 @@ void handleSetLedScenario() {
 
 // Couleur RGB libre : POST JSON {"r":0-255,"g":0-255,"b":0-255}
 void handleSetLedRgb() {
+  if (!requireApiKey()) return;  // [SECU] auth requise
   if (server.method() != HTTP_POST) {
     server.send(405, "text/plain", "Method not allowed");
     return;
@@ -1474,6 +1483,7 @@ void handleLedTest() {
 
 // Set LED scenario via query ?scene=N
 void handleSetLed() {
+  if (!requireApiKey()) return;  // [SECU] auth requise
   String s = server.arg("scene");
   if (s.length() == 0) {
     server.send(400, "text/plain", "Missing scene");
@@ -1505,6 +1515,7 @@ void handleSetLed() {
 
 // Turn off LEDs
 void handleLedOff() {
+  if (!requireApiKey()) return;  // [SECU] auth requise
   ledScenario = 0;
   setLedDuty(0);
   if (useAddressableLEDs) stripSetAll(0, 0, 0);
@@ -1551,6 +1562,7 @@ void handlePrayerTimes();
 // Returns 202 immediately — loop() drives the actual connection.
 // Poll GET /api/wifi/status to track progress.
 void handleConnectWifi() {
+  if (!requireApiKey()) return;  // [SECU] auth requise
   if (server.method() != HTTP_POST) {
     server.send(405, "text/plain", "Method not allowed");
     return;
@@ -1762,7 +1774,7 @@ void handleOtaUploadComplete() {
 // GET /api/firmware/version
 void handleFirmwareVersion() {
   server.send(200, "application/json",
-              "{\"version\":\"2.0.10\",\"hardware\":\"v2\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
+              "{\"version\":\"2.1.0\",\"hardware\":\"v2\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
 }
 
 // Returns true if the request carries the correct API key (or if token not yet set).
@@ -1784,7 +1796,7 @@ bool requireApiKey() {
 void handleDeviceInfo() {
   char buf[512];
   snprintf(buf, sizeof(buf),
-           "{\"version\":\"2.0.10\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
+           "{\"version\":\"2.1.0\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
            OTA_HOSTNAME, _apiToken.c_str(), _otaPass.c_str());
   server.send(200, "application/json", buf);
 }
@@ -2569,6 +2581,7 @@ void handleAdhanConfig() {
 
 
 void handleDisconnectWifi() {
+  if (!requireApiKey()) return;  // [SECU] auth requise
   WiFi.disconnect(true);
   WiFi.mode(WIFI_AP);
   server.send(200, "text/plain", "WiFi disconnected");
@@ -2756,7 +2769,7 @@ void handleBLEProvisioning() {
   WiFi.begin(ssid.c_str(), pass.c_str());
 
   unsigned long t0 = millis();
-  while (millis() - t0 < 20000 && WiFi.status() != WL_CONNECTED) delay(300);
+  while (millis() - t0 < 20000 && WiFi.status() != WL_CONNECTED) { esp_task_wdt_reset(); delay(300); }
 
   if (WiFi.status() == WL_CONNECTED) {
     String ip = WiFi.localIP().toString();
@@ -3891,6 +3904,7 @@ void v2SetOne(const String &b, const char *pfx, V2Item &it) {
   snprintf(k, sizeof(k), "%s_days", pfx); it.days = v2arg(b, k, it.days);
 }
 void handleSetAzkarCoran() {
+  if (!requireApiKey()) return;  // [SECU] auth requise
   String b = getRequestBody();
   v2SetOne(b, "sabah", v2cfg.sabah); v2SetOne(b, "masaa", v2cfg.masaa);
   v2SetOne(b, "kahf",  v2cfg.kahf);  v2SetOne(b, "mulk",  v2cfg.mulk);
@@ -3914,6 +3928,7 @@ void v2ListDir(File dir, String &out, bool &first) {
   }
 }
 void handleAudioDelete() {
+  if (!requireApiKey()) return;  // [SECU] auth requise
   String path = server.arg("f");
   if (path.length() && SD.exists(path)) { SD.remove(path); server.send(200, "text/plain", "deleted"); }
   else server.send(404, "text/plain", "not found");
@@ -3922,6 +3937,7 @@ void handleAudioDelete() {
 // Joue N'IMPORTE quel fichier par chemin (test azkar/coran a la demande).
 // Renvoie la taille du fichier + si le decodeur a demarre -> diagnostic.
 void handlePlayFile() {
+  if (!requireApiKey()) return;  // [SECU] auth requise
   String f = server.arg("f");
   if (!f.length()) { server.send(400, "text/plain", "missing f"); return; }
   if (!SD.exists(f)) { server.send(404, "application/json", "{\"error\":\"absent\",\"file\":\"" + f + "\"}"); return; }
@@ -4038,6 +4054,7 @@ void _v2SyncTask(void*) {
   vTaskDelete(nullptr);
 }
 void handleContentSync() {
+  if (!requireApiKey()) return;  // [SECU] auth requise
   if (!_syncRunning) {
     _syncAdded = 0;
     xTaskCreate(_v2SyncTask, "v2sync", 32768, nullptr, 1, nullptr);  // stack large (TLS)
@@ -4090,7 +4107,16 @@ void v2Tick() {
 void setup() {
   Serial.begin(115200);
   delay(100);
-  Serial.println("AdhanBox V2 firmware v2.0.10 starting...");
+  Serial.println("AdhanBox V2 firmware v2.1.0 starting...");
+
+  // [SECU] Watchdog materiel : si la boucle principale se fige > 30s (deadlock,
+  // boucle infinie), l'appareil reboote tout seul -> plus d'adhan manque sans
+  // recuperation. 30s laisse passer les operations bloquantes legitimes (NTP 15s).
+  {
+    esp_task_wdt_config_t wdtCfg = { .timeout_ms = 30000, .idle_core_mask = 0, .trigger_panic = true };
+    esp_task_wdt_reconfigure(&wdtCfg);   // le core a deja init le WDT -> on reconfigure
+    esp_task_wdt_add(NULL);              // surveille la tache loop()
+  }
 
   pinMode(CONFIG_BUTTON_PIN, INPUT_PULLUP);
 
@@ -4280,6 +4306,7 @@ void setup() {
   bool bleHadClient = false;
 
   while (true) {
+    esp_task_wdt_reset();   // [SECU] nourrit le WDT pendant le provisioning (jusqu'a 5 min)
     unsigned long now = millis();
 
     // LED rouge clignotante
@@ -4386,6 +4413,7 @@ void setup() {
 }
 
 void loop() {
+  esp_task_wdt_reset();   // [SECU] nourrit le watchdog a chaque tour (freeze -> reboot)
   audio.pump();
   v2Tick();          // [V2] azkar/coran + sync contenu
 
