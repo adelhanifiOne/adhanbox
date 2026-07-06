@@ -2,7 +2,7 @@
 // - Starts an AP when a long-press is detected on CONFIG_BUTTON_PIN
 // - Serves a small webpage that requests navigator.geolocation and POSTs lat/lon
 // - Stores lat/lon/accuracy/timestamp in Preferences (NVS)
-//Version: 2.3.2 (AdhanBox V2 / HW v2)
+//Version: 2.3.9 (AdhanBox V2 / HW v2)
 #include <Arduino.h>
 #include <Wire.h>
 #include <WiFi.h>
@@ -259,19 +259,42 @@ class I2SAudio {
   AudioFileSourceBuffer *buf = nullptr;
   float gain = 0.5f;
   bool  _sdOk = false;
+  uint32_t _sdClock = 0;
  public:
+  uint32_t sdClock() const { return _sdClock; }
+  // Bench debit SD : lit `bytes` octets d'un fichier existant et renvoie ko/s.
+  int sdBenchKBs(const char* path, uint32_t bytes) {
+    if (!_sdOk || !SD.exists(path)) return -1;
+    File f = SD.open(path, FILE_READ);
+    if (!f) return -1;
+    static uint8_t tmp[4096];
+    uint32_t total = 0; unsigned long t0 = millis();
+    while (total < bytes) {
+      int n = f.read(tmp, sizeof(tmp));
+      if (n <= 0) break;
+      total += n;
+    }
+    unsigned long dt = millis() - t0;
+    f.close();
+    if (dt == 0) return -2;
+    return (int)((uint64_t)total / dt);  // octets/ms == ko/s
+  }
   bool begin() {
     spi.begin(SD_SCK_PIN, SD_MISO_PIN, SD_MOSI_PIN, SD_CS_PIN);
-    // Horloge SPI basse (1 MHz) + plusieurs tentatives : fiabilise l'init sur une
-    // carte fraichement soudee / traces marginales. Un test SD nu passe souvent a
-    // 4 MHz mais l'appli complete non ; 1 MHz reste largement assez rapide pour le
-    // MP3 (~16 Ko/s). On reessaie car le 1er SD.begin echoue souvent a froid.
+    // A 1 MHz le debit brut SD (~10-16 Ko/s a cause de la latence par bloc) est trop
+    // juste pour le MP3 128 kbps -> le decodeur se vide et s'arrete apres 3-5s. On
+    // tente donc des horloges plus hautes D'ABORD (debit x4-x16), avec repli sur
+    // 1 MHz si l'init echoue (traces SPI marginales). 5 essais par palier a froid.
+    // 1 MHz : le seul clock FIABLE sous charge sur ce PCB (traces SPI marginales).
+    // A 16 MHz la lecture isolee marche (1186 ko/s) mais pendant l'audio les lectures
+    // se corrompent -> l'adhan meurt en 1ms. On reste donc a 1 MHz.
     _sdOk = false;
     for (int i = 0; i < 5 && !_sdOk; i++) {
       _sdOk = SD.begin(SD_CS_PIN, spi, 1000000);
       if (!_sdOk) { SD.end(); delay(60); }
     }
-    Serial.printf("[SD] %s\n", _sdOk ? "OK" : "FAIL - verifier carte et cablage");
+    if (_sdOk) _sdClock = 1000000;
+    Serial.printf("[SD] %s @ %lu Hz\n", _sdOk ? "OK" : "FAIL", (unsigned long)_sdClock);
     if (!out) {
       out = new AudioOutputI2S();
       // DMA I2S agrandi (defaut 5x4608) : loop() fait serveur web + BLE + NeoPixel
@@ -300,12 +323,27 @@ class I2SAudio {
     stop();
     if (!_sdOk || !SD.exists(path)) return false;
     src = new AudioFileSourceSD(path);
-    // Buffer fichier 32 Ko : ~2s d'avance a 128kbps. Absorbe les a-coups de lecture
-    // SD (1 MHz) + les pauses CPU -> fini les grésillements.
+    // Buffer fichier 32 Ko (~2s). Le vrai levier n'est pas la taille mais le DEBIT
+    // SD (voir SD.begin plus haut) : un buffer plus gros ne fait que retarder si le
+    // debit brut est sous 16 Ko/s (128 kbps).
     buf = new AudioFileSourceBuffer(src, 32768);
     String p = path; p.toLowerCase();
-    if (p.endsWith(".wav")) { wav = new AudioGeneratorWAV(); return wav->begin(buf, out); }
-    mp3 = new AudioGeneratorMP3(); return mp3->begin(buf, out);
+    bool ok;
+    if (p.endsWith(".wav")) { wav = new AudioGeneratorWAV(); ok = wav->begin(buf, out); }
+    else { mp3 = new AudioGeneratorMP3(); ok = mp3->begin(buf, out); }
+    // Anti "debut coupe" : recreer le canal I2S redemarre BCLK -> le MAX98357A se
+    // resynchronise (~0.8s) en avalant le debut. On lui envoie ~900ms de silence
+    // propre AVANT le contenu (rien n'est encore decode) : l'ampli se cale, puis la
+    // voix demarre entiere. delay(1) quand le DMA est plein pour NE PAS pegger le CPU
+    // (un busy-loop sans yield affamait le watchdog -> crash).
+    if (ok && out) {
+      int16_t silence[2] = {0, 0};
+      unsigned long t0 = millis();
+      while (millis() - t0 < 900) {
+        if (!out->ConsumeSample(silence)) delay(1);
+      }
+    }
+    return ok;
   }
   void playTrackNum(int track) {
     char path[24];
@@ -376,6 +414,7 @@ void handleContentSync();
 void handleContentStatus();
 void handleAudioDelete();
 void handleAudioList();
+void handleDiag();
 void handlePlayFile();
 void handleStopPlay();
 bool tryReinitSD();
@@ -1820,7 +1859,7 @@ void handleOtaUploadComplete() {
 // GET /api/firmware/version
 void handleFirmwareVersion() {
   server.send(200, "application/json",
-              "{\"version\":\"2.3.2\",\"hardware\":\"v2\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
+              "{\"version\":\"2.3.9\",\"hardware\":\"v2\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
 }
 
 // Returns true if the request carries the correct API key (or if token not yet set).
@@ -1852,11 +1891,11 @@ void handleDeviceInfo() {
   char buf[512];
   if (pairingWindow || hasValidToken) {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"2.3.2\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
+             "{\"version\":\"2.3.9\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
              OTA_HOSTNAME, _apiToken.c_str(), _otaPass.c_str());
   } else {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"2.3.2\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"paired\":true}",
+             "{\"version\":\"2.3.9\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"paired\":true}",
              OTA_HOSTNAME);
   }
   server.send(200, "application/json", buf);
@@ -2989,6 +3028,7 @@ void setupServerRoutes() {
   server.on("/api/content/sync", HTTP_POST, handleContentSync);
   server.on("/api/content/status", HTTP_GET, handleContentStatus);
   server.on("/api/audio/list", HTTP_GET, handleAudioList);
+  server.on("/api/diag", HTTP_GET, handleDiag);
   server.on("/api/audio/delete", HTTP_GET, handleAudioDelete);
   server.on("/api/audio/play", HTTP_GET, handlePlayFile);
   server.on("/api/device/info", HTTP_GET, handleDeviceInfo);
@@ -4027,6 +4067,21 @@ void handleAudioList() {
   server.send(200, "application/json", out);
 }
 
+// Diagnostic : horloge SD reelle + debit de lecture (ko/s) + heap/PSRAM.
+// Sert a savoir si la SD tient le 128 kbps (16 ko/s) ou pas.
+void handleDiag() {
+  stopPlay();  // mesure au repos (pas de contention SPI avec l'audio)
+  int kBs = audio.sdBenchKBs("/quran/afs/001.mp3", 256 * 1024);
+  char buf[256];
+  snprintf(buf, sizeof(buf),
+    "{\"sd_clock_hz\":%lu,\"sd_read_kBs\":%d,\"need_kBs\":16,"
+    "\"free_heap\":%u,\"psram_size\":%u,\"psram_free\":%u}",
+    (unsigned long)audio.sdClock(), kBs,
+    (unsigned)ESP.getFreeHeap(),
+    (unsigned)ESP.getPsramSize(), (unsigned)ESP.getFreePsram());
+  server.send(200, "application/json", buf);
+}
+
 // Sync de contenu : telecharge les fichiers MANQUANTS listes dans un manifeste
 // texte (1 ligne = "chemin|url"). Permet d'ajouter des duaas/sons a distance.
 String _syncMsg = "(idle)";   // diagnostic visible via /api/content/status
@@ -4992,13 +5047,19 @@ void loop() {
   // Handle HTTP server requests (always, whether in AP mode or normal WiFi)
   server.handleClient();
 
-  // ArduinoOTA (only when connected)
-  if (WiFi.status() == WL_CONNECTED) ArduinoOTA.handle();
+  // [AUDIO] Pendant la lecture, on NE fait AUCUNE operation reseau bloquante : un
+  // reconnectMQTT() (broker injoignable) ou ArduinoOTA peut bloquer plusieurs
+  // secondes -> le decodeur se vide -> l'audio se coupe (3 underruns = stop). La SD
+  // a largement le debit (117 ko/s a 1 MHz) ; le vrai tueur, c'est ces blocages.
+  if (!audio.isRunning()) {
+    // ArduinoOTA (only when connected)
+    if (WiFi.status() == WL_CONNECTED) ArduinoOTA.handle();
 
-  // MQTT : maintenir la connexion et traiter les messages entrants
-  if (WiFi.status() == WL_CONNECTED) {
-    if (!mqtt.connected()) reconnectMQTT();
-    else mqtt.loop();
+    // MQTT : maintenir la connexion et traiter les messages entrants
+    if (WiFi.status() == WL_CONNECTED) {
+      if (!mqtt.connected()) reconnectMQTT();
+      else mqtt.loop();
+    }
   }
   // MQTT : heartbeat status toutes les 30s
   static unsigned long lastMqttStatus = 0;
