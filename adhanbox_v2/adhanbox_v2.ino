@@ -2,7 +2,7 @@
 // - Starts an AP when a long-press is detected on CONFIG_BUTTON_PIN
 // - Serves a small webpage that requests navigator.geolocation and POSTs lat/lon
 // - Stores lat/lon/accuracy/timestamp in Preferences (NVS)
-//Version: 2.3.1 (AdhanBox V2 / HW v2)
+//Version: 2.3.2 (AdhanBox V2 / HW v2)
 #include <Arduino.h>
 #include <Wire.h>
 #include <WiFi.h>
@@ -109,7 +109,23 @@ class _BLEWifiScanCB : public BLECharacteristicCallbacks {
     xTaskCreate([](void*) {
       // Switch to STA mode temporarily for scan (doesn't disconnect if already STA)
       WiFi.mode(WIFI_STA);
+      // Nettoyer l'etat WiFi : au boot, setAutoReconnect(true) relance des tentatives
+      // de connexion en arriere-plan -> scanNetworks() renvoie -2 (WIFI_SCAN_RUNNING)
+      // et 0 reseau. On coupe la reconnexion auto + on purge un scan reste coince.
+      WiFi.setAutoReconnect(false);
+      WiFi.disconnect(false, false);  // stoppe la tentative en cours, garde les creds
+      delay(200);
+      WiFi.scanDelete();
       int n = WiFi.scanNetworks(false, true);  // async=false, show_hidden=true
+      // Retour negatif (-2 running / -1 failed) -> on reessaie proprement.
+      for (int attempt = 0; n < 0 && attempt < 4; attempt++) {
+        Serial.printf("[BLE] WiFi scan retour %d, nouvelle tentative %d/4...\n", n, attempt + 1);
+        WiFi.scanDelete();
+        delay(400);
+        n = WiFi.scanNetworks(false, true);
+      }
+      if (n < 0) n = 0;
+      WiFi.setAutoReconnect(true);  // restaurer le comportement normal
       Serial.printf("[BLE] WiFi scan found %d networks\n", n);
 
       int count = min(n, 20);
@@ -258,6 +274,10 @@ class I2SAudio {
     Serial.printf("[SD] %s\n", _sdOk ? "OK" : "FAIL - verifier carte et cablage");
     if (!out) {
       out = new AudioOutputI2S();
+      // DMA I2S agrandi (defaut 5x4608) : loop() fait serveur web + BLE + NeoPixel
+      // (interruptions coupees ~1ms) entre 2 pump(). Un DMA plus gros = plus de
+      // cushion -> plus de grésillement/underrun quand un tour de loop traine.
+      out->SetBuffers(12, 4608);
       out->SetPinout(I2S_BCLK_PIN, I2S_LRC_PIN, I2S_DIN_PIN);
       out->SetGain(gain);
       Serial.println("[I2S] OK");
@@ -280,7 +300,9 @@ class I2SAudio {
     stop();
     if (!_sdOk || !SD.exists(path)) return false;
     src = new AudioFileSourceSD(path);
-    buf = new AudioFileSourceBuffer(src, 8192);
+    // Buffer fichier 32 Ko : ~2s d'avance a 128kbps. Absorbe les a-coups de lecture
+    // SD (1 MHz) + les pauses CPU -> fini les grésillements.
+    buf = new AudioFileSourceBuffer(src, 32768);
     String p = path; p.toLowerCase();
     if (p.endsWith(".wav")) { wav = new AudioGeneratorWAV(); return wav->begin(buf, out); }
     mp3 = new AudioGeneratorMP3(); return mp3->begin(buf, out);
@@ -1798,7 +1820,7 @@ void handleOtaUploadComplete() {
 // GET /api/firmware/version
 void handleFirmwareVersion() {
   server.send(200, "application/json",
-              "{\"version\":\"2.3.1\",\"hardware\":\"v2\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
+              "{\"version\":\"2.3.2\",\"hardware\":\"v2\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
 }
 
 // Returns true if the request carries the correct API key (or if token not yet set).
@@ -1830,11 +1852,11 @@ void handleDeviceInfo() {
   char buf[512];
   if (pairingWindow || hasValidToken) {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"2.3.1\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
+             "{\"version\":\"2.3.2\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
              OTA_HOSTNAME, _apiToken.c_str(), _otaPass.c_str());
   } else {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"2.3.1\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"paired\":true}",
+             "{\"version\":\"2.3.2\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"paired\":true}",
              OTA_HOSTNAME);
   }
   server.send(200, "application/json", buf);
@@ -3954,7 +3976,13 @@ void handleSetAzkarCoran() {
 void v2ListDir(File dir, String &out, bool &first) {
   for (File f = dir.openNextFile(); f; f = dir.openNextFile()) {
     String nm = f.name();
-    if (f.isDirectory()) { if (!nm.startsWith(".")) v2ListDir(f, out, first); }
+    if (f.isDirectory()) {
+      // On saute les dossiers caches ET /quran : les 456 sourates (4 recitateurs)
+      // font timeout l'app + fragmentent la RAM. Le Coran se lit via des chemins
+      // connus (lecteur dedie), pas via cette liste diagnostic.
+      String p = f.path(); p.toLowerCase();
+      if (!nm.startsWith(".") && !p.startsWith("/quran")) v2ListDir(f, out, first);
+    }
     else {
       String low = nm; low.toLowerCase();
       if (low.endsWith(".mp3") || low.endsWith(".wav")) {

@@ -1,6 +1,6 @@
 {
-  "version": "2.3.1",
+  "version": "2.3.2",
   "hardware": "v2",
   "url": "https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/build_temp_v2/adhanbox_v2.ino.bin",
-  "changelog": "Securite renforcee + reconnexion WiFi automatique plus rapide et fiable"
+  "changelog": "Audio: fin des gresillements (buffers I2S agrandis) + liste contenu instantanee + scan BLE fiable"
 }
