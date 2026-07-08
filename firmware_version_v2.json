@@ -1,6 +1,6 @@
 {
-  "version": "2.3.9",
+  "version": "2.3.15",
   "hardware": "v2",
   "url": "https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/build_temp_v2/adhanbox_v2.ino.bin",
-  "changelog": "Audio: correction majeure - la lecture ne coupe plus (MQTT ne bloque plus pendant l_audio), debut des pistes complet, liste contenu instantanee, scan BLE fiable"
+  "changelog": "Fix crash audio sur modules sans PSRAM (buffer DMA I2S reduit) + bouton \"Appairer avec l_app\" sur la page web (reboot en mode appairage BLE fiable) + corrections audio (plus de coupures ni gresillement)"
 }

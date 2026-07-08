@@ -2,7 +2,7 @@
 // - Starts an AP when a long-press is detected on CONFIG_BUTTON_PIN
 // - Serves a small webpage that requests navigator.geolocation and POSTs lat/lon
 // - Stores lat/lon/accuracy/timestamp in Preferences (NVS)
-//Version: 2.3.9 (AdhanBox V2 / HW v2)
+//Version: 2.3.15 (AdhanBox V2 / HW v2)
 #include <Arduino.h>
 #include <Wire.h>
 #include <WiFi.h>
@@ -297,10 +297,11 @@ class I2SAudio {
     Serial.printf("[SD] %s @ %lu Hz\n", _sdOk ? "OK" : "FAIL", (unsigned long)_sdClock);
     if (!out) {
       out = new AudioOutputI2S();
-      // DMA I2S agrandi (defaut 5x4608) : loop() fait serveur web + BLE + NeoPixel
-      // (interruptions coupees ~1ms) entre 2 pump(). Un DMA plus gros = plus de
-      // cushion -> plus de grésillement/underrun quand un tour de loop traine.
-      out->SetBuffers(12, 4608);
+      // DMA I2S = 8x2048 (~16 Ko). ATTENTION : un DMA plus gros (55 Ko) FAIT CRASHER
+      // les modules SANS PSRAM (i2s_alloc_dma_desc echoue apres WiFi+BLE -> assert ->
+      // reboot en boucle des qu'on joue un son). 16 Ko tient partout ; le grésillement
+      // est de toute facon evite par le fait de ne PAS bloquer loop() pendant l'audio.
+      out->SetBuffers(8, 2048);
       out->SetPinout(I2S_BCLK_PIN, I2S_LRC_PIN, I2S_DIN_PIN);
       out->SetGain(gain);
       Serial.println("[I2S] OK");
@@ -372,6 +373,12 @@ DateTime scheduledPrayerTime;
 unsigned long softwareAlarmAt = 0;
 // Persistent option: force playing track 1 for all prayers
 bool forcePlayTrack1 = false;
+// Signal "rebooter en mode appairage BLE" via memoire RTC : survit a ESP.restart()
+// (contrairement a NVS/prefs qui peut echouer si deja ouvert en runtime).
+// IMPORTANT : RTC_NOINIT_ATTR (PAS RTC_DATA_ATTR) -> le code de demarrage NE le
+// re-initialise PAS a chaque reboot ; c'est ce qui lui permet de survivre au restart.
+#define PAIR_BOOT_MAGIC 0x50414952UL  // "PAIR"
+RTC_NOINIT_ATTR uint32_t g_pairBootMagic;
 // Global LED brightness (0-100, default 50%)
 int ledBrightness = 50;
 // Track sequence: adhan plays first, then duaa (track 1) plays after adhan finishes
@@ -711,6 +718,11 @@ const char index_html[] PROGMEM = R"HTML(
         <!-- Dashboard -->
         <section class="card page" id="page-dashboard">
           <h3>Statut</h3>
+          <div style="margin:0 0 14px 0; padding:12px; border:1px solid rgba(255,255,255,0.10); border-radius:10px; background:rgba(59,130,246,0.10);">
+            <div class="small" style="margin-bottom:8px;">Pour ajouter cette AdhanBox à l'application :</div>
+            <button class="btn" id="pairBtn" style="background:#3B82F6; font-weight:600;">Appairer avec l'app (Bluetooth)</button>
+            <div id="pairMsg" class="small" style="margin-top:8px;"></div>
+          </div>
           <p class="small">Heure du module (DS3231)</p>
           <div style="display:flex;align-items:center;gap:12px;">
             <div style="font-size:18px;font-weight:600;"> <span id="rtcTime">--:--:--</span></div>
@@ -1031,6 +1043,7 @@ const char index_html[] PROGMEM = R"HTML(
     var brightSetBtn = document.getElementById('brightSetBtn'); if(brightSetBtn) brightSetBtn.onclick = function(){ var bs = document.getElementById('brightSlider'); var b = bs ? parseInt(bs.value) : 50; fetch('/set_brightness', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ bright: b }) }).then(r=>r.text()).then(t=>{ alert('Luminosité appliquée: '+b+'%'); refreshBrightness(); }).catch(e=>{ alert('Erreur'); }); };
     refreshBrightness();
     // Test track buttons
+    var pairBtn = document.getElementById('pairBtn'); if(pairBtn) pairBtn.onclick = function(){ var m=document.getElementById('pairMsg'); if(m) m.textContent="Demarrage du Bluetooth..."; pairBtn.disabled=true; fetch('/api/pair').then(function(r){return r.json();}).then(function(t){ if(m) m.textContent="Bluetooth actif (5 min). Ouvrez l'app -> Reglages -> Associer un autre appareil, et patientez sur l'ecran Bluetooth."; }).catch(function(e){ if(m) m.textContent="Erreur de demarrage"; pairBtn.disabled=false; }); };
     var testTrack1Btn = document.getElementById('testTrack1Btn'); if(testTrack1Btn) testTrack1Btn.onclick = function(){ fetch('/play?track=1').then(r=>r.text()).then(t=>{ console.log('Playing track 1:', t); }).catch(e=>{ alert('Erreur lecture piste 1'); }); };
     var testTrack2Btn = document.getElementById('testTrack2Btn'); if(testTrack2Btn) testTrack2Btn.onclick = function(){ fetch('/play?track=2').then(r=>r.text()).then(t=>{ console.log('Playing track 2:', t); }).catch(e=>{ alert('Erreur lecture piste 2'); }); };
     var testTrack3Btn = document.getElementById('testTrack3Btn'); if(testTrack3Btn) testTrack3Btn.onclick = function(){ fetch('/play?track=3').then(r=>r.text()).then(t=>{ console.log('Playing track 3:', t); }).catch(e=>{ alert('Erreur lecture piste 3'); }); };
@@ -1859,7 +1872,7 @@ void handleOtaUploadComplete() {
 // GET /api/firmware/version
 void handleFirmwareVersion() {
   server.send(200, "application/json",
-              "{\"version\":\"2.3.9\",\"hardware\":\"v2\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
+              "{\"version\":\"2.3.15\",\"hardware\":\"v2\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
 }
 
 // Returns true if the request carries the correct API key (or if token not yet set).
@@ -1891,11 +1904,11 @@ void handleDeviceInfo() {
   char buf[512];
   if (pairingWindow || hasValidToken) {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"2.3.9\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
+             "{\"version\":\"2.3.15\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
              OTA_HOSTNAME, _apiToken.c_str(), _otaPass.c_str());
   } else {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"2.3.9\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"paired\":true}",
+             "{\"version\":\"2.3.15\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"paired\":true}",
              OTA_HOSTNAME);
   }
   server.send(200, "application/json", buf);
@@ -3029,6 +3042,18 @@ void setupServerRoutes() {
   server.on("/api/content/status", HTTP_GET, handleContentStatus);
   server.on("/api/audio/list", HTTP_GET, handleAudioList);
   server.on("/api/diag", HTTP_GET, handleDiag);
+#if ENABLE_BLE
+  // Depuis la page web de la box : demande l'appairage BLE. Demarrer le BLE A CHAUD
+  // (WiFi+web+audio en RAM) manque de memoire -> crash. On memorise la demande et on
+  // REBOOTE : au boot (RAM fraiche) la box entre en appairage BLE de facon fiable,
+  // avec le WiFi qui se reconnecte en fond (creds jamais effacees).
+  server.on("/api/pair", HTTP_GET, [](){
+    g_pairBootMagic = PAIR_BOOT_MAGIC;   // survit au reboot (memoire RTC)
+    server.send(200, "application/json", "{\"ok\":true,\"msg\":\"Redemarrage en mode appairage (LED clignote ~5 min)\"}");
+    delay(400);
+    ESP.restart();
+  });
+#endif
   server.on("/api/audio/delete", HTTP_GET, handleAudioDelete);
   server.on("/api/audio/play", HTTP_GET, handlePlayFile);
   server.on("/api/device/info", HTTP_GET, handleDeviceInfo);
@@ -4428,26 +4453,35 @@ void setup() {
   // coupure de courant). Le BLE provisioning n'est qu'un FALLBACK (pas de creds
   // ou connexion echouee) -> fini les 5 min hors ligne a chaque redemarrage.
   // (mark_valid est deja fait plus haut -> le WDT bootloader ne gene pas cette attente.)
-  {
-    prefs.begin("adhancfg", true);
-    String bootSSID = prefs.getString("wifi_ssid", "");
-    String bootPass = prefs.getString("wifi_pass", "");
-    prefs.end();
-    if (bootSSID.length() > 0) {
-      Serial.printf("Boot: tentative WiFi memorise (SSID=%s)...\n", bootSSID.c_str());
-      WiFi.mode(WIFI_STA);
-      WiFi.setAutoReconnect(true);
-      WiFi.begin(bootSSID.c_str(), bootPass.c_str());
-      unsigned long t0 = millis();
-      while (millis() - t0 < 15000 && WiFi.status() != WL_CONNECTED) delay(300);
-      if (WiFi.status() == WL_CONNECTED) {
-        wifiConnected = true;
-        wifiConnectState = WCS_CONNECTED;
-        Serial.printf("\n✓ WiFi memorise connecte ! IP=%s\n", WiFi.localIP().toString().c_str());
-      } else {
-        Serial.println("\n✗ WiFi memorise indisponible -> BLE provisioning.");
-      }
+  // pairBoot : demande d'appairage via /api/pair (survit au reboot via memoire RTC).
+  bool pairBoot = (g_pairBootMagic == PAIR_BOOT_MAGIC);
+  g_pairBootMagic = 0;   // one-shot : consomme
+  Serial.printf("Boot: pairBoot=%d\n", pairBoot ? 1 : 0);
+
+  prefs.begin("adhancfg", true);
+  String bootSSID = prefs.getString("wifi_ssid", "");
+  String bootPass = prefs.getString("wifi_pass", "");
+  prefs.end();
+
+  if (bootSSID.length() > 0 && !pairBoot) {
+    Serial.printf("Boot: tentative WiFi memorise (SSID=%s)...\n", bootSSID.c_str());
+    WiFi.mode(WIFI_STA);
+    WiFi.setAutoReconnect(true);
+    WiFi.begin(bootSSID.c_str(), bootPass.c_str());
+    unsigned long t0 = millis();
+    while (millis() - t0 < 15000 && WiFi.status() != WL_CONNECTED) delay(300);
+    if (WiFi.status() == WL_CONNECTED) {
+      wifiConnected = true;
+      wifiConnectState = WCS_CONNECTED;
+      Serial.printf("\n✓ WiFi memorise connecte ! IP=%s\n", WiFi.localIP().toString().c_str());
+    } else {
+      Serial.println("\n✗ WiFi memorise indisponible -> BLE provisioning.");
     }
+  } else if (pairBoot) {
+    // Appairage : on entre en BLE PUR (wifiConnected reste false). PAS de WiFi en
+    // fond : sa connexion sur ce lien perturbait la boucle BLE (sortie a ~24s). Le
+    // WiFi memorise sera reconnecte APRES la fenetre BLE (voir plus bas).
+    Serial.println("Boot: APPAIRAGE demande -> BLE pur (WiFi coupe pendant l'appairage)");
   }
 
 #if ENABLE_BLE
@@ -4505,9 +4539,11 @@ void setup() {
       break;
     }
 
-    // Bouton tactile : arrêt manuel (transition HIGH→LOW uniquement, anti-rebond)
+    // Bouton tactile : arrêt manuel (transition HIGH→LOW uniquement, anti-rebond).
+    // Desactive pendant un appairage demande (pairBoot) pour ne pas sortir tot sur
+    // un faux contact du capteur tactile.
     bool btnNow = (digitalRead(CONFIG_BUTTON_PIN) == HIGH);
-    if (btnWasHigh && !btnNow) {
+    if (!pairBoot && btnWasHigh && !btnNow) {
       delay(80);
       if (digitalRead(CONFIG_BUTTON_PIN) == LOW) {
         Serial.println("[BLE] Bouton appuye — arret manuel du BLE.");
@@ -4525,6 +4561,22 @@ void setup() {
     delay(100);
   }
   }  // fin du fallback : if (!wifiConnected) { BLE provisioning }
+
+  // Apres la fenetre d'appairage : si on n'a PAS ete configure (timeout/annulation)
+  // mais qu'on a des creds memorisees, reconnecter le WiFi pour revenir en ligne.
+  if (pairBoot && !wifiConnected && bootSSID.length() > 0) {
+    Serial.println("Appairage termine sans config -> reconnexion WiFi memorise");
+    WiFi.mode(WIFI_STA);
+    WiFi.setAutoReconnect(true);
+    WiFi.begin(bootSSID.c_str(), bootPass.c_str());
+    unsigned long t0 = millis();
+    while (millis() - t0 < 15000 && WiFi.status() != WL_CONNECTED) delay(300);
+    if (WiFi.status() == WL_CONNECTED) {
+      wifiConnected = true;
+      wifiConnectState = WCS_CONNECTED;
+      Serial.printf("Reconnecte apres appairage. IP=%s\n", WiFi.localIP().toString().c_str());
+    }
+  }
 #endif
 
   // ── Fonctionnement normal : connexion WiFi ou hors-ligne ──
