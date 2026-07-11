@@ -3,7 +3,8 @@
 
 # --- Adhans (joues par NUMERO) : 0001=duaa 0003=fajr, autres=muezzins ---
 # Sources 128 kbps (archive.org) au lieu des islamcan 24-40 kbps.
-/mp3/0001.mp3|https://archive.org/download/adhan.notifications/Dua_after_Adhan.mp3
+# 0001 : duaa personnalisee hebergee dans ce repo (audio/0001.mp3)
+/mp3/0001.mp3|https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/audio/0001.mp3
 /mp3/0002.mp3|https://archive.org/download/adhan.notifications/Ahmed_al_Imadi_Adhan.mp3
 /mp3/0003.mp3|https://archive.org/download/adhan.notifications/Mishary_Rashid_al_Afasy_Fajr_Adhan.mp3
 /mp3/0004.mp3|https://archive.org/download/adhan.notifications/Mokhtar_Hadj_Slimane_Adhan.mp3
