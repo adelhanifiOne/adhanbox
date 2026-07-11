@@ -222,8 +222,7 @@
       width: 38px; height: 38px;
       border-radius: 11px;
       background: var(--emerald);
-      display: grid;
-      place-items: center;
+      object-fit: cover;
       flex-shrink: 0;
     }
     .logo span { color: var(--emerald); }

@@ -6,12 +6,7 @@
   var page = document.body.getAttribute('data-page') || '';
 
   var LOGO_SVG =
-    '<span class="logo-mark" aria-hidden="true">' +
-      '<svg width="20" height="20" viewBox="0 0 64 64" fill="none">' +
-        '<path d="M32 10c2.4 8 8 12.6 16 15v24a3 3 0 0 1-3 3H19a3 3 0 0 1-3-3V25c8-2.4 13.6-7 16-15z" fill="#F7EEDC"/>' +
-        '<circle cx="32" cy="34" r="7" fill="#0C5B45"/>' +
-      '</svg>' +
-    '</span>';
+    '<img class="logo-mark" src="logo-app.png" alt="" aria-hidden="true" width="38" height="38">';
 
   var HEADER =
     '<header id="header">' +
