@@ -112,10 +112,8 @@
     function loadLid() {
       makeLoader().load('lid.glb', (gltf) => {
         lidMesh = gltf.scene;
-        // OBJ from Fusion 360 exports in mm; adhanbox.glb is in m → scale down 1000×
+        // lid.glb (STL Fusion) est en mm, Z-up jupe vers le bas ; adhanbox.glb est en m → scale 1000×
         lidMesh.scale.setScalar(0.001);
-        // Apply rotation BEFORE computing bounds so centering accounts for it
-        lidMesh.rotation.x = Math.PI;
         lidMesh.updateMatrixWorld(true);
         const lidBounds = new THREE.Box3().setFromObject(lidMesh);
         const lidCenter = new THREE.Vector3();
@@ -124,7 +122,8 @@
         lidBounds.getSize(lidSize);
         lidMesh.position.sub(lidCenter);
         if (boxSize) {
-          lidMesh.position.z += boxSize.z / 2 + lidSize.z / 2 - 0.036;
+          // la jupe de 5 mm s'insère dans l'ouverture de la box
+          lidMesh.position.z += boxSize.z / 2 + lidSize.z / 2 - 0.005;
         }
         // Build material with current finish color directly — avoids two-step apply issue
         const f = FINISHES[state.finish];
