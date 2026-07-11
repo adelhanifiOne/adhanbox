@@ -197,10 +197,12 @@
 
         const wrapper = new THREE.Group();
         wrapper.add(model);
-        const scale = (boxSize.x * 0.7) / Math.max(size.x, size.y, size.z);
+        // 55 % de la largeur et décalé vers le bas : les fenêtres en arches
+        // occupent le haut de la façade (z ≥ 69 mm), le motif doit rester dessous
+        const scale = (boxSize.x * 0.55) / Math.max(size.x, size.y, size.z);
         wrapper.scale.setScalar(scale);
         // Façade : face -X locale du boîtier
-        wrapper.position.set(-boxSize.x / 2 - 0.0015, 0, 0);
+        wrapper.position.set(-boxSize.x / 2 - 0.0015, 0, -0.008);
         wrapper.rotation.set(0, -Math.PI / 2, 0);
 
         if (mandalaMesh) boxGroup.remove(mandalaMesh);
