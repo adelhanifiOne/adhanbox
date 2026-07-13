@@ -122,4 +122,33 @@
       }
     });
   });
+
+  // Liste d'attente : envoi AJAX (Formspree) sans quitter la page
+  var wlForm = document.getElementById('waitlist-form');
+  if (wlForm) {
+    wlForm.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var btn = wlForm.querySelector('button[type="submit"]');
+      var original = btn.innerHTML;
+      btn.disabled = true;
+      btn.textContent = 'Envoi…';
+      fetch(wlForm.action, {
+        method: 'POST',
+        body: new FormData(wlForm),
+        headers: { 'Accept': 'application/json' }
+      }).then(function (res) {
+        if (res.ok) {
+          wlForm.hidden = true;
+          var ok = document.getElementById('waitlist-success');
+          if (ok) ok.hidden = false;
+        } else {
+          throw new Error('rejet serveur');
+        }
+      }).catch(function () {
+        btn.disabled = false;
+        btn.innerHTML = original;
+        alert('Une erreur est survenue. Réessayez ou écrivez à adel.hanifi@yahoo.fr');
+      });
+    });
+  }
 })();

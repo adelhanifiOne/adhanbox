@@ -1607,3 +1607,94 @@
     @media (max-width: 560px) {
       .giant-btn { width: 100%; padding: 1.6rem 1.5rem; gap: 0.6rem; }
     }
+
+    /* ─── Liste d'attente / précommandes ─── */
+    .waitlist {
+      background: var(--emerald);
+      color: #FFF;
+      padding: 5.5rem 1.5rem;
+    }
+    .waitlist-inner {
+      max-width: 640px;
+      margin: 0 auto;
+      text-align: center;
+    }
+    .waitlist .eyebrow { color: var(--gold-soft); }
+    .waitlist .eyebrow::before, .waitlist .eyebrow::after { background: rgba(247, 238, 220, 0.5); }
+    .waitlist-title {
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: clamp(2rem, 5vw, 3rem);
+      line-height: 1.1;
+      margin: 0 0 1.1rem;
+    }
+    .waitlist-title em { color: var(--gold-soft); font-style: italic; }
+    .waitlist-sub {
+      color: rgba(255, 255, 255, 0.82);
+      font-size: 1.08rem;
+      line-height: 1.6;
+      margin: 0 auto 2.4rem;
+      max-width: 520px;
+    }
+    .waitlist-fields {
+      display: flex;
+      gap: 0.7rem;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    .waitlist-fields input {
+      flex: 1 1 200px;
+      min-width: 0;
+      padding: 1rem 1.2rem;
+      font-family: var(--font-body);
+      font-size: 1rem;
+      color: var(--ink);
+      background: #FFF;
+      border: 1px solid transparent;
+      border-radius: var(--radius-sm);
+      outline: none;
+      transition: box-shadow 0.2s ease;
+    }
+    .waitlist-fields input::placeholder { color: var(--faint); }
+    .waitlist-fields input:focus { box-shadow: 0 0 0 3px var(--gold-soft); }
+    .waitlist-fields .btn-gold {
+      flex: 0 0 auto;
+      padding: 1rem 1.6rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      cursor: pointer;
+      border: none;
+      font-size: 1rem;
+    }
+    .waitlist-note {
+      margin: 1.2rem auto 0;
+      font-size: 0.85rem;
+      color: rgba(255, 255, 255, 0.62);
+      max-width: 460px;
+    }
+    .waitlist-note a { color: var(--gold-soft); text-decoration: underline; }
+    .waitlist-success[hidden] { display: none; }
+    .waitlist-success {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.9rem;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(247, 238, 220, 0.3);
+      border-radius: var(--radius);
+      padding: 1.6rem 2rem;
+      max-width: 480px;
+      margin: 0 auto;
+      text-align: left;
+    }
+    .waitlist-success svg {
+      width: 34px; height: 34px;
+      flex-shrink: 0;
+      color: var(--gold-soft);
+    }
+    .waitlist-success p { margin: 0; line-height: 1.5; }
+    @media (max-width: 560px) {
+      .waitlist { padding: 4rem 1.3rem; }
+      .waitlist-fields .btn-gold { width: 100%; justify-content: center; }
+    }

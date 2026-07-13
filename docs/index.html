@@ -35,6 +35,40 @@
         </a>
       </div>
     </section>
+
+    <section class="waitlist" id="liste-attente">
+      <div class="waitlist-inner">
+        <span class="eyebrow">— Précommandes bientôt ouvertes —</span>
+        <h2 class="waitlist-title">Soyez informé du <em>lancement</em></h2>
+        <p class="waitlist-sub">
+          Les premières AdhanBox partent bientôt en production. Laissez votre email
+          pour être prévenu en avant-première le jour de l'ouverture des précommandes.
+        </p>
+
+        <!-- ⚠️ REMPLACER VOTRE_ID_FORMSPREE par l'ID de votre formulaire Formspree
+             (créer un compte gratuit sur formspree.io -> New form -> copier l'ID). -->
+        <form class="waitlist-form" id="waitlist-form"
+              action="https://formspree.io/f/VOTRE_ID_FORMSPREE" method="POST">
+          <div class="waitlist-fields">
+            <input type="text" name="prenom" placeholder="Prénom (optionnel)" autocomplete="given-name" aria-label="Prénom">
+            <input type="email" name="email" placeholder="Votre email" required autocomplete="email" aria-label="Email">
+            <button type="submit" class="btn btn-gold">
+              Rejoindre la liste
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" style="width:1.1em;height:1.1em"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+            </button>
+          </div>
+          <p class="waitlist-note">
+            Pas de spam — votre email ne sert qu'à vous prévenir du lancement.
+            Désinscription à tout moment. <a href="privacy.html">Confidentialité</a>.
+          </p>
+        </form>
+
+        <div class="waitlist-success" id="waitlist-success" hidden>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg>
+          <p><strong>Merci, c'est noté !</strong><br>Vous serez parmi les premiers informés du lancement.</p>
+        </div>
+      </div>
+    </section>
   </main>
 </body>
 </html>
