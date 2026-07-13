@@ -48,6 +48,8 @@
             '<h4>Ressources</h4>' +
             '<ul>' +
               '<li><a href="privacy.html">Politique de confidentialité</a></li>' +
+              '<li><a href="cgv.html">Conditions générales de vente</a></li>' +
+              '<li><a href="mentions-legales.html">Mentions légales</a></li>' +
               '<li><a href="mailto:adel.hanifi@yahoo.fr">adel.hanifi@yahoo.fr</a></li>' +
             '</ul>' +
           '</div>' +
