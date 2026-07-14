@@ -635,19 +635,27 @@ var SHIP_DATE = "automne 2026";
         new THREE.MeshBasicMaterial({ color: glowColor })
       );
       group.add(innerShell);
-      // ── port USB-C PLEIN (connecteur, pas un trou) sur la face opposée au motif ──
+      // ── port USB-C panneau ROND (connecteur press-fit) sur la face opposée au motif ──
       var usb = new THREE.Group();
-      usb.add(new THREE.Mesh(
-        new THREE.BoxGeometry(0.0028, 0.0112, 0.0054),
-        new THREE.MeshStandardMaterial({ color: 0x3a3a3a, roughness: 0.5, metalness: 0.55 })
-      ));
+      var usbBezel = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.0060, 0.0060, 0.0032, 30),
+        new THREE.MeshStandardMaterial({ color: 0x141414, roughness: 0.5, metalness: 0.2 })
+      );
+      usbBezel.rotation.z = Math.PI / 2;   // axe le long de X : face ronde contre la paroi
+      usb.add(usbBezel);
+      var usbSlot = new THREE.Mesh(
+        new THREE.BoxGeometry(0.0024, 0.0058, 0.0026),
+        new THREE.MeshStandardMaterial({ color: 0x050505, roughness: 0.6, metalness: 0.2 })
+      );
+      usbSlot.position.x = 0.0010;
+      usb.add(usbSlot);
       var usbTongue = new THREE.Mesh(
-        new THREE.BoxGeometry(0.0020, 0.0080, 0.0022),
+        new THREE.BoxGeometry(0.0016, 0.0042, 0.0010),
         new THREE.MeshStandardMaterial({ color: 0x8c8c8c, roughness: 0.4, metalness: 0.6 })
       );
-      usbTongue.position.x = 0.0006;
+      usbTongue.position.x = 0.0013;
       usb.add(usbTongue);
-      usb.position.set(boxSize.x / 2 - 0.0002, 0, -0.020);
+      usb.position.set(boxSize.x / 2 - 0.0002, 0, -0.012);
       group.add(usb);
       // couvercle noir
       loader.load('lid.glb', function (g2) {
