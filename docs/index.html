@@ -631,7 +631,7 @@ var SHIP_DATE = "automne 2026";
       // ── coque lumineuse UNIFORME : même lueur derrière toutes les fenêtres ──
       var glowColor = 0xFFEAD0; // blanc chaud, uniforme
       var innerShell = new THREE.Mesh(
-        new THREE.BoxGeometry(boxSize.x * 0.9, boxSize.y * 0.9, boxSize.z * 0.98),
+        new THREE.BoxGeometry(boxSize.x * 0.95, boxSize.y * 0.95, boxSize.z * 1.0),
         new THREE.MeshBasicMaterial({ color: glowColor })
       );
       group.add(innerShell);
@@ -658,8 +658,8 @@ var SHIP_DATE = "automne 2026";
         var lc = new THREE.Vector3(); lb.getCenter(lc);
         var ls = new THREE.Vector3(); lb.getSize(ls);
         lid.position.sub(lc);
-        lid.position.z += boxSize.z / 2 + ls.z / 2 - 0.005;
-        lid.traverse(function (c2) { if (c2.isMesh) c2.material = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.5, metalness: 0.1, transparent: true, opacity: 0.4 }); });
+        lid.position.z += boxSize.z / 2 + ls.z / 2 - 0.001;
+        lid.traverse(function (c2) { if (c2.isMesh) c2.material = new THREE.MeshStandardMaterial(mat); });
         group.add(lid);
       });
       // motif 3 en blanc sur la façade

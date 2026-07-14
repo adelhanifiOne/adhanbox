@@ -123,7 +123,7 @@
         lidMesh.position.sub(lidCenter);
         if (boxSize) {
           // la jupe de 5 mm s'insère dans l'ouverture de la box
-          lidMesh.position.z += boxSize.z / 2 + lidSize.z / 2 - 0.005;
+          lidMesh.position.z += boxSize.z / 2 + lidSize.z / 2 - 0.001;
         }
         // Build material with current finish color directly — avoids two-step apply issue
         const f = FINISHES[state.finish];
