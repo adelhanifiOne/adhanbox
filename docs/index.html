@@ -3,71 +3,656 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AdhanBox — L'adhan chez vous, comme à la mosquée</title>
-  <meta name="description" content="AdhanBox, boîtier d'appel à la prière artisanal et connecté : la lumière s'éveille et l'adhan résonne à chaque prière. Personnalisez le vôtre et passez commande.">
+  <title>AdhanBox — L'adhan chez vous, comme à la mosquée · Précommande</title>
+  <meta name="description" content="AdhanBox : boîtier d'appel à la prière artisanal et connecté. La lumière s'éveille à travers les arches et l'adhan de votre mosquée résonne. Précommandez — paiement en 3x sans frais, livraison offerte.">
   <meta name="theme-color" content="#0C5B45">
   <link rel="canonical" href="https://adelhanifione.github.io/adhanbox/">
-
   <meta property="og:type" content="website">
   <meta property="og:title" content="AdhanBox — L'adhan chez vous, comme à la mosquée">
-  <meta property="og:description" content="Boîtier d'appel à la prière artisanal et connecté : la lumière s'éveille et l'adhan résonne à chaque prière. Synchronisé avec votre mosquée ou autonome hors-ligne.">
+  <meta property="og:description" content="Boîtier d'appel à la prière artisanal et connecté. Précommande ouverte — paiement 3x sans frais, livraison offerte en France.">
   <meta property="og:locale" content="fr_FR">
   <link rel="icon" type="image/png" href="logo-app.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=Amiri:wght@400;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css">
-  <script defer src="site.js"></script>
+  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+  <style>
+    :root {
+      --ivory:#FAF6EF; --ivory-deep:#F3EDE1; --paper:#FFFFFF;
+      --ink:#15251F; --muted:#5D6B63; --faint:#8A958E;
+      --emerald:#0C5B45; --emerald-dark:#08402F; --emerald-soft:#E5F0EB;
+      --gold:#B8892F; --gold-deep:#96690F; --gold-soft:#F7EEDC;
+      --line:#E6DECF; --radius:20px; --radius-sm:12px;
+      --shadow-sm:0 2px 8px rgba(21,37,31,.06);
+      --shadow-md:0 12px 32px rgba(21,37,31,.10);
+      --shadow-lg:0 24px 60px rgba(21,37,31,.14);
+      --font-display:"Fraunces",Georgia,serif;
+      --font-body:"Inter",system-ui,sans-serif;
+      --font-arabic:"Amiri",serif;
+    }
+    * { box-sizing:border-box; margin:0; padding:0; }
+    html { scroll-behavior:smooth; }
+    body { font-family:var(--font-body); background:var(--ivory); color:var(--ink); line-height:1.6; -webkit-font-smoothing:antialiased; }
+    img { max-width:100%; }
+    a { color:inherit; }
+
+    .container { max-width:1120px; margin:0 auto; padding:0 22px; }
+    .eyebrow {
+      display:inline-flex; align-items:center; gap:.6rem;
+      font-size:.76rem; font-weight:700; letter-spacing:.16em; text-transform:uppercase;
+      color:var(--gold-deep); margin-bottom:1rem;
+    }
+    .eyebrow::before, .eyebrow::after { content:""; width:24px; height:1px; background:var(--gold); opacity:.5; }
+
+    /* ── Header ── */
+    header.site {
+      position:sticky; top:0; z-index:50;
+      background:rgba(250,246,239,.92); backdrop-filter:blur(10px);
+      border-bottom:1px solid var(--line);
+    }
+    .nav { display:flex; align-items:center; justify-content:space-between; height:70px; }
+    .logo { display:inline-flex; align-items:center; gap:.6rem; text-decoration:none; font-family:var(--font-display); font-weight:700; font-size:1.25rem; }
+    .logo img { width:36px; height:36px; border-radius:10px; }
+    .logo span { color:var(--emerald); }
+    .nav-links { display:flex; align-items:center; gap:1.6rem; list-style:none; }
+    .nav-links a { text-decoration:none; font-size:.92rem; font-weight:500; color:var(--muted); transition:color .15s; }
+    .nav-links a:hover { color:var(--emerald); }
+    .btn {
+      display:inline-flex; align-items:center; justify-content:center; gap:.55rem;
+      padding:.85rem 1.6rem; border-radius:999px; border:none; cursor:pointer;
+      font-family:var(--font-body); font-weight:700; font-size:.95rem; text-decoration:none;
+      transition:transform .18s, box-shadow .18s, background .18s;
+    }
+    .btn-gold { background:var(--gold); color:#fff; box-shadow:0 10px 26px rgba(184,137,47,.35); }
+    .btn-gold:hover { background:var(--gold-deep); transform:translateY(-2px); }
+    .btn-emerald { background:var(--emerald); color:#fff; box-shadow:0 10px 26px rgba(12,91,69,.32); }
+    .btn-emerald:hover { background:var(--emerald-dark); transform:translateY(-2px); }
+    .btn-outline { background:transparent; color:var(--emerald); border:1.5px solid var(--emerald); }
+    .btn-outline:hover { background:var(--emerald-soft); }
+    .btn-big { padding:1.15rem 2.4rem; font-size:1.08rem; }
+    .nav .btn { padding:.6rem 1.2rem; font-size:.85rem; }
+    @media (max-width:760px){ .nav-links{ display:none; } }
+
+    /* ── Hero ── */
+    .hero { position:relative; overflow:hidden; padding:64px 0 40px; }
+    .hero-grid { display:grid; grid-template-columns:1.05fr .95fr; gap:40px; align-items:center; }
+    @media (max-width:860px){ .hero-grid{ grid-template-columns:1fr; } }
+    .hero h1 {
+      font-family:var(--font-display); font-weight:600; letter-spacing:-.015em;
+      font-size:clamp(2.3rem,5.2vw,3.6rem); line-height:1.07; margin-bottom:1.1rem;
+      text-wrap:balance;
+    }
+    .hero h1 em { font-style:italic; color:var(--emerald); }
+    .hero .sub { font-size:1.12rem; color:var(--muted); max-width:34rem; margin-bottom:1.8rem; }
+    .hero-ctas { display:flex; flex-wrap:wrap; gap:.9rem; align-items:center; margin-bottom:1.4rem; }
+    .hero-price { font-size:.92rem; color:var(--muted); }
+    .hero-price b { color:var(--ink); font-size:1.05rem; }
+    .reassure { display:flex; flex-wrap:wrap; gap:.5rem 1.4rem; font-size:.83rem; color:var(--muted); margin-top:.4rem; }
+    .reassure span { display:inline-flex; align-items:center; gap:.45rem; }
+    .reassure svg { width:15px; height:15px; color:var(--emerald); flex-shrink:0; }
+
+    .hero-visual { position:relative; }
+    #hero3d {
+      width:100%; aspect-ratio:1/1.05; max-height:520px;
+      border-radius:calc(var(--radius) + 6px);
+      background:radial-gradient(120% 100% at 50% 15%, #FDFBF6 0%, var(--ivory-deep) 78%);
+      border:1px solid var(--line); box-shadow:var(--shadow-lg);
+      display:grid; place-items:center; overflow:hidden;
+    }
+    #hero3d canvas { display:block; }
+    .hero-visual .tag {
+      position:absolute; left:18px; bottom:18px;
+      background:rgba(255,255,255,.86); backdrop-filter:blur(6px);
+      border:1px solid var(--line); border-radius:999px;
+      font-size:.78rem; color:var(--muted); padding:.45rem .95rem;
+    }
+    .arabic-line { font-family:var(--font-arabic); color:var(--gold-deep); font-size:1.15rem; margin-bottom:.6rem; }
+
+    /* ── Trust strip ── */
+    .trust { background:var(--emerald); color:var(--gold-soft); padding:14px 0; }
+    .trust .container { display:flex; flex-wrap:wrap; justify-content:center; gap:.7rem 2.4rem; font-size:.85rem; font-weight:500; }
+    .trust span { display:inline-flex; align-items:center; gap:.5rem; opacity:.95; }
+    .trust svg { width:16px; height:16px; color:var(--gold); flex-shrink:0; }
+
+    /* ── Sections ── */
+    section.block { padding:76px 0; }
+    section.block.alt { background:var(--paper); border-top:1px solid var(--line); border-bottom:1px solid var(--line); }
+    .block h2 {
+      font-family:var(--font-display); font-weight:600; letter-spacing:-.01em;
+      font-size:clamp(1.7rem,3.6vw,2.5rem); line-height:1.15; margin-bottom:.7rem; text-wrap:balance;
+    }
+    .block h2 em { font-style:italic; color:var(--emerald); }
+    .block .lead { color:var(--muted); font-size:1.05rem; max-width:38rem; margin-bottom:2.2rem; }
+    .center { text-align:center; }
+    .center .lead { margin-left:auto; margin-right:auto; }
+
+    /* moment */
+    .moment { background:var(--emerald-dark); color:var(--gold-soft); }
+    .moment h2 { color:#fff; }
+    .moment .lead { color:rgba(247,238,220,.8); }
+    .moment-steps { display:grid; grid-template-columns:repeat(3,1fr); gap:22px; margin-top:1rem; }
+    @media (max-width:760px){ .moment-steps{ grid-template-columns:1fr; } }
+    .step { background:rgba(255,255,255,.05); border:1px solid rgba(247,238,220,.18); border-radius:var(--radius); padding:26px 24px; }
+    .step .n { font-family:var(--font-display); font-size:1rem; color:var(--gold); margin-bottom:.6rem; display:block; }
+    .step h3 { font-size:1.05rem; color:#fff; margin-bottom:.45rem; }
+    .step p { font-size:.92rem; color:rgba(247,238,220,.75); }
+
+    /* features */
+    .features-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:20px; }
+    @media (max-width:860px){ .features-grid{ grid-template-columns:repeat(2,1fr); } }
+    @media (max-width:560px){ .features-grid{ grid-template-columns:1fr; } }
+    .feat { background:var(--paper); border:1px solid var(--line); border-radius:var(--radius); padding:26px 24px; box-shadow:var(--shadow-sm); }
+    .feat .ic {
+      width:44px; height:44px; border-radius:12px; background:var(--emerald-soft);
+      display:grid; place-items:center; margin-bottom:1rem;
+    }
+    .feat .ic svg { width:22px; height:22px; color:var(--emerald); }
+    .feat h3 { font-size:1.02rem; margin-bottom:.4rem; }
+    .feat p { font-size:.9rem; color:var(--muted); }
+
+    /* configurateur teaser */
+    .config-teaser {
+      display:grid; grid-template-columns:1fr auto; gap:26px; align-items:center;
+      background:linear-gradient(120deg, var(--emerald) 0%, var(--emerald-dark) 100%);
+      color:#fff; border-radius:calc(var(--radius) + 6px); padding:40px 42px;
+      box-shadow:var(--shadow-lg);
+    }
+    @media (max-width:760px){ .config-teaser{ grid-template-columns:1fr; text-align:center; } .config-teaser .btn{ justify-self:center; } }
+    .config-teaser h2 { color:#fff; margin-bottom:.5rem; }
+    .config-teaser p { color:rgba(247,238,220,.82); max-width:34rem; }
+
+    /* ── Précommande ── */
+    .order-grid { display:grid; grid-template-columns:1fr 1fr; gap:34px; align-items:start; }
+    @media (max-width:860px){ .order-grid{ grid-template-columns:1fr; } }
+    .price-card {
+      background:var(--paper); border:2px solid var(--emerald); border-radius:calc(var(--radius) + 4px);
+      padding:34px 32px; box-shadow:var(--shadow-lg); position:relative;
+    }
+    .founders {
+      position:absolute; top:-14px; left:28px;
+      background:var(--gold); color:#fff; font-size:.74rem; font-weight:700;
+      letter-spacing:.08em; text-transform:uppercase; padding:.4rem 1rem; border-radius:999px;
+    }
+    .price-line { display:flex; align-items:baseline; gap:.7rem; margin:.6rem 0 .2rem; }
+    .price-line .p { font-family:var(--font-display); font-size:3rem; font-weight:700; color:var(--emerald); }
+    .price-line .per { color:var(--muted); font-size:.9rem; }
+    .kl { font-size:.95rem; color:var(--ink); font-weight:600; margin-bottom:1.2rem; }
+    .kl b { color:var(--gold-deep); }
+    .includes { list-style:none; margin:0 0 1.6rem; }
+    .includes li { display:flex; gap:.6rem; align-items:flex-start; font-size:.93rem; color:var(--muted); padding:.32rem 0; }
+    .includes svg { width:17px; height:17px; color:var(--emerald); flex-shrink:0; margin-top:3px; }
+    .order-note { font-size:.8rem; color:var(--faint); margin-top:.9rem; }
+
+    .pay-box { background:var(--paper); border:1px solid var(--line); border-radius:var(--radius); padding:28px 26px; box-shadow:var(--shadow-sm); }
+    .pay-box + .pay-box { margin-top:18px; }
+    .pay-box h3 { font-size:1.05rem; margin-bottom:.9rem; display:flex; align-items:center; gap:.5rem; }
+    .pay-box h3 svg { width:19px; height:19px; color:var(--emerald); }
+    .pay-badges { display:flex; flex-wrap:wrap; gap:.5rem; }
+    .badge {
+      display:inline-flex; align-items:center; gap:.4rem;
+      border:1px solid var(--line); background:var(--ivory);
+      border-radius:9px; padding:.45rem .8rem; font-size:.82rem; font-weight:600; color:var(--ink);
+    }
+    .badge.k { border-color:#FFB3C7; background:#FFF3F6; }
+    .badge small { font-weight:500; color:var(--muted); }
+    .pay-box p { font-size:.88rem; color:var(--muted); }
+    .pay-box .hl { color:var(--emerald); font-weight:700; }
+
+    /* FAQ */
+    .faq-list { max-width:720px; margin:0 auto; }
+    .faq-item { background:var(--paper); border:1px solid var(--line); border-radius:var(--radius-sm); margin-bottom:12px; overflow:hidden; }
+    .faq-q {
+      width:100%; text-align:left; background:none; border:none; cursor:pointer;
+      font-family:var(--font-body); font-size:.98rem; font-weight:600; color:var(--ink);
+      padding:18px 52px 18px 20px; position:relative;
+    }
+    .faq-q::after {
+      content:"+"; position:absolute; right:20px; top:50%; transform:translateY(-50%);
+      font-size:1.4rem; font-weight:400; color:var(--gold-deep); transition:transform .2s;
+    }
+    .faq-item.open .faq-q::after { transform:translateY(-50%) rotate(45deg); }
+    .faq-a { max-height:0; overflow:hidden; transition:max-height .25s ease; }
+    .faq-a p { padding:0 20px 18px; font-size:.92rem; color:var(--muted); }
+
+    /* waitlist secondaire */
+    .mini-wait { background:var(--ivory-deep); border-top:1px solid var(--line); padding:52px 0; }
+    .mini-wait .inner { max-width:560px; margin:0 auto; text-align:center; }
+    .mini-wait h2 { font-family:var(--font-display); font-size:1.5rem; font-weight:600; margin-bottom:.5rem; }
+    .mini-wait p { color:var(--muted); font-size:.94rem; margin-bottom:1.4rem; }
+    .wl-fields { display:flex; gap:.6rem; flex-wrap:wrap; justify-content:center; }
+    .wl-fields input {
+      flex:1 1 220px; padding:.9rem 1.1rem; font-family:var(--font-body); font-size:.95rem;
+      border:1px solid var(--line); border-radius:var(--radius-sm); outline:none; background:#fff;
+    }
+    .wl-fields input:focus { box-shadow:0 0 0 3px var(--emerald-soft); border-color:var(--emerald); }
+    .wl-ok { display:none; align-items:center; justify-content:center; gap:.6rem; color:var(--emerald); font-weight:600; }
+    .wl-ok.show { display:flex; }
+
+    /* footer */
+    footer.site {
+      background:var(--emerald-dark); color:rgba(247,238,220,.75);
+      padding:44px 0 30px; font-size:.86rem;
+    }
+    .foot-grid { display:flex; flex-wrap:wrap; gap:22px 48px; justify-content:space-between; align-items:flex-start; }
+    .foot-brand { display:flex; align-items:center; gap:.6rem; font-family:var(--font-display); font-weight:700; font-size:1.1rem; color:#fff; text-decoration:none; }
+    .foot-brand img { width:32px; height:32px; border-radius:9px; }
+    .foot-col h4 { color:var(--gold-soft); font-size:.8rem; text-transform:uppercase; letter-spacing:.1em; margin-bottom:.7rem; }
+    .foot-col ul { list-style:none; }
+    .foot-col a { color:rgba(247,238,220,.75); text-decoration:none; line-height:2; }
+    .foot-col a:hover { color:#fff; }
+    .foot-base { margin-top:30px; padding-top:18px; border-top:1px solid rgba(247,238,220,.15); display:flex; flex-wrap:wrap; gap:10px 30px; justify-content:space-between; }
+    .bismillah { font-family:var(--font-arabic); color:var(--gold); }
+  </style>
 </head>
-<body data-page="accueil">
-  <main>
-    <section class="home-hero">
-      <div class="pattern-bg" aria-hidden="true"></div>
-      <div class="home-hero-inner">
-        <h1 class="home-title">L'adhan à la maison, <em>comme à la mosquée</em></h1>
-        <p class="home-sub">
-          À chaque prière, la lumière s'éveille doucement et l'adhan s'élève —
-          un rappel paisible au cœur du foyer.
-        </p>
-        <a href="personnaliser.html" class="giant-btn">
-          Personnaliser mon boîtier
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-        </a>
+<body>
+
+<header class="site">
+  <div class="container nav">
+    <a href="index.html" class="logo"><img src="logo-app.png" alt="" width="36" height="36">Adhan<span>Box</span></a>
+    <ul class="nav-links">
+      <li><a href="#experience">L'expérience</a></li>
+      <li><a href="personnaliser.html">Personnaliser</a></li>
+      <li><a href="#faq">Questions</a></li>
+      <li><a href="contact.html">Contact</a></li>
+    </ul>
+    <a href="#precommande" class="btn btn-gold">Précommander</a>
+  </div>
+</header>
+
+<!-- ── HERO ── -->
+<section class="hero">
+  <div class="container hero-grid">
+    <div>
+      <p class="arabic-line">حَيَّ عَلَى الصَّلَاةِ</p>
+      <h1>L'adhan chez vous, <em>comme à la mosquée</em></h1>
+      <p class="sub">
+        À chaque prière, la lumière s'éveille doucement à travers les arches
+        et l'adhan de <strong>votre mosquée</strong> s'élève — un rappel paisible
+        au cœur du foyer. Façonné à la main en France.
+      </p>
+      <div class="hero-ctas">
+        <a href="#precommande" class="btn btn-emerald btn-big">Précommander — 149&nbsp;€</a>
+        <span class="hero-price">ou <b>3 × 49,67&nbsp;€</b> sans frais</span>
       </div>
-    </section>
+      <div class="reassure">
+        <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg>Livraison suivie offerte (France)</span>
+        <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg>Garantie 2 ans</span>
+        <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg>Série Fondateurs — 25 ex. numérotés</span>
+      </div>
+    </div>
+    <div class="hero-visual">
+      <div id="hero3d" aria-label="Aperçu 3D de l'AdhanBox"></div>
+      <span class="tag">Modèle 3D réel — personnalisable</span>
+    </div>
+  </div>
+</section>
 
-    <section class="waitlist" id="liste-attente">
-      <div class="waitlist-inner">
-        <span class="eyebrow">— Précommandes bientôt ouvertes —</span>
-        <h2 class="waitlist-title">Soyez informé du <em>lancement</em></h2>
-        <p class="waitlist-sub">
-          Les premières AdhanBox partent bientôt en production. Laissez votre email
-          pour être prévenu en avant-première le jour de l'ouverture des précommandes.
-        </p>
+<!-- ── TRUST ── -->
+<div class="trust">
+  <div class="container">
+    <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>Paiement sécurisé Stripe</span>
+    <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3 7h7l-5.5 4.5L18.5 21 12 16.5 5.5 21l2-7.5L2 9h7z"/></svg>3× / 4× sans frais</span>
+    <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="6" width="15" height="12" rx="2"/><path d="M16 10h4l3 3v5h-7z"/></svg>Expédition soignée depuis la France</span>
+    <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>Fait main · pièces certifiées</span>
+  </div>
+</div>
 
-        <!-- Formspree : liste d'attente AdhanBox (compte adel.hanifi@yahoo.fr) -->
-        <form class="waitlist-form" id="waitlist-form"
-              action="https://formspree.io/f/mojgqebg" method="POST">
-          <div class="waitlist-fields">
-            <input type="text" name="prenom" placeholder="Prénom (optionnel)" autocomplete="given-name" aria-label="Prénom">
-            <input type="email" name="email" placeholder="Votre email" required autocomplete="email" aria-label="Email">
-            <button type="submit" class="btn btn-gold">
-              Rejoindre la liste
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" style="width:1.1em;height:1.1em"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-            </button>
+<!-- ── L'EXPÉRIENCE ── -->
+<section class="block moment" id="experience">
+  <div class="container">
+    <p class="eyebrow" style="color:var(--gold);">L'expérience</p>
+    <h2>Un instant de sérénité, <em style="color:var(--gold);">cinq fois par jour</em></h2>
+    <p class="lead">Pas d'écran. Pas de notification. Juste la lumière et la voix.</p>
+    <div class="moment-steps">
+      <div class="step">
+        <span class="n">Quelques minutes avant</span>
+        <h3>La lumière s'éveille</h3>
+        <p>Une lueur douce naît derrière les arches ogivales et les oculi, sculptée par le boîtier. Votre foyer change d'atmosphère.</p>
+      </div>
+      <div class="step">
+        <span class="n">À l'heure exacte de votre mosquée</span>
+        <h3>L'adhan s'élève</h3>
+        <p>Synchronisée avec votre mosquée (Mawaqit) ou en calcul autonome, la voix du muezzin que vous avez choisie résonne, claire et chaleureuse.</p>
+      </div>
+      <div class="step">
+        <span class="n">Au quotidien</span>
+        <h3>Coran &amp; azkar</h3>
+        <p>Sourate Al-Kahf le vendredi, azkar du matin et du soir, 114 sourates par 4 récitateurs — automatiques ou à la demande depuis l'app.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── FEATURES ── -->
+<section class="block" id="fonctions">
+  <div class="container">
+    <div class="center">
+      <p class="eyebrow">Pourquoi AdhanBox</p>
+      <h2>Pas une horloge de plus. <em>Un objet de foyer.</em></h2>
+      <p class="lead">La seule box qui réunit l'adhan véritable, la lumière d'ambiance, la synchronisation avec votre mosquée et l'artisanat français.</p>
+    </div>
+    <div class="features-grid">
+      <div class="feat">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12h4l3-9 4 18 3-9h6"/></svg></div>
+        <h3>Synchronisée avec votre mosquée</h3>
+        <p>Compatible Mawaqit : l'adhan sonne à l'heure exacte de <em>votre</em> mosquée — pas un calcul approximatif.</p>
+      </div>
+      <div class="feat">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M4.9 4.9l2.2 2.2M16.9 16.9l2.1 2.1M2 12h3M19 12h3M4.9 19.1l2.2-2.2M16.9 7.1l2.1-2.1"/></svg></div>
+        <h3>Lumière d'ambiance arabesque</h3>
+        <p>La lumière traverse les arches et oculi sculptés — un moucharabieh moderne qui habille le mur, réglable depuis l'app.</p>
+      </div>
+      <div class="feat">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M12 18h.01"/></svg></div>
+        <h3>App iPhone &amp; Android</h3>
+        <p>Toute la famille pilote la box : adhans, volume, lumière, azkar. Chaque téléphone du foyer, sans manipulation.</p>
+      </div>
+      <div class="feat">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v18M5.5 7.5C7 6 9.4 5 12 5s5 1 6.5 2.5M4 12c2-2 4.9-3 8-3s6 1 8 3M5.5 16.5C7 15 9.4 14 12 14s5 1 6.5 2.5"/></svg></div>
+        <h3>Autonome, même sans internet</h3>
+        <p>Horloge de précision embarquée : les prières restent à l'heure même si le WiFi coupe. Aucun abonnement.</p>
+      </div>
+      <div class="feat">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l2.4 4.8L20 8l-4 3.9.9 5.6L12 15l-4.9 2.5.9-5.6L4 8l5.6-1.2z"/></svg></div>
+        <h3>Fabriquée à la main en France</h3>
+        <p>Chaque boîtier est imprimé, assemblé et testé un par un dans notre atelier. Série Fondateurs numérotée.</p>
+      </div>
+      <div class="feat">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 11-9-9"/><path d="M21 3v6h-6"/></svg></div>
+        <h3>S'améliore avec le temps</h3>
+        <p>Mises à jour à distance : votre AdhanBox reçoit de nouvelles fonctions après l'achat. Elle vieillit bien.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── CONFIGURATEUR TEASER ── -->
+<section class="block" style="padding-top:0;">
+  <div class="container">
+    <div class="config-teaser">
+      <div>
+        <h2>Composez <em style="color:var(--gold-soft);">la vôtre</em></h2>
+        <p>13 couleurs de châssis, motifs de façade, teintes du relief — visualisez votre AdhanBox en 3D avant de précommander.</p>
+      </div>
+      <a href="personnaliser.html" class="btn btn-gold btn-big">Ouvrir le configurateur 3D</a>
+    </div>
+  </div>
+</section>
+
+<!-- ── PRÉCOMMANDE ── -->
+<section class="block alt" id="precommande">
+  <div class="container">
+    <div class="center">
+      <p class="eyebrow">Précommande</p>
+      <h2>Rejoignez la <em>Série Fondateurs</em></h2>
+      <p class="lead">25 exemplaires numérotés à la main, assemblés dans l'ordre des précommandes.</p>
+    </div>
+    <div class="order-grid">
+      <div class="price-card">
+        <span class="founders">Série Fondateurs · 25 exemplaires</span>
+        <p style="color:var(--muted); font-size:.9rem; margin-top:.6rem;">AdhanBox — édition numérotée</p>
+        <div class="price-line"><span class="p">149&nbsp;€</span><span class="per">livraison incluse</span></div>
+        <p class="kl">ou <b>3 × 49,67&nbsp;€ sans frais</b> avec Klarna</p>
+        <ul class="includes">
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg>Boîtier personnalisé (couleur &amp; motif au choix)</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg>Numéro de série gravé + carte signée</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg>6 adhans, 114 sourates × 4 récitateurs, azkar</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg>App iPhone &amp; Android + mises à jour à vie</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg>Alimentation, câble et notice inclus</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg>Garantie légale 2 ans · retour 14 jours</li>
+        </ul>
+        <a href="#" id="orderBtn" class="btn btn-emerald btn-big" style="width:100%;">Précommander maintenant</a>
+        <p class="order-note" id="shipNote">Expédition : <b>[DATE À CONFIRMER]</b> — vous serez tenu informé à chaque étape (confirmation, assemblage, envoi).</p>
+      </div>
+      <div>
+        <div class="pay-box">
+          <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>Payez comme vous voulez</h3>
+          <div class="pay-badges">
+            <span class="badge">💳 Carte bancaire</span>
+            <span class="badge"> Apple Pay</span>
+            <span class="badge">Ⓖ Google Pay</span>
+            <span class="badge k">Klarna <small>3× sans frais</small></span>
+            <span class="badge">PayPal</span>
           </div>
-          <p class="waitlist-note">
-            Pas de spam — votre email ne sert qu'à vous prévenir du lancement.
-            Désinscription à tout moment. <a href="privacy.html">Confidentialité</a>.
-          </p>
-        </form>
-
-        <div class="waitlist-success" id="waitlist-success" hidden>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg>
-          <p><strong>Merci, c'est noté !</strong><br>Vous serez parmi les premiers informés du lancement.</p>
+          <p style="margin-top:.9rem;">Paiement <span class="hl">100&nbsp;% sécurisé</span> via Stripe — vos données bancaires ne transitent jamais par notre site. Le paiement en 3 fois Klarna est <span class="hl">sans aucun frais</span> pour vous.</p>
+        </div>
+        <div class="pay-box">
+          <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="6" width="15" height="12" rx="2"/><path d="M16 10h4l3 3v5h-7z"/><circle cx="6" cy="18" r="1.6"/><circle cx="19" cy="18" r="1.6"/></svg>Livraison</h3>
+          <p><span class="hl">Offerte en France métropolitaine</span> — Colissimo suivi, remise avec signature. Belgique, Suisse et reste de l'Europe : calculée au paiement. Chaque box part testée, protégée dans un emballage soigné.</p>
+        </div>
+        <div class="pay-box">
+          <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>Précommande sans risque</h3>
+          <p>Droit de rétractation <span class="hl">14 jours</span> après réception, garantie légale <span class="hl">2 ans</span>, et remboursement intégral immédiat si nous ne pouvions pas expédier à la date annoncée. <a href="cgv.html" style="color:var(--emerald);">Conditions générales</a>.</p>
         </div>
       </div>
-    </section>
-  </main>
+    </div>
+  </div>
+</section>
+
+<!-- ── FAQ ── -->
+<section class="block" id="faq">
+  <div class="container">
+    <div class="center">
+      <p class="eyebrow">Questions fréquentes</p>
+      <h2>Tout ce qu'on nous demande</h2>
+      <p class="lead" style="margin-bottom:2rem;"></p>
+    </div>
+    <div class="faq-list">
+      <div class="faq-item">
+        <button class="faq-q" aria-expanded="false">Comment la box connaît-elle les horaires de ma mosquée ?</button>
+        <div class="faq-a"><p>Deux modes : soit vous la synchronisez avec votre mosquée via Mawaqit (l'adhan sonne à la minute exacte de votre masjid), soit elle calcule les horaires selon votre position GPS et la méthode de calcul de votre choix. Dans les deux cas, une horloge de précision embarquée garde l'heure même sans internet.</p></div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q" aria-expanded="false">Le paiement en 3 fois est-il vraiment sans frais ?</button>
+        <div class="faq-a"><p>Oui. Avec Klarna, vous payez en 3 mensualités égales, sans aucun frais ni intérêt pour vous. C'est nous qui prenons en charge la commission. Vous pouvez aussi payer en une fois par carte, Apple Pay, Google Pay ou PayPal.</p></div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q" aria-expanded="false">Quand serai-je livré ?</button>
+        <div class="faq-a"><p>Les précommandes de la Série Fondateurs sont assemblées à la main dans l'ordre d'arrivée. La date d'expédition estimée est affichée au moment de la commande, et nous vous tenons informé à chaque étape : confirmation, assemblage, tests, envoi avec numéro de suivi. Si nous ne pouvions pas tenir la date annoncée, vous êtes intégralement remboursé sur simple demande.</p></div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q" aria-expanded="false">Puis-je choisir les voix des adhans ? Ajouter les miennes ?</button>
+        <div class="faq-a"><p>La box est livrée avec 6 adhans (Afasy, Qatami, et d'autres muezzins), la duaa après l'adhan, les azkar du matin/soir et les 114 sourates par 4 récitateurs. Vous choisissez l'adhan de chaque prière depuis l'app — et le catalogue s'enrichit par mises à jour.</p></div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q" aria-expanded="false">Et si j'ai un problème ?</button>
+        <div class="faq-a"><p>Garantie légale de 2 ans et un artisan (pas un chatbot) qui vous répond par email. La box reçoit des mises à jour à distance : la plupart des soucis se corrigent sans même la débrancher.</p></div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q" aria-expanded="false">Pourquoi AdhanBox plutôt qu'une horloge adhan classique ?</button>
+        <div class="faq-a"><p>Une horloge affiche l'heure et sonne. AdhanBox crée un moment : la lumière qui s'éveille à travers les arches, la voix synchronisée avec votre vraie mosquée, le Coran et les azkar en automatique, l'app pour toute la famille — dans un objet artisanal fabriqué en France, pas un boîtier plastique importé. Et elle s'améliore après l'achat grâce aux mises à jour.</p></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── WAITLIST secondaire ── -->
+<section class="mini-wait" id="liste-attente">
+  <div class="inner">
+    <h2>Pas encore prêt ?</h2>
+    <p>Laissez votre email — on vous prévient des nouveautés et des prochaines séries, sans spam.</p>
+    <form id="waitlist-form" action="https://formspree.io/f/mojgqebg" method="POST">
+      <div class="wl-fields">
+        <input type="email" name="email" placeholder="Votre email" required autocomplete="email" aria-label="Email">
+        <button type="submit" class="btn btn-emerald">Me tenir informé</button>
+      </div>
+    </form>
+    <p class="wl-ok" id="wl-ok">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg>
+      Merci, c'est noté !
+    </p>
+  </div>
+</section>
+
+<!-- ── FOOTER ── -->
+<footer class="site">
+  <div class="container">
+    <div class="foot-grid">
+      <div>
+        <a class="foot-brand" href="index.html"><img src="logo-app.png" alt="">Adhan<span style="color:var(--gold);">Box</span></a>
+        <p style="max-width:280px; margin-top:.8rem;">Boîtier d'appel à la prière artisanal et connecté, conçu et fabriqué en France.</p>
+      </div>
+      <div class="foot-col">
+        <h4>Boutique</h4>
+        <ul>
+          <li><a href="#precommande">Précommander</a></li>
+          <li><a href="personnaliser.html">Personnaliser</a></li>
+          <li><a href="produit.html">Le produit en détail</a></li>
+        </ul>
+      </div>
+      <div class="foot-col">
+        <h4>Aide</h4>
+        <ul>
+          <li><a href="faq.html">FAQ complète</a></li>
+          <li><a href="contact.html">Contact</a></li>
+          <li><a href="mailto:adel.hanifi@yahoo.fr">adel.hanifi@yahoo.fr</a></li>
+        </ul>
+      </div>
+      <div class="foot-col">
+        <h4>Légal</h4>
+        <ul>
+          <li><a href="cgv.html">CGV</a></li>
+          <li><a href="mentions-legales.html">Mentions légales</a></li>
+          <li><a href="privacy.html">Confidentialité</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="foot-base">
+      <span>© 2026 AdhanBox · Adel Hanifi</span>
+      <span class="bismillah">بِسْمِ ٱللَّٰهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ</span>
+    </div>
+  </div>
+</footer>
+
+<script>
+// ══════════════════════════════════════════════════════════════
+// CONFIGURATION COMMANDE
+// 1. Créer le Payment Link dans Stripe (CB + Apple/Google Pay +
+//    Klarna + PayPal activés, collecte adresse + tarifs livraison).
+// 2. Coller l'URL ci-dessous. Tant qu'elle est vide, le bouton
+//    renvoie vers la liste d'attente.
+// ══════════════════════════════════════════════════════════════
+var STRIPE_PAYMENT_LINK = "";           // ex: "https://buy.stripe.com/xxxx"
+var SHIP_DATE = "";                     // ex: "semaine du 12 janvier 2027"
+
+(function () {
+  // ── bouton précommande ──
+  var btn = document.getElementById('orderBtn');
+  if (STRIPE_PAYMENT_LINK) {
+    btn.href = STRIPE_PAYMENT_LINK;
+  } else {
+    btn.addEventListener('click', function (e) {
+      e.preventDefault();
+      var wl = document.getElementById('liste-attente');
+      wl.scrollIntoView({ behavior: 'smooth' });
+      var input = wl.querySelector('input[name=email]');
+      if (input) setTimeout(function(){ input.focus(); }, 600);
+    });
+    btn.textContent = "Ouverture imminente — être prévenu";
+  }
+  if (SHIP_DATE) {
+    document.getElementById('shipNote').innerHTML =
+      'Expédition : <b>' + SHIP_DATE + '</b> — vous serez tenu informé à chaque étape (confirmation, assemblage, envoi).';
+  }
+
+  // ── FAQ accordéon ──
+  document.querySelectorAll('.faq-q').forEach(function (q) {
+    q.addEventListener('click', function () {
+      var item = q.parentElement;
+      var ans = item.querySelector('.faq-a');
+      var open = item.classList.contains('open');
+      document.querySelectorAll('.faq-item.open').forEach(function (o) {
+        o.classList.remove('open');
+        o.querySelector('.faq-a').style.maxHeight = null;
+        o.querySelector('.faq-q').setAttribute('aria-expanded', 'false');
+      });
+      if (!open) {
+        item.classList.add('open');
+        ans.style.maxHeight = ans.scrollHeight + 'px';
+        q.setAttribute('aria-expanded', 'true');
+      }
+    });
+  });
+
+  // ── waitlist AJAX ──
+  var wf = document.getElementById('waitlist-form');
+  if (wf) {
+    wf.addEventListener('submit', function (e) {
+      e.preventDefault();
+      fetch(wf.action, { method: 'POST', body: new FormData(wf), headers: { 'Accept': 'application/json' } })
+        .then(function (r) {
+          if (r.ok) { wf.style.display = 'none'; document.getElementById('wl-ok').classList.add('show'); }
+          else alert('Une erreur est survenue — réessayez ou écrivez-nous.');
+        })
+        .catch(function () { alert('Une erreur est survenue — réessayez ou écrivez-nous.'); });
+    });
+  }
+
+  // ── HERO 3D : la vraie box, auto-rotation ──
+  function init3D() {
+    if (typeof THREE === 'undefined' || !THREE.GLTFLoader) { setTimeout(init3D, 150); return; }
+    var host = document.getElementById('hero3d');
+    var w = host.clientWidth, h = host.clientHeight;
+    var scene = new THREE.Scene();
+    var camera = new THREE.PerspectiveCamera(36, w / h, 0.01, 10);
+    camera.position.set(0.16, 0.11, -0.19);
+    camera.lookAt(0, 0.01, 0);
+    var renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setSize(w, h);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    host.appendChild(renderer.domElement);
+
+    scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+    scene.add(new THREE.HemisphereLight(0xfff8ec, 0x8a7a5c, 0.55));
+    var key = new THREE.DirectionalLight(0xffffff, 0.95); key.position.set(2, 4, 3); scene.add(key);
+    var fill = new THREE.DirectionalLight(0xfff2dd, 0.45); fill.position.set(-2, 2, -3); scene.add(fill);
+
+    var group = new THREE.Group();
+    group.rotation.x = -Math.PI / 2;
+    scene.add(group);
+    var boxSize = null;
+    var mat = { color: 0x8B5A2B, roughness: 0.85, metalness: 0.0 };
+
+    var loader = new THREE.GLTFLoader();
+    loader.load('adhanbox.glb', function (gltf) {
+      var m = gltf.scene;
+      m.traverse(function (c) { if (c.isMesh) c.material = new THREE.MeshStandardMaterial(mat); });
+      var b = new THREE.Box3().setFromObject(m);
+      boxSize = new THREE.Vector3(); b.getSize(boxSize);
+      var c = new THREE.Vector3(); b.getCenter(c); m.position.sub(c);
+      group.add(m);
+      loader.load('lid.glb', function (g2) {
+        var lid = g2.scene;
+        lid.scale.setScalar(0.001);
+        lid.updateMatrixWorld(true);
+        var lb = new THREE.Box3().setFromObject(lid);
+        var lc = new THREE.Vector3(); lb.getCenter(lc);
+        var ls = new THREE.Vector3(); lb.getSize(ls);
+        lid.position.sub(lc);
+        lid.position.z += boxSize.z / 2 + ls.z / 2 - 0.005;
+        lid.traverse(function (c2) { if (c2.isMesh) c2.material = new THREE.MeshStandardMaterial(mat); });
+        group.add(lid);
+      });
+    });
+
+    function tick() {
+      group.rotation.z += 0.0045;
+      renderer.render(scene, camera);
+      requestAnimationFrame(tick);
+    }
+    tick();
+
+    window.addEventListener('resize', function () {
+      var w2 = host.clientWidth, h2 = host.clientHeight;
+      camera.aspect = w2 / h2; camera.updateProjectionMatrix();
+      renderer.setSize(w2, h2);
+    });
+  }
+  if (document.readyState === 'complete') init3D();
+  else window.addEventListener('load', init3D);
+})();
+</script>
 </body>
 </html>
