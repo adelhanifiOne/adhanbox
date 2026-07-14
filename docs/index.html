@@ -639,7 +639,7 @@ var SHIP_DATE = "automne 2026";
       var usb = new THREE.Group();
       // disque d'obturation noir : bouche entièrement le trou pour empêcher la lumière de fuir autour
       var usbBack = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.0110, 0.0110, 0.0020, 36),
+        new THREE.CylinderGeometry(0.0100, 0.0100, 0.0020, 36),
         new THREE.MeshStandardMaterial({ color: 0x0c0c0c, roughness: 0.7, metalness: 0.1 })
       );
       usbBack.rotation.z = Math.PI / 2;
@@ -647,24 +647,24 @@ var SHIP_DATE = "automne 2026";
       usb.add(usbBack);
       // flasque/bezel du connecteur panneau : plus large que le trou pour le recouvrir
       var usbBezel = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.0092, 0.0092, 0.0040, 36),
+        new THREE.CylinderGeometry(0.0083, 0.0083, 0.0040, 36),
         new THREE.MeshStandardMaterial({ color: 0x141414, roughness: 0.5, metalness: 0.2 })
       );
       usbBezel.rotation.z = Math.PI / 2;   // axe le long de X : face ronde contre la paroi
       usb.add(usbBezel);
       var usbSlot = new THREE.Mesh(
-        new THREE.BoxGeometry(0.0026, 0.0092, 0.0042),
+        new THREE.BoxGeometry(0.0026, 0.0082, 0.0038),
         new THREE.MeshStandardMaterial({ color: 0x050505, roughness: 0.6, metalness: 0.2 })
       );
       usbSlot.position.x = 0.0014;
       usb.add(usbSlot);
       var usbTongue = new THREE.Mesh(
-        new THREE.BoxGeometry(0.0018, 0.0066, 0.0016),
+        new THREE.BoxGeometry(0.0018, 0.0060, 0.0014),
         new THREE.MeshStandardMaterial({ color: 0x8c8c8c, roughness: 0.4, metalness: 0.6 })
       );
       usbTongue.position.x = 0.0018;
       usb.add(usbTongue);
-      usb.position.set(boxSize.x / 2 - 0.0002, 0, -0.012);
+      usb.position.set(boxSize.x / 2 - 0.0002, 0, -0.016);
       group.add(usb);
       // couvercle noir
       loader.load('lid.glb', function (g2) {
