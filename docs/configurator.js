@@ -22,7 +22,7 @@
     const FINISHES = PALETTE;
     const MANDALA_COLORS = PALETTE;
 
-    const state = { finish: 'bois', mandala: 0, mandalaColor: 'dore' };
+    const state = { finish: 'noir', mandala: 0, mandalaColor: 'dore' };
     let scene, camera, renderer, controls, boxGroup, boxMesh = null, mandalaMesh = null, lidMesh = null;
     let boxSize = null, boxCenter = null;
     let threeStarted = false;
@@ -90,6 +90,7 @@
         boxMesh.position.sub(boxCenter);
         boxGroup.add(boxMesh);
         boxGroup.rotation.x = -Math.PI / 2;
+        addGlowAndPort();
         applyFinish();
         animate3D();
         loadLid();
@@ -107,6 +108,49 @@
       requestAnimationFrame(animate3D);
       controls.update();
       renderer.render(scene, camera);
+    }
+
+    // Coque lumineuse uniforme + port USB-C rond — identiques au hero d'accueil.
+    // Ces objets ne sont pas affectés par applyFinish (qui ne touche que boxMesh/lidMesh),
+    // donc la lueur reste chaude et le port reste noir quelle que soit la couleur choisie.
+    function addGlowAndPort() {
+      if (!boxSize) return;
+      // ── coque lumineuse UNIFORME : même lueur derrière toutes les fenêtres ──
+      const glow = new THREE.Mesh(
+        new THREE.BoxGeometry(boxSize.x * 0.95, boxSize.y * 0.95, boxSize.z * 1.0),
+        new THREE.MeshBasicMaterial({ color: 0xFFEAD0 })
+      );
+      boxGroup.add(glow);
+
+      // ── port USB-C panneau ROND (press-fit) sur la face opposée au motif (+X) ──
+      const usb = new THREE.Group();
+      const usbBack = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.0100, 0.0100, 0.0020, 36),
+        new THREE.MeshStandardMaterial({ color: 0x0c0c0c, roughness: 0.7, metalness: 0.1 })
+      );
+      usbBack.rotation.z = Math.PI / 2;
+      usbBack.position.x = -0.0016;
+      usb.add(usbBack);
+      const usbBezel = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.0083, 0.0083, 0.0040, 36),
+        new THREE.MeshStandardMaterial({ color: 0x141414, roughness: 0.5, metalness: 0.2 })
+      );
+      usbBezel.rotation.z = Math.PI / 2;
+      usb.add(usbBezel);
+      const usbSlot = new THREE.Mesh(
+        new THREE.BoxGeometry(0.0026, 0.0082, 0.0038),
+        new THREE.MeshStandardMaterial({ color: 0x050505, roughness: 0.6, metalness: 0.2 })
+      );
+      usbSlot.position.x = 0.0014;
+      usb.add(usbSlot);
+      const usbTongue = new THREE.Mesh(
+        new THREE.BoxGeometry(0.0018, 0.0060, 0.0014),
+        new THREE.MeshStandardMaterial({ color: 0x8c8c8c, roughness: 0.4, metalness: 0.6 })
+      );
+      usbTongue.position.x = 0.0018;
+      usb.add(usbTongue);
+      usb.position.set(boxSize.x / 2 - 0.0002, 0, -0.016);
+      boxGroup.add(usb);
     }
 
     function loadLid() {
