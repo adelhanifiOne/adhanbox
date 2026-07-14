@@ -628,6 +628,15 @@ var SHIP_DATE = "automne 2026";
       boxSize = new THREE.Vector3(); b.getSize(boxSize);
       var c = new THREE.Vector3(); b.getCenter(c); m.position.sub(c);
       group.add(m);
+      // ── lumière intérieure : « la lumière s'éveille » (visible à travers les arches) ──
+      var glow = 0xFFC27A; // ambre chaud
+      var innerLight = new THREE.PointLight(glow, 2.4, 0.34, 2);
+      group.add(innerLight);            // au centre du boîtier (origine)
+      var glowMesh = new THREE.Mesh(
+        new THREE.SphereGeometry(0.032, 20, 20),
+        new THREE.MeshBasicMaterial({ color: glow })
+      );
+      group.add(glowMesh);              // source lumineuse visible par les fenêtres
       // couvercle noir
       loader.load('lid.glb', function (g2) {
         var lid = g2.scene;
