@@ -403,7 +403,7 @@
           <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg>Alimentation, câble et notice inclus</li>
           <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg>Garantie légale 2 ans · retour 14 jours</li>
         </ul>
-        <a href="#" id="orderBtn" class="btn btn-emerald btn-big" style="width:100%;">Précommander maintenant</a>
+        <a href="personnaliser.html" id="orderBtn" class="btn btn-emerald btn-big" style="width:100%;">Personnaliser &amp; précommander</a>
         <p class="order-note" id="shipNote">Expédition : <b>automne 2026</b> — vous serez tenu informé à chaque étape (confirmation, assemblage, envoi).</p>
       </div>
       <div>
@@ -541,8 +541,10 @@ var SHIP_DATE = "automne 2026";
   // ── bouton précommande ──
   var btn = document.getElementById('orderBtn');
   if (STRIPE_PAYMENT_LINK) {
-    btn.href = STRIPE_PAYMENT_LINK;
+    // le paiement se fait à la fin de la personnalisation
+    btn.href = "personnaliser.html";
   } else {
+    btn.href = "#";
     btn.addEventListener('click', function (e) {
       e.preventDefault();
       var wl = document.getElementById('liste-attente');

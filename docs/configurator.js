@@ -271,21 +271,28 @@
       });
     });
 
-    // ─── Devis : le mail reprend la configuration choisie ───
+    // ─── Précommande : le bouton final mène au paiement Stripe,
+    //     en transmettant la configuration choisie (client_reference_id) ───
+    const STRIPE_PAYMENT_LINK = 'https://buy.stripe.com/4gM6oIaMv6o7doQ9RvfjG00';
+    function slug(s) {
+      return (s || '').toLowerCase()
+        .normalize('NFD').replace(/[̀-ͯ]/g, '')
+        .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
+    }
     function updateQuoteLink() {
       const finish = FINISHES[state.finish].label;
       const motif = state.mandala === 0
         ? 'Sans motif'
         : 'Motif ' + state.mandala + ' (' + MANDALA_COLORS[state.mandalaColor].label + ')';
-      const subject = encodeURIComponent('Demande de devis AdhanBox — ' + finish + ' · ' + motif);
-      const body = encodeURIComponent(
-        'Assalamou alaykoum,\n\n' +
-        'Je souhaite recevoir un devis pour une AdhanBox avec la configuration suivante :\n\n' +
-        '• Finition du châssis : ' + finish + '\n' +
-        '• Façade : ' + motif + '\n\n' +
-        'Merci !'
-      );
-      document.getElementById('config-cta').href =
-        'mailto:adel.hanifi@yahoo.fr?subject=' + subject + '&body=' + body;
+      // référence lisible pour Stripe : chassis + motif (+ teinte)
+      let ref = 'chassis-' + slug(finish);
+      if (state.mandala === 0) {
+        ref += '_sans-motif';
+      } else {
+        ref += '_motif-' + state.mandala + '-' + slug(MANDALA_COLORS[state.mandalaColor].label);
+      }
+      const cta = document.getElementById('config-cta');
+      cta.href = STRIPE_PAYMENT_LINK + '?client_reference_id=' + encodeURIComponent(ref);
+      cta.textContent = 'Précommander cette configuration — 119 €';
     }
     updateQuoteLink();
