@@ -17,6 +17,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=Amiri:wght@400;700&display=swap" rel="stylesheet">
   <script defer src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/DRACOLoader.js"></script>
   <style>
     :root {
       --ivory:#FAF6EF; --ivory-deep:#F3EDE1; --paper:#FFFFFF;
@@ -591,7 +592,7 @@ var SHIP_DATE = "automne 2026";
 
   // ── HERO 3D : la vraie box, auto-rotation ──
   function init3D() {
-    if (typeof THREE === 'undefined' || !THREE.GLTFLoader) { setTimeout(init3D, 150); return; }
+    if (typeof THREE === 'undefined' || !THREE.GLTFLoader || !THREE.DRACOLoader) { setTimeout(init3D, 150); return; }
     var host = document.getElementById('hero3d');
     var w = host.clientWidth, h = host.clientHeight;
     var scene = new THREE.Scene();
@@ -613,9 +614,13 @@ var SHIP_DATE = "automne 2026";
     group.rotation.x = -Math.PI / 2;
     scene.add(group);
     var boxSize = null;
-    var mat = { color: 0x8B5A2B, roughness: 0.85, metalness: 0.0 };
+    var mat = { color: 0x161616, roughness: 0.82, metalness: 0.06 };   // noir mat (chassis + couvercle)
 
     var loader = new THREE.GLTFLoader();
+    var draco = new THREE.DRACOLoader();
+    draco.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.6/');
+    loader.setDRACOLoader(draco);
+
     loader.load('adhanbox.glb', function (gltf) {
       var m = gltf.scene;
       m.traverse(function (c) { if (c.isMesh) c.material = new THREE.MeshStandardMaterial(mat); });
@@ -623,6 +628,7 @@ var SHIP_DATE = "automne 2026";
       boxSize = new THREE.Vector3(); b.getSize(boxSize);
       var c = new THREE.Vector3(); b.getCenter(c); m.position.sub(c);
       group.add(m);
+      // couvercle noir
       loader.load('lid.glb', function (g2) {
         var lid = g2.scene;
         lid.scale.setScalar(0.001);
@@ -634,6 +640,21 @@ var SHIP_DATE = "automne 2026";
         lid.position.z += boxSize.z / 2 + ls.z / 2 - 0.005;
         lid.traverse(function (c2) { if (c2.isMesh) c2.material = new THREE.MeshStandardMaterial(mat); });
         group.add(lid);
+      });
+      // motif 3 en blanc sur la façade
+      loader.load('mandala3.glb', function (g3) {
+        var mo = g3.scene;
+        mo.traverse(function (c3) { if (c3.isMesh) c3.material = new THREE.MeshStandardMaterial({ color: 0xf4f4f4, roughness: 0.5, metalness: 0.0, side: THREE.DoubleSide }); });
+        var mb = new THREE.Box3().setFromObject(mo);
+        var ms = new THREE.Vector3(); mb.getSize(ms);
+        var mc = new THREE.Vector3(); mb.getCenter(mc); mo.position.sub(mc);
+        var wrap = new THREE.Group();
+        wrap.add(mo);
+        var sc = (boxSize.x * 0.55) / Math.max(ms.x, ms.y, ms.z);
+        wrap.scale.setScalar(sc);
+        wrap.position.set(-boxSize.x / 2 - 0.0015, 0, -0.008);
+        wrap.rotation.set(0, -Math.PI / 2, 0);
+        group.add(wrap);
       });
     });
 
