@@ -628,28 +628,26 @@ var SHIP_DATE = "automne 2026";
       boxSize = new THREE.Vector3(); b.getSize(boxSize);
       var c = new THREE.Vector3(); b.getCenter(c); m.position.sub(c);
       group.add(m);
-      // ── lumière intérieure : « la lumière s'éveille » (visible à travers les arches) ──
-      var glow = 0xFFC27A; // ambre chaud
-      var innerLight = new THREE.PointLight(glow, 2.4, 0.34, 2);
-      group.add(innerLight);            // au centre du boîtier (origine)
-      var glowMesh = new THREE.Mesh(
-        new THREE.SphereGeometry(0.032, 20, 20),
-        new THREE.MeshBasicMaterial({ color: glow })
+      // ── coque lumineuse UNIFORME : même lueur derrière toutes les fenêtres ──
+      var glowColor = 0xFFEAD0; // blanc chaud, uniforme
+      var innerShell = new THREE.Mesh(
+        new THREE.BoxGeometry(boxSize.x * 0.9, boxSize.y * 0.9, boxSize.z * 0.98),
+        new THREE.MeshBasicMaterial({ color: glowColor })
       );
-      group.add(glowMesh);              // source lumineuse visible par les fenêtres
-      // ── port USB-C sur la face opposée au motif (face +X, en bas) ──
+      group.add(innerShell);
+      // ── port USB-C PLEIN (connecteur, pas un trou) sur la face opposée au motif ──
       var usb = new THREE.Group();
       usb.add(new THREE.Mesh(
-        new THREE.BoxGeometry(0.0026, 0.0110, 0.0052),
-        new THREE.MeshStandardMaterial({ color: 0x0a0a0a, roughness: 0.55, metalness: 0.35 })
+        new THREE.BoxGeometry(0.0028, 0.0112, 0.0054),
+        new THREE.MeshStandardMaterial({ color: 0x3a3a3a, roughness: 0.5, metalness: 0.55 })
       ));
       var usbTongue = new THREE.Mesh(
-        new THREE.BoxGeometry(0.0016, 0.0074, 0.0016),
-        new THREE.MeshStandardMaterial({ color: 0x9a9a9a, roughness: 0.4, metalness: 0.6 })
+        new THREE.BoxGeometry(0.0020, 0.0080, 0.0022),
+        new THREE.MeshStandardMaterial({ color: 0x8c8c8c, roughness: 0.4, metalness: 0.6 })
       );
       usbTongue.position.x = 0.0006;
       usb.add(usbTongue);
-      usb.position.set(boxSize.x / 2 - 0.0006, 0, -0.020);
+      usb.position.set(boxSize.x / 2 - 0.0002, 0, -0.020);
       group.add(usb);
       // couvercle noir
       loader.load('lid.glb', function (g2) {
@@ -661,7 +659,7 @@ var SHIP_DATE = "automne 2026";
         var ls = new THREE.Vector3(); lb.getSize(ls);
         lid.position.sub(lc);
         lid.position.z += boxSize.z / 2 + ls.z / 2 - 0.005;
-        lid.traverse(function (c2) { if (c2.isMesh) c2.material = new THREE.MeshStandardMaterial(mat); });
+        lid.traverse(function (c2) { if (c2.isMesh) c2.material = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.5, metalness: 0.1, transparent: true, opacity: 0.4 }); });
         group.add(lid);
       });
       // motif 3 en blanc sur la façade
