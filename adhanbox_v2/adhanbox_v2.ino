@@ -2,7 +2,7 @@
 // - Starts an AP when a long-press is detected on CONFIG_BUTTON_PIN
 // - Serves a small webpage that requests navigator.geolocation and POSTs lat/lon
 // - Stores lat/lon/accuracy/timestamp in Preferences (NVS)
-//Version: 2.3.15 (AdhanBox V2 / HW v2)
+//Version: 2.3.16 (AdhanBox V2 / HW v2)
 #include <Arduino.h>
 #include <Wire.h>
 #include <WiFi.h>
@@ -1410,7 +1410,7 @@ void handleStopPlay() {
 
 // Set volume via POST JSON {"vol":number}
 void handleSetVolume() {
-  if (!requireApiKey()) return;  // [SECU] auth requise
+  // [SECU] contrôle foyer (volume) — ouvert sur le LAN, comme /play
   if (server.method() != HTTP_POST) {
     server.send(405, "text/plain", "Method not allowed");
     return;
@@ -1444,7 +1444,7 @@ void handleGetVolume() {
 
 // Set brightness via POST JSON {"bright":number}
 void handleSetBrightness() {
-  if (!requireApiKey()) return;  // [SECU] auth requise
+  // [SECU] contrôle foyer (luminosité) — ouvert sur le LAN, comme /play
   if (server.method() != HTTP_POST) {
     server.send(405, "text/plain", "Method not allowed");
     return;
@@ -1480,7 +1480,7 @@ void handleGetBrightness() {
 
 // Set LED scenario via POST JSON {"scenario": number}
 void handleSetLedScenario() {
-  if (!requireApiKey()) return;  // [SECU] auth requise
+  // [SECU] contrôle foyer (scénario LED) — ouvert sur le LAN, comme /play
   if (server.method() != HTTP_POST) {
     server.send(405, "text/plain", "Method not allowed");
     return;
@@ -1517,7 +1517,7 @@ void handleSetLedScenario() {
 
 // Couleur RGB libre : POST JSON {"r":0-255,"g":0-255,"b":0-255}
 void handleSetLedRgb() {
-  if (!requireApiKey()) return;  // [SECU] auth requise
+  // [SECU] contrôle foyer (couleur LED) — ouvert sur le LAN, comme /play
   if (server.method() != HTTP_POST) {
     server.send(405, "text/plain", "Method not allowed");
     return;
@@ -1559,7 +1559,7 @@ void handleLedTest() {
 
 // Set LED scenario via query ?scene=N
 void handleSetLed() {
-  if (!requireApiKey()) return;  // [SECU] auth requise
+  // [SECU] contrôle foyer (LED) — ouvert sur le LAN, comme /play
   String s = server.arg("scene");
   if (s.length() == 0) {
     server.send(400, "text/plain", "Missing scene");
@@ -1591,7 +1591,7 @@ void handleSetLed() {
 
 // Turn off LEDs
 void handleLedOff() {
-  if (!requireApiKey()) return;  // [SECU] auth requise
+  // [SECU] contrôle foyer (LED off) — ouvert sur le LAN, comme /play
   ledScenario = 0;
   setLedDuty(0);
   if (useAddressableLEDs) stripSetAll(0, 0, 0);
@@ -1872,7 +1872,7 @@ void handleOtaUploadComplete() {
 // GET /api/firmware/version
 void handleFirmwareVersion() {
   server.send(200, "application/json",
-              "{\"version\":\"2.3.15\",\"hardware\":\"v2\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
+              "{\"version\":\"2.3.16\",\"hardware\":\"v2\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
 }
 
 // Returns true if the request carries the correct API key (or if token not yet set).
@@ -1904,11 +1904,11 @@ void handleDeviceInfo() {
   char buf[512];
   if (pairingWindow || hasValidToken) {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"2.3.15\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
+             "{\"version\":\"2.3.16\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
              OTA_HOSTNAME, _apiToken.c_str(), _otaPass.c_str());
   } else {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"2.3.15\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"paired\":true}",
+             "{\"version\":\"2.3.16\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"paired\":true}",
              OTA_HOSTNAME);
   }
   server.send(200, "application/json", buf);
@@ -4254,7 +4254,7 @@ void v2Tick() {
 void setup() {
   Serial.begin(115200);
   delay(100);
-  Serial.println("AdhanBox V2 firmware v2.3.1 starting...");
+  Serial.println("AdhanBox V2 firmware v2.3.16 starting...");
 
   // [SECU] Watchdog materiel : on REGLE juste le timeout ici (30s, reboot sur
   // panic) et on DESABONNE les taches idle. L'abonnement de la tache loop() se

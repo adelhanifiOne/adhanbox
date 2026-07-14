@@ -1,6 +1,6 @@
 {
-  "version": "2.3.15",
+  "version": "2.3.16",
   "hardware": "v2",
   "url": "https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/build_temp_v2/adhanbox_v2.ino.bin",
-  "changelog": "Fix crash audio sur modules sans PSRAM (buffer DMA I2S reduit) + bouton \"Appairer avec l_app\" sur la page web (reboot en mode appairage BLE fiable) + corrections audio (plus de coupures ni gresillement)"
+  "changelog": "Controle foyer : LED, volume et luminosite pilotables par tous les telephones de la maison sans reappairage. Les actions sensibles (WiFi, mises a jour, suppression audio) restent protegees."
 }
