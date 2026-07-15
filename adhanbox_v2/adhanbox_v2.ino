@@ -2,7 +2,7 @@
 // - Starts an AP when a long-press is detected on CONFIG_BUTTON_PIN
 // - Serves a small webpage that requests navigator.geolocation and POSTs lat/lon
 // - Stores lat/lon/accuracy/timestamp in Preferences (NVS)
-//Version: 2.3.16 (AdhanBox V2 / HW v2)
+//Version: 2.3.17 (AdhanBox V2 / HW v2)
 #include <Arduino.h>
 #include <Wire.h>
 #include <WiFi.h>
@@ -1763,22 +1763,10 @@ static UpdaterECDSAVerifier *_otaVerifier = nullptr;
 
 // OTA update via HTTP multipart upload (POST /ota/upload)
 void handleOtaUpload() {
-  // Verify authorization at the start of the upload to prevent writing unauthorized chunks
-  bool auth = true;
-  if (_apiToken.length() > 0 && !apRunning) {
-    String key = server.header("X-API-Key");
-    if (key.length() == 0) {
-      key = server.arg("token");
-    }
-    if (key != _apiToken) {
-      auth = false;
-    }
-  }
-
-  if (!auth) {
-    return;
-  }
-
+  // [CONTROLE FOYER] Pas d'auth par token sur l'OTA : n'importe quel appareil
+  // du foyer (Wi-Fi local) peut lancer une mise à jour. La vraie protection est
+  // la SIGNATURE ECDSA du firmware (voir UPDATE_SIGN) : la box refuse tout binaire
+  // non signé par la clé privée hors-repo, un token n'ajoutait donc rien.
   HTTPUpload &upload = server.upload();
   if (upload.status == UPLOAD_FILE_START) {
     size_t total = (size_t)server.arg("size").toInt();  // taille du .bin signe (firmware+512)
@@ -1859,7 +1847,7 @@ void handleUpdatePage() {
 }
 
 void handleOtaUploadComplete() {
-  if (!requireApiKey()) { return; }
+  // [CONTROLE FOYER] Voir handleOtaUpload : protection assurée par la signature ECDSA.
   if (Update.hasError()) {
     server.send(500, "application/json", "{\"ok\":false,\"error\":\"Update failed\"}");
   } else {
@@ -1872,7 +1860,7 @@ void handleOtaUploadComplete() {
 // GET /api/firmware/version
 void handleFirmwareVersion() {
   server.send(200, "application/json",
-              "{\"version\":\"2.3.16\",\"hardware\":\"v2\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
+              "{\"version\":\"2.3.17\",\"hardware\":\"v2\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
 }
 
 // Returns true if the request carries the correct API key (or if token not yet set).
@@ -1904,11 +1892,11 @@ void handleDeviceInfo() {
   char buf[512];
   if (pairingWindow || hasValidToken) {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"2.3.16\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
+             "{\"version\":\"2.3.17\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
              OTA_HOSTNAME, _apiToken.c_str(), _otaPass.c_str());
   } else {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"2.3.16\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"paired\":true}",
+             "{\"version\":\"2.3.17\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"paired\":true}",
              OTA_HOSTNAME);
   }
   server.send(200, "application/json", buf);
@@ -2078,8 +2066,9 @@ void handleMawaqitConfig() {
     server.send(405, "application/json", "{\"error\":\"Method not allowed\"}");
     return;
   }
-  if (!requireApiKey()) return;
-
+  // [CONTROLE FOYER] Config de la mosquée de référence accessible à tout
+  // appareil du réseau local (pas d'auth) : un 2e téléphone du foyer, non
+  // appairé, doit pouvoir régler les horaires sans re-jumeler.
   String body = getRequestBody();
   Serial.print("/api/mawaqit/config body: ");
   Serial.println(body);
@@ -2380,8 +2369,7 @@ void handleMawaqitSync() {
     server.send(405, "application/json", "{\"error\":\"Method not allowed\"}");
     return;
   }
-  if (!requireApiKey()) return;
-
+  // [CONTROLE FOYER] Synchro Mawaqit accessible à tout appareil du réseau local.
   String err;
   if (performMawaqitSync(err)) {
     scheduleNextPrayerAlarm();
@@ -4254,7 +4242,7 @@ void v2Tick() {
 void setup() {
   Serial.begin(115200);
   delay(100);
-  Serial.println("AdhanBox V2 firmware v2.3.16 starting...");
+  Serial.println("AdhanBox V2 firmware v2.3.17 starting...");
 
   // [SECU] Watchdog materiel : on REGLE juste le timeout ici (30s, reboot sur
   // panic) et on DESABONNE les taches idle. L'abonnement de la tache loop() se

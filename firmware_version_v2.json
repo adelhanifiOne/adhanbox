@@ -1,6 +1,6 @@
 {
-  "version": "2.3.16",
+  "version": "2.3.17",
   "hardware": "v2",
   "url": "https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/build_temp_v2/adhanbox_v2.ino.bin",
-  "changelog": "Controle foyer : LED, volume et luminosite pilotables par tous les telephones de la maison sans reappairage. Les actions sensibles (WiFi, mises a jour, suppression audio) restent protegees."
+  "changelog": "Controle foyer etendu : la mosquee de reference (Mawaqit) et la mise a jour du firmware sont desormais accessibles a tous les telephones de la maison, sans reappairage. La securite de l'OTA reste assuree par la signature du firmware. Les actions sensibles (WiFi, suppression audio) restent protegees."
 }
