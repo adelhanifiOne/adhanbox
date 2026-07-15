@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Fiche de garnissage — AdhanBox</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{--emerald:#0C5B45;--emerald-deep:#08402F;--gold:#C9A227;--cream:#FAF6EE;--ink:#22271F;--muted:#6b7267;--line:#e3ddcd;}
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html,body{background:#e8e4da;}
+  body{font-family:'Inter',sans-serif;color:var(--ink);font-size:9.4pt;line-height:1.45;}
+  .page{width:210mm;height:297mm;background:#fff;margin:8mm auto;padding:12mm 13mm;box-shadow:0 2px 14px rgba(0,0,0,.18);position:relative;display:flex;flex-direction:column;}
+  @media print{html,body{background:none;}.page{margin:0;box-shadow:none;}.no-print{display:none!important;}}
+  @page{size:A4;margin:0;}
+  h1,h2,h3{font-family:'Fraunces',serif;color:var(--emerald-deep);}
+  em{font-style:italic;color:var(--gold);}
+  .head{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2px solid var(--emerald);padding-bottom:4mm;margin-bottom:5mm;}
+  .head .eyebrow{font-size:7.5pt;letter-spacing:2px;text-transform:uppercase;color:var(--gold);font-weight:600;}
+  .head h1{font-size:20pt;margin-top:1mm;}
+  .head .ref{text-align:right;font-size:8.2pt;color:var(--muted);}
+  .head .ref b{color:var(--emerald-deep);font-size:10pt;font-family:'Fraunces',serif;}
+  .cols{display:grid;grid-template-columns:1.15fr .85fr;gap:9mm;flex:1;}
+  .prep{background:#fbf5e9;border:1px solid #ecd9a8;border-radius:2.5mm;padding:3.5mm 4mm;margin-bottom:4mm;}
+  .prep h3{font-size:10pt;margin-bottom:1.5mm;color:#8a6d12;}
+  .prep ol{padding-left:5mm;}
+  .prep li{margin-bottom:1mm;font-size:8.7pt;}
+  .steps{counter-reset:step;}
+  .steps h2{font-size:12pt;margin-bottom:3mm;}
+  .step{display:flex;gap:3.5mm;margin-bottom:3.2mm;align-items:flex-start;}
+  .step .n{counter-increment:step;flex:0 0 7mm;height:7mm;border-radius:50%;background:var(--emerald);color:#fff;font-family:'Fraunces',serif;font-weight:700;font-size:10pt;display:flex;align-items:center;justify-content:center;}
+  .step .n::before{content:counter(step);}
+  .step .b h4{font-size:10pt;color:var(--emerald-deep);font-family:'Inter';font-weight:700;}
+  .step .b p{font-size:8.7pt;color:var(--ink);}
+  .step .b .q{font-size:7.8pt;color:var(--muted);font-style:italic;}
+  .diagram{background:var(--cream);border:1px solid var(--line);border-radius:3mm;padding:5mm 4mm 4mm;}
+  .diagram h3{font-size:9.5pt;text-align:center;margin-bottom:3mm;}
+  .diagram .cap{font-size:7.6pt;color:var(--muted);text-align:center;margin-top:2mm;}
+  .legend{margin-top:4mm;display:flex;flex-direction:column;gap:1.6mm;}
+  .legend div{display:flex;align-items:center;gap:2.5mm;font-size:8.2pt;}
+  .legend .sw{width:5mm;height:3mm;border-radius:.8mm;flex:0 0 auto;border:1px solid rgba(0,0,0,.15);}
+  .check{margin-top:5mm;border-top:1px solid var(--line);padding-top:4mm;}
+  .check h3{font-size:10pt;margin-bottom:2.5mm;}
+  .check .grid{display:grid;grid-template-columns:1fr 1fr;gap:1.5mm 8mm;}
+  .check label{display:flex;gap:2.5mm;align-items:center;font-size:8.7pt;}
+  .check .box{width:3.6mm;height:3.6mm;border:1.4px solid var(--emerald);border-radius:.8mm;flex:0 0 auto;}
+  .foot{margin-top:auto;border-top:1px solid var(--line);padding-top:3mm;font-size:7.4pt;color:var(--muted);display:flex;justify-content:space-between;}
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="head">
+    <div>
+      <div class="eyebrow">Procédure d'expédition · Série Fondateurs</div>
+      <h1>Fiche de <em>garnissage</em></h1>
+    </div>
+    <div class="ref">Caisse kraft RAJA<br><b>16 × 12 × 11 cm</b></div>
+  </div>
+
+  <div class="prep">
+    <h3>⚙️ Avant de lancer la série (une fois)</h3>
+    <ol>
+      <li><b>Teste chaque boîtier</b> : branche-le, vérifie que la lumière s'anime et qu'un son sort (contrôle qualité obligatoire avant emballage).</li>
+      <li><b>Numérote &amp; signe la carte</b> au stylo doré : « N° __ / 25 » + ta signature et la date. Un numéro unique par boîte, dans l'ordre.</li>
+      <li><b>Plie la notice</b> une fois de plus (A5 → A6) pour qu'elle se pose à plat.</li>
+    </ol>
+  </div>
+
+  <div class="cols">
+    <div class="steps">
+      <h2>Ordre de garnissage</h2>
+
+      <div class="step"><div class="n"></div><div class="b">
+        <h4>Lit de calage au fond</h4>
+        <p>Une poignée de frisottis kraft au fond de la caisse (~1 cm), bien réparti.</p>
+        <div class="q">frisottis kraft</div>
+      </div></div>
+
+      <div class="step"><div class="n"></div><div class="b">
+        <h4>Boîtier AdhanBox au centre</h4>
+        <p>Enveloppe-le d'une feuille de papier de soie (option premium), puis pose-le bien au milieu, motif vers le haut.</p>
+        <div class="q">1 boîtier (+ papier de soie)</div>
+      </div></div>
+
+      <div class="step"><div class="n"></div><div class="b">
+        <h4>Alim + câble sur le côté</h4>
+        <p>Câble enroulé et maintenu par une attache. Glisse alim + câble dans l'espace libre à côté du boîtier (~5 cm).</p>
+        <div class="q">1 alim 5 V · 1 câble USB-C</div>
+      </div></div>
+
+      <div class="step"><div class="n"></div><div class="b">
+        <h4>Cale les vides</h4>
+        <p>Comble les espaces latéraux avec du frisottis pour que rien ne bouge quand tu secoues doucement.</p>
+      </div></div>
+
+      <div class="step"><div class="n"></div><div class="b">
+        <h4>Notice + carte sur le dessus</h4>
+        <p>Pose à plat la notice (pliée A6) et la carte signée, face visible. C'est la première chose que le client voit.</p>
+        <div class="q">1 notice · 1 carte N°__/25</div>
+      </div></div>
+
+      <div class="step"><div class="n"></div><div class="b">
+        <h4>Ferme &amp; étiquette</h4>
+        <p>Ferme les rabats, ruban kraft si besoin. Colle l'étiquette 90×62 <b>centrée sur le dessus</b> (~3 cm de marge). Ruban « Fragile » en option.</p>
+        <div class="q">1 étiquette produit</div>
+      </div></div>
+    </div>
+
+    <div>
+      <div class="diagram">
+        <h3>Vue en coupe</h3>
+        <svg viewBox="0 0 200 210" width="100%" xmlns="http://www.w3.org/2000/svg">
+          <!-- caisse -->
+          <rect x="18" y="14" width="164" height="182" rx="4" fill="#fff" stroke="#c9bfa6" stroke-width="2"/>
+          <!-- rabats ouverts -->
+          <path d="M18 14 L2 4 M182 14 L198 4" stroke="#c9bfa6" stroke-width="2" fill="none"/>
+          <!-- notice + carte (dessus) -->
+          <rect x="26" y="24" width="148" height="20" rx="2" fill="#0C5B45"/>
+          <rect x="34" y="30" width="70" height="9" rx="1.5" fill="#C9A227"/>
+          <text x="150" y="37" font-size="8" fill="#fff" font-family="Inter" text-anchor="end">notice + carte</text>
+          <!-- boitier -->
+          <rect x="30" y="52" width="96" height="112" rx="4" fill="#22271F"/>
+          <!-- fenetres motif -->
+          <g fill="#FFEAD0"><rect x="42" y="60" width="8" height="13" rx="3"/><rect x="54" y="60" width="8" height="13" rx="3"/><rect x="66" y="60" width="8" height="13" rx="3"/></g>
+          <circle cx="70" cy="120" r="16" fill="#3a3a3a"/><circle cx="70" cy="120" r="9" fill="#161616"/>
+          <text x="78" y="166" font-size="8" fill="#fff" font-family="Inter" text-anchor="middle" transform="rotate(-90 78 120)" style="display:none"></text>
+          <!-- alim + cable a cote -->
+          <rect x="134" y="96" width="40" height="34" rx="3" fill="#5b6157"/>
+          <circle cx="154" cy="150" r="15" fill="none" stroke="#8a8f85" stroke-width="4"/>
+          <text x="154" y="86" font-size="7.5" fill="#22271F" font-family="Inter" text-anchor="middle">alim + câble</text>
+          <!-- calage bas + cotes -->
+          <g fill="#e9c98f"><circle cx="30" cy="176" r="3"/><circle cx="45" cy="180" r="3"/><circle cx="62" cy="176" r="3"/><circle cx="80" cy="180" r="3"/><circle cx="100" cy="177" r="3"/><circle cx="120" cy="181" r="3"/><circle cx="140" cy="177" r="3"/><circle cx="160" cy="180" r="3"/><circle cx="172" cy="176" r="3"/></g>
+          <!-- etiquette sur le dessus -->
+          <rect x="66" y="6" width="52" height="14" rx="2" fill="#FAF6EE" stroke="#0C5B45" stroke-width="1.5"/>
+          <text x="92" y="15.5" font-size="7" fill="#0C5B45" font-family="Inter" text-anchor="middle" font-weight="700">étiquette</text>
+        </svg>
+        <div class="cap">Boîtier au centre · alim/câble sur le côté · notice &amp; carte à plat sur le dessus.</div>
+      </div>
+
+      <div class="legend">
+        <div><span class="sw" style="background:#e9c98f"></span> Frisottis kraft (fond + côtés)</div>
+        <div><span class="sw" style="background:#22271F"></span> Boîtier AdhanBox</div>
+        <div><span class="sw" style="background:#5b6157"></span> Alim + câble USB-C</div>
+        <div><span class="sw" style="background:#0C5B45"></span> Notice + carte signée</div>
+        <div><span class="sw" style="background:#FAF6EE;border-color:#0C5B45"></span> Étiquette produit (dessus)</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="check">
+    <h3>✔️ Contrôle avant fermeture (chaque colis)</h3>
+    <div class="grid">
+      <label><span class="box"></span> Boîtier testé (lumière + son OK)</label>
+      <label><span class="box"></span> Carte numérotée &amp; signée (N° unique)</label>
+      <label><span class="box"></span> Alim + câble présents</label>
+      <label><span class="box"></span> Notice pliée A6 incluse</label>
+      <label><span class="box"></span> Rien ne bouge (test secousse)</label>
+      <label><span class="box"></span> Étiquette centrée sur le dessus</label>
+    </div>
+  </div>
+
+  <div class="foot">
+    <span>AdhanBox — Série Fondateurs · fiche interne d'expédition</span>
+    <span>adhanbox.fr · contact@adhanbox.fr</span>
+  </div>
+</div>
+</body>
+</html>
