@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Packaging AdhanBox — carte signée &amp; étiquette</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=Amiri:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --emerald: #0C5B45;
+    --emerald-deep: #08402F;
+    --gold: #C9A227;
+    --cream: #FAF6EE;
+    --ink: #22271F;
+    --muted: #6b7267;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { background: #e8e4da; }
+  body { font-family: 'Inter', sans-serif; color: var(--ink); }
+
+  .sheet {
+    width: 210mm; height: 297mm;
+    background: #fff;
+    margin: 8mm auto; padding: 10mm;
+    box-shadow: 0 2px 14px rgba(0,0,0,.18);
+    display: flex; flex-wrap: wrap; gap: 8mm;
+    align-content: flex-start;
+  }
+  @media print {
+    html, body { background: none; }
+    .sheet { margin: 0; box-shadow: none; page-break-after: always; }
+    .no-print { display: none !important; }
+  }
+  @page { size: A4; margin: 0; }
+
+  .cutline { outline: 0.3mm dashed #b9b2a2; }
+  .sheet-title { width: 100%; font-size: 9pt; color: #888; font-family: sans-serif; }
+  @media print { .sheet-title { display: none; } }
+
+  /* ═══ CARTE SIGNÉE A6 (105×148, portrait) ═══ */
+  .card-front, .card-back {
+    width: 105mm; height: 148mm;
+    display: flex; flex-direction: column;
+    overflow: hidden; position: relative;
+  }
+  .card-front {
+    background: linear-gradient(165deg, var(--emerald-deep) 0%, var(--emerald) 75%);
+    color: var(--cream); text-align: center;
+    padding: 12mm 10mm;
+    justify-content: space-between;
+  }
+  .card-front .basmala { font-family: 'Amiri', serif; font-size: 13pt; color: var(--gold); }
+  .card-front h1 { font-family: 'Fraunces', serif; font-size: 24pt; margin-top: 2mm; }
+  .card-front .sub { font-size: 8.5pt; color: #d8e6df; margin-top: 1.5mm; }
+  .card-front .badge { display: inline-block; border: 1px solid var(--gold); color: var(--gold); border-radius: 999px; padding: 1.4mm 5mm; font-size: 7.5pt; letter-spacing: 1.6px; text-transform: uppercase; margin: 5mm auto 0; }
+  .num-block { margin-top: 4mm; }
+  .num-block .lab { font-size: 7.5pt; letter-spacing: 1.5px; text-transform: uppercase; color: #bcd2c9; }
+  .num-block .num { font-family: 'Fraunces', serif; font-size: 30pt; color: var(--cream); line-height: 1.15; }
+  .num-block .num span { color: var(--gold); font-size: 16pt; }
+  .card-front .windows { display: flex; justify-content: center; gap: 2.6mm; margin-top: 5mm; }
+  .card-front .windows i { display: block; width: 6.5mm; height: 11mm; background: rgba(255,234,208,.92); border-radius: 3.5mm 3.5mm .8mm .8mm; }
+  .card-front .foot { font-size: 7pt; color: #bcd2c9; }
+
+  .card-back {
+    background: var(--cream); padding: 12mm 11mm;
+    justify-content: space-between;
+  }
+  .card-back h2 { font-family: 'Fraunces', serif; color: var(--emerald-deep); font-size: 13pt; margin-bottom: 4mm; }
+  .card-back p { font-size: 9pt; line-height: 1.65; }
+  .card-back .ar { font-family: 'Amiri', serif; text-align: center; font-size: 12pt; color: var(--emerald); margin: 4mm 0; }
+  .sign-zone { margin-top: 5mm; }
+  .sign-zone .row { display: flex; gap: 8mm; margin-top: 6mm; }
+  .sign-zone .field { flex: 1; border-top: 0.35mm solid var(--ink); padding-top: 1.5mm; font-size: 7.5pt; color: var(--muted); }
+  .card-back .foot { font-size: 7pt; color: var(--muted); text-align: center; }
+
+  /* ═══ ÉTIQUETTE BOÎTE (90×62mm, paysage) ═══ */
+  .label {
+    width: 90mm; height: 62mm;
+    background: var(--cream);
+    display: flex; overflow: hidden;
+  }
+  .label .left {
+    flex: 0 0 26mm; background: linear-gradient(165deg, var(--emerald-deep), var(--emerald));
+    color: var(--cream); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1.5mm; padding: 3mm 1mm;
+    text-align: center;
+  }
+  .label .left .ar { font-family: 'Amiri', serif; font-size: 10pt; color: var(--gold); }
+  .label .left b { font-family: 'Fraunces', serif; font-size: 11.5pt; }
+  .label .left .windows { display: flex; gap: 1.2mm; margin-top: 1.5mm; }
+  .label .left .windows i { display: block; width: 3.2mm; height: 5.5mm; background: rgba(255,234,208,.92); border-radius: 1.7mm 1.7mm .4mm .4mm; }
+  .label .right { flex: 1; padding: 3.5mm 4mm; display: flex; flex-direction: column; }
+  .label h3 { font-family: 'Fraunces', serif; color: var(--emerald-deep); font-size: 10pt; }
+  .label .sub { font-size: 6.6pt; color: var(--muted); margin-top: .6mm; }
+  .label .serial { font-size: 7.5pt; margin-top: 1.6mm; }
+  .label .serial b { font-family: 'Fraunces', serif; color: var(--emerald-deep); font-size: 9.5pt; }
+  .label .contents { font-size: 6.2pt; color: var(--ink); margin-top: 1.4mm; line-height: 1.5; }
+  .label .bottom { margin-top: auto; display: flex; align-items: flex-end; gap: 2.5mm; }
+  .label .legal { font-size: 5.2pt; color: var(--muted); line-height: 1.45; flex: 1; }
+  .label .qr { flex: 0 0 12mm; }
+  .label .qr img { width: 12mm; height: 12mm; display: block; }
+  .label .qr .q { font-size: 4.8pt; color: var(--muted); text-align: center; margin-top: .5mm; }
+  .weee { display: inline-block; vertical-align: -1px; }
+</style>
+</head>
+<body>
+
+<!-- ═══════════ FEUILLE 1 — CARTE SIGNÉE : RECTO (centré) ═══════════ -->
+<div class="sheet" style="justify-content:center; align-content:center;">
+  <div class="sheet-title">Feuille 1 — Carte signée A6, RECTO. Papier cartonné 250-300 g. Imprimer les feuilles 1 et 2 en recto-verso (retourner sur les bords longs) : le verso tombe pile au dos. Découper ensuite.</div>
+
+  <div class="card-front cutline">
+    <div>
+      <div class="basmala">بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ</div>
+      <h1>AdhanBox</h1>
+      <div class="sub">L'appel à la prière chez vous, comme à la mosquée</div>
+      <div class="badge">Série Fondateurs</div>
+      <div class="num-block">
+        <div class="lab">Exemplaire</div>
+        <div class="num">N° ____ <span>/ 25</span></div>
+      </div>
+      <div class="windows"><i></i><i></i><i></i><i></i></div>
+    </div>
+    <div class="foot">Imprimée, assemblée &amp; testée à la main — France</div>
+  </div>
+</div>
+
+<!-- ═══════════ FEUILLE 2 — CARTE SIGNÉE : VERSO (centré) ═══════════ -->
+<div class="sheet" style="justify-content:center; align-content:center;">
+  <div class="sheet-title">Feuille 2 — Carte signée A6, VERSO (s'aligne au dos du recto en impression recto-verso).</div>
+
+  <div class="card-back cutline">
+    <div>
+      <h2>Assalamou alaykoum,</h2>
+      <p>Vous tenez entre vos mains l'un des <b>25 premiers exemplaires</b> d'AdhanBox. Ce boîtier a été imprimé, assemblé et testé à la main, pour que l'appel à la prière retrouve sa place au cœur de votre foyer — sans écran, sans distraction.</p>
+      <p style="margin-top:2.5mm;">Merci de faire partie de cette première histoire. Qu'Allah mette la baraka dans votre maison.</p>
+      <div class="ar">جزاكم الله خيرا</div>
+    </div>
+    <div class="sign-zone">
+      <div class="row">
+        <div class="field">Testé &amp; signé par</div>
+        <div class="field">Date</div>
+      </div>
+    </div>
+    <div class="foot">adhanbox.fr · contact@adhanbox.fr</div>
+  </div>
+</div>
+
+<!-- ═══════════ FEUILLE 3 — ÉTIQUETTES BOÎTE ×4 ═══════════ -->
+<div class="sheet">
+  <div class="sheet-title">Feuille 3 — Étiquette de boîte 90×62 mm (×4). Imprimer sur papier autocollant A4, découper au massicot.</div>
+
+  <!-- Étiquette répétée 4× -->
+  <div class="label cutline">
+    <div class="left">
+      <div class="ar">أذان</div>
+      <b>AdhanBox</b>
+      <div class="windows"><i></i><i></i><i></i></div>
+    </div>
+    <div class="right">
+      <h3>Boîtier d'appel à la prière connecté</h3>
+      <div class="sub">Adhan automatique · Coran &amp; azkar · lumière d'ambiance · app iPhone &amp; Android</div>
+      <div class="serial">Série Fondateurs — Exemplaire <b>N° ____ / 25</b></div>
+      <div class="contents">Contenu : boîtier AdhanBox · alimentation 5 V &amp; câble USB-C · carte signée · notice.</div>
+      <div class="bottom">
+        <div class="legal">
+          Adel Hanifi (EI) — 14 rue du Corps Franc Pommiès, 65500 Vic-en-Bigorre, France · SIRET 932 355 589 00015 · contact@adhanbox.fr<br>
+          Entrée : 5 V ⎓ 2 A (USB-C) · Usage intérieur ·
+          <svg class="weee" width="10" height="12" viewBox="0 0 20 24" fill="none" stroke="#22271F" stroke-width="1.4"><rect x="4" y="7" width="12" height="12" rx="1"/><path d="M2 7h16M8 7V5h4v2M7 10v6M10 10v6M13 10v6M2 22L18 2"/></svg>
+          Ne pas jeter avec les ordures ménagères — collecte séparée DEEE.
+        </div>
+        <div class="qr">
+          <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ4AAAEOCAIAAAD3027yAAAErUlEQVR4nO3dQXKjOhRA0aSrd8H+l8Y6+NM/om+VrJLA50wTE2znlgYPwe91XT/Av/z5528AUoFKKpBIBRKpQCIVSKQCiVQgkQokf+9/fBzHz7uc5znp/d4fecT7zmpP95+VVQUSqUAiFUikAolUIJEKJFKBRCqQSAU+Ma1fNQnec7Y9cuT71+75SY44t3xHI9+gVQUSqUAiFUikAolUIJEKJFKBRCqQSAXmT+tX7b1etV981Sz/fY4H/m9YVSCRCiRSgUQqkEgFEqlAIhVIpAKJVGD1tP6JRubxI3PiedPrb9vTP49VBRKpQCIVSKQCiVQgkQokUoFEKpBIBRLT+sebd5WAWf7/WVUgkQokUoFEKpBIBRKpQCIVSKQCiVRg9bT+ibPeVXvcV1n1HZ0P/N+wqkAiFUikAolUIJEKJFKBRCqQSAUSqcD8af2eE+gn3if/ia/9tv8NqwokUoFEKpBIBRKpQCIVSKQCiVQgkQokv9d1td9k2Wz7iTvR38eqAolUIJEKJFKBRCqQSAUSqUAiFUikAp/YW7/nvu15u7pX7SYf+SRHjvxtVzYcA6+1qkAiFUikAolUIJEKJFKBRCqQSAUSqcAnpvXzpsjz7HnO86bmqyb9x7RPct48foRVBRKpQCIVSKQCiVQgkQokUoFEKpBIBfbeW//EKfK9ebu6V0365x35GPiOVs3yrSqQSAUSqUAiFUikAolUIJEKJFKBRCrwiWn9iFUz9T1n+e+7q/w58HdXPUNh5LVWFUikAolUIJEKJFKBRCqQSAUSqUAiFVg9rd/zufWr9nzPe+29Pd/vueheAp5bD9NJBRKpQCIVSKQCiVQgkQokUoFEKjD/ufXzfNue71VHfp/Dc+thLalAIhVIpAKJVCCRCiRSgUQqkEgF5j+3fp55O8JXzeNHrPoW9rw7wj3PrYfFpAKJVCCRCiRSgUQqkEgFEqlAIhVIfq/r+llh3v3qV732fdcujDgW3dt/HqsKJFKBRCqQSAUSqUAiFUikAolUIJEKfGJa/777qO95v/qRv/s+55bfkVUFEqlAIhVIpAKJVCCRCiRSgUQqkEgFnvzc+lX2vBP+iD3v/H8s2nk/8n6tKpBIBRKpQCIVSKQCiVQgkQokUoFEKvDk59bPs+cE+v6s9rxK4HjdlQ33rCqQSAUSqUAiFUikAolUIJEKJFKBRCrwiWn9vT0nsque477qOoB5T7X/tm//nlUFEqlAIhVIpAKJVCCRCiRSgUQqkEgF5k/r771vTrzn1HyeJ57zPFYVSKQCiVQgkQokUoFEKpBIBRKpQCIVWD2tf595z0Sfd1f5edcQnANnNfJ3V52zVQUSqUAiFUikAolUIJEKJFKBRCqQSAUS0/qPTc1X3Qn/3sg5r5qpH9Ouexg5slUFEqlAIhVIpAKJVCCRCiRSgUQqkEgFVk/r93yu+Z675+ed1b15e/pHzLuXwAirCiRSgUQqkEgFEqlAIhVIpAKJVCCRCsyf1r/vueZ7Tr73/JyPRe931ZGtKpBIBRKpQCIVSKQCiVQgkQokUoFEKpD8XtfVfhO+mlUFEqlAIhVIpAKJVCCRCiRSgUQqkEgFfor/APCCgfPVrU7VAAAAAElFTkSuQmCC" alt="QR adhanbox.fr">
+          <div class="q">adhanbox.fr</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="label cutline">
+    <div class="left">
+      <div class="ar">أذان</div>
+      <b>AdhanBox</b>
+      <div class="windows"><i></i><i></i><i></i></div>
+    </div>
+    <div class="right">
+      <h3>Boîtier d'appel à la prière connecté</h3>
+      <div class="sub">Adhan automatique · Coran &amp; azkar · lumière d'ambiance · app iPhone &amp; Android</div>
+      <div class="serial">Série Fondateurs — Exemplaire <b>N° ____ / 25</b></div>
+      <div class="contents">Contenu : boîtier AdhanBox · alimentation 5 V &amp; câble USB-C · carte signée · notice.</div>
+      <div class="bottom">
+        <div class="legal">
+          Adel Hanifi (EI) — 14 rue du Corps Franc Pommiès, 65500 Vic-en-Bigorre, France · SIRET 932 355 589 00015 · contact@adhanbox.fr<br>
+          Entrée : 5 V ⎓ 2 A (USB-C) · Usage intérieur ·
+          <svg class="weee" width="10" height="12" viewBox="0 0 20 24" fill="none" stroke="#22271F" stroke-width="1.4"><rect x="4" y="7" width="12" height="12" rx="1"/><path d="M2 7h16M8 7V5h4v2M7 10v6M10 10v6M13 10v6M2 22L18 2"/></svg>
+          Ne pas jeter avec les ordures ménagères — collecte séparée DEEE.
+        </div>
+        <div class="qr">
+          <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ4AAAEOCAIAAAD3027yAAAErUlEQVR4nO3dQXKjOhRA0aSrd8H+l8Y6+NM/om+VrJLA50wTE2znlgYPwe91XT/Av/z5528AUoFKKpBIBRKpQCIVSKQCiVQgkQokf+9/fBzHz7uc5znp/d4fecT7zmpP95+VVQUSqUAiFUikAolUIJEKJFKBRCqQSAU+Ma1fNQnec7Y9cuT71+75SY44t3xHI9+gVQUSqUAiFUikAolUIJEKJFKBRCqQSAXmT+tX7b1etV981Sz/fY4H/m9YVSCRCiRSgUQqkEgFEqlAIhVIpAKJVGD1tP6JRubxI3PiedPrb9vTP49VBRKpQCIVSKQCiVQgkQokUoFEKpBIBRLT+sebd5WAWf7/WVUgkQokUoFEKpBIBRKpQCIVSKQCiVRg9bT+ibPeVXvcV1n1HZ0P/N+wqkAiFUikAolUIJEKJFKBRCqQSAUSqcD8af2eE+gn3if/ia/9tv8NqwokUoFEKpBIBRKpQCIVSKQCiVQgkQokv9d1td9k2Wz7iTvR38eqAolUIJEKJFKBRCqQSAUSqUAiFUikAp/YW7/nvu15u7pX7SYf+SRHjvxtVzYcA6+1qkAiFUikAolUIJEKJFKBRCqQSAUSqcAnpvXzpsjz7HnO86bmqyb9x7RPct48foRVBRKpQCIVSKQCiVQgkQokUoFEKpBIBfbeW//EKfK9ebu6V0365x35GPiOVs3yrSqQSAUSqUAiFUikAolUIJEKJFKBRCrwiWn9iFUz9T1n+e+7q/w58HdXPUNh5LVWFUikAolUIJEKJFKBRCqQSAUSqUAiFVg9rd/zufWr9nzPe+29Pd/vueheAp5bD9NJBRKpQCIVSKQCiVQgkQokUoFEKjD/ufXzfNue71VHfp/Dc+thLalAIhVIpAKJVCCRCiRSgUQqkEgF5j+3fp55O8JXzeNHrPoW9rw7wj3PrYfFpAKJVCCRCiRSgUQqkEgFEqlAIhVIfq/r+llh3v3qV732fdcujDgW3dt/HqsKJFKBRCqQSAUSqUAiFUikAolUIJEKfGJa/777qO95v/qRv/s+55bfkVUFEqlAIhVIpAKJVCCRCiRSgUQqkEgFnvzc+lX2vBP+iD3v/H8s2nk/8n6tKpBIBRKpQCIVSKQCiVQgkQokUoFEKvDk59bPs+cE+v6s9rxK4HjdlQ33rCqQSAUSqUAiFUikAolUIJEKJFKBRCrwiWn9vT0nsque477qOoB5T7X/tm//nlUFEqlAIhVIpAKJVCCRCiRSgUQqkEgF5k/r771vTrzn1HyeJ57zPFYVSKQCiVQgkQokUoFEKpBIBRKpQCIVWD2tf595z0Sfd1f5edcQnANnNfJ3V52zVQUSqUAiFUikAolUIJEKJFKBRCqQSAUS0/qPTc1X3Qn/3sg5r5qpH9Ouexg5slUFEqlAIhVIpAKJVCCRCiRSgUQqkEgFVk/r93yu+Z675+ed1b15e/pHzLuXwAirCiRSgUQqkEgFEqlAIhVIpAKJVCCRCsyf1r/vueZ7Tr73/JyPRe931ZGtKpBIBRKpQCIVSKQCiVQgkQokUoFEKpD8XtfVfhO+mlUFEqlAIhVIpAKJVCCRCiRSgUQqkEgFfor/APCCgfPVrU7VAAAAAElFTkSuQmCC" alt="QR adhanbox.fr">
+          <div class="q">adhanbox.fr</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="label cutline">
+    <div class="left">
+      <div class="ar">أذان</div>
+      <b>AdhanBox</b>
+      <div class="windows"><i></i><i></i><i></i></div>
+    </div>
+    <div class="right">
+      <h3>Boîtier d'appel à la prière connecté</h3>
+      <div class="sub">Adhan automatique · Coran &amp; azkar · lumière d'ambiance · app iPhone &amp; Android</div>
+      <div class="serial">Série Fondateurs — Exemplaire <b>N° ____ / 25</b></div>
+      <div class="contents">Contenu : boîtier AdhanBox · alimentation 5 V &amp; câble USB-C · carte signée · notice.</div>
+      <div class="bottom">
+        <div class="legal">
+          Adel Hanifi (EI) — 14 rue du Corps Franc Pommiès, 65500 Vic-en-Bigorre, France · SIRET 932 355 589 00015 · contact@adhanbox.fr<br>
+          Entrée : 5 V ⎓ 2 A (USB-C) · Usage intérieur ·
+          <svg class="weee" width="10" height="12" viewBox="0 0 20 24" fill="none" stroke="#22271F" stroke-width="1.4"><rect x="4" y="7" width="12" height="12" rx="1"/><path d="M2 7h16M8 7V5h4v2M7 10v6M10 10v6M13 10v6M2 22L18 2"/></svg>
+          Ne pas jeter avec les ordures ménagères — collecte séparée DEEE.
+        </div>
+        <div class="qr">
+          <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ4AAAEOCAIAAAD3027yAAAErUlEQVR4nO3dQXKjOhRA0aSrd8H+l8Y6+NM/om+VrJLA50wTE2znlgYPwe91XT/Av/z5528AUoFKKpBIBRKpQCIVSKQCiVQgkQokf+9/fBzHz7uc5znp/d4fecT7zmpP95+VVQUSqUAiFUikAolUIJEKJFKBRCqQSAU+Ma1fNQnec7Y9cuT71+75SY44t3xHI9+gVQUSqUAiFUikAolUIJEKJFKBRCqQSAXmT+tX7b1etV981Sz/fY4H/m9YVSCRCiRSgUQqkEgFEqlAIhVIpAKJVGD1tP6JRubxI3PiedPrb9vTP49VBRKpQCIVSKQCiVQgkQokUoFEKpBIBRLT+sebd5WAWf7/WVUgkQokUoFEKpBIBRKpQCIVSKQCiVRg9bT+ibPeVXvcV1n1HZ0P/N+wqkAiFUikAolUIJEKJFKBRCqQSAUSqcD8af2eE+gn3if/ia/9tv8NqwokUoFEKpBIBRKpQCIVSKQCiVQgkQokv9d1td9k2Wz7iTvR38eqAolUIJEKJFKBRCqQSAUSqUAiFUikAp/YW7/nvu15u7pX7SYf+SRHjvxtVzYcA6+1qkAiFUikAolUIJEKJFKBRCqQSAUSqcAnpvXzpsjz7HnO86bmqyb9x7RPct48foRVBRKpQCIVSKQCiVQgkQokUoFEKpBIBfbeW//EKfK9ebu6V0365x35GPiOVs3yrSqQSAUSqUAiFUikAolUIJEKJFKBRCrwiWn9iFUz9T1n+e+7q/w58HdXPUNh5LVWFUikAolUIJEKJFKBRCqQSAUSqUAiFVg9rd/zufWr9nzPe+29Pd/vueheAp5bD9NJBRKpQCIVSKQCiVQgkQokUoFEKjD/ufXzfNue71VHfp/Dc+thLalAIhVIpAKJVCCRCiRSgUQqkEgF5j+3fp55O8JXzeNHrPoW9rw7wj3PrYfFpAKJVCCRCiRSgUQqkEgFEqlAIhVIfq/r+llh3v3qV732fdcujDgW3dt/HqsKJFKBRCqQSAUSqUAiFUikAolUIJEKfGJa/777qO95v/qRv/s+55bfkVUFEqlAIhVIpAKJVCCRCiRSgUQqkEgFnvzc+lX2vBP+iD3v/H8s2nk/8n6tKpBIBRKpQCIVSKQCiVQgkQokUoFEKvDk59bPs+cE+v6s9rxK4HjdlQ33rCqQSAUSqUAiFUikAolUIJEKJFKBRCrwiWn9vT0nsque477qOoB5T7X/tm//nlUFEqlAIhVIpAKJVCCRCiRSgUQqkEgF5k/r771vTrzn1HyeJ57zPFYVSKQCiVQgkQokUoFEKpBIBRKpQCIVWD2tf595z0Sfd1f5edcQnANnNfJ3V52zVQUSqUAiFUikAolUIJEKJFKBRCqQSAUS0/qPTc1X3Qn/3sg5r5qpH9Ouexg5slUFEqlAIhVIpAKJVCCRCiRSgUQqkEgFVk/r93yu+Z675+ed1b15e/pHzLuXwAirCiRSgUQqkEgFEqlAIhVIpAKJVCCRCsyf1r/vueZ7Tr73/JyPRe931ZGtKpBIBRKpQCIVSKQCiVQgkQokUoFEKpD8XtfVfhO+mlUFEqlAIhVIpAKJVCCRCiRSgUQqkEgFfor/APCCgfPVrU7VAAAAAElFTkSuQmCC" alt="QR adhanbox.fr">
+          <div class="q">adhanbox.fr</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="label cutline">
+    <div class="left">
+      <div class="ar">أذان</div>
+      <b>AdhanBox</b>
+      <div class="windows"><i></i><i></i><i></i></div>
+    </div>
+    <div class="right">
+      <h3>Boîtier d'appel à la prière connecté</h3>
+      <div class="sub">Adhan automatique · Coran &amp; azkar · lumière d'ambiance · app iPhone &amp; Android</div>
+      <div class="serial">Série Fondateurs — Exemplaire <b>N° ____ / 25</b></div>
+      <div class="contents">Contenu : boîtier AdhanBox · alimentation 5 V &amp; câble USB-C · carte signée · notice.</div>
+      <div class="bottom">
+        <div class="legal">
+          Adel Hanifi (EI) — 14 rue du Corps Franc Pommiès, 65500 Vic-en-Bigorre, France · SIRET 932 355 589 00015 · contact@adhanbox.fr<br>
+          Entrée : 5 V ⎓ 2 A (USB-C) · Usage intérieur ·
+          <svg class="weee" width="10" height="12" viewBox="0 0 20 24" fill="none" stroke="#22271F" stroke-width="1.4"><rect x="4" y="7" width="12" height="12" rx="1"/><path d="M2 7h16M8 7V5h4v2M7 10v6M10 10v6M13 10v6M2 22L18 2"/></svg>
+          Ne pas jeter avec les ordures ménagères — collecte séparée DEEE.
+        </div>
+        <div class="qr">
+          <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ4AAAEOCAIAAAD3027yAAAErUlEQVR4nO3dQXKjOhRA0aSrd8H+l8Y6+NM/om+VrJLA50wTE2znlgYPwe91XT/Av/z5528AUoFKKpBIBRKpQCIVSKQCiVQgkQokf+9/fBzHz7uc5znp/d4fecT7zmpP95+VVQUSqUAiFUikAolUIJEKJFKBRCqQSAU+Ma1fNQnec7Y9cuT71+75SY44t3xHI9+gVQUSqUAiFUikAolUIJEKJFKBRCqQSAXmT+tX7b1etV981Sz/fY4H/m9YVSCRCiRSgUQqkEgFEqlAIhVIpAKJVGD1tP6JRubxI3PiedPrb9vTP49VBRKpQCIVSKQCiVQgkQokUoFEKpBIBRLT+sebd5WAWf7/WVUgkQokUoFEKpBIBRKpQCIVSKQCiVRg9bT+ibPeVXvcV1n1HZ0P/N+wqkAiFUikAolUIJEKJFKBRCqQSAUSqcD8af2eE+gn3if/ia/9tv8NqwokUoFEKpBIBRKpQCIVSKQCiVQgkQokv9d1td9k2Wz7iTvR38eqAolUIJEKJFKBRCqQSAUSqUAiFUikAp/YW7/nvu15u7pX7SYf+SRHjvxtVzYcA6+1qkAiFUikAolUIJEKJFKBRCqQSAUSqcAnpvXzpsjz7HnO86bmqyb9x7RPct48foRVBRKpQCIVSKQCiVQgkQokUoFEKpBIBfbeW//EKfK9ebu6V0365x35GPiOVs3yrSqQSAUSqUAiFUikAolUIJEKJFKBRCrwiWn9iFUz9T1n+e+7q/w58HdXPUNh5LVWFUikAolUIJEKJFKBRCqQSAUSqUAiFVg9rd/zufWr9nzPe+29Pd/vueheAp5bD9NJBRKpQCIVSKQCiVQgkQokUoFEKjD/ufXzfNue71VHfp/Dc+thLalAIhVIpAKJVCCRCiRSgUQqkEgF5j+3fp55O8JXzeNHrPoW9rw7wj3PrYfFpAKJVCCRCiRSgUQqkEgFEqlAIhVIfq/r+llh3v3qV732fdcujDgW3dt/HqsKJFKBRCqQSAUSqUAiFUikAolUIJEKfGJa/777qO95v/qRv/s+55bfkVUFEqlAIhVIpAKJVCCRCiRSgUQqkEgFnvzc+lX2vBP+iD3v/H8s2nk/8n6tKpBIBRKpQCIVSKQCiVQgkQokUoFEKvDk59bPs+cE+v6s9rxK4HjdlQ33rCqQSAUSqUAiFUikAolUIJEKJFKBRCrwiWn9vT0nsque477qOoB5T7X/tm//nlUFEqlAIhVIpAKJVCCRCiRSgUQqkEgF5k/r771vTrzn1HyeJ57zPFYVSKQCiVQgkQokUoFEKpBIBRKpQCIVWD2tf595z0Sfd1f5edcQnANnNfJ3V52zVQUSqUAiFUikAolUIJEKJFKBRCqQSAUS0/qPTc1X3Qn/3sg5r5qpH9Ouexg5slUFEqlAIhVIpAKJVCCRCiRSgUQqkEgFVk/r93yu+Z675+ed1b15e/pHzLuXwAirCiRSgUQqkEgFEqlAIhVIpAKJVCCRCsyf1r/vueZ7Tr73/JyPRe931ZGtKpBIBRKpQCIVSKQCiVQgkQokUoFEKpD8XtfVfhO+mlUFEqlAIhVIpAKJVCCRCiRSgUQqkEgFfor/APCCgfPVrU7VAAAAAElFTkSuQmCC" alt="QR adhanbox.fr">
+          <div class="q">adhanbox.fr</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="no-print" style="max-width:210mm;margin:6mm auto 14mm;font-family:sans-serif;font-size:12px;color:#555;background:#fff;padding:12px 16px;border-radius:8px;">
+  <b>Impression :</b> A4, échelle 100 %, arrière-plans cochés.
+  <b>Feuilles 1-2</b> (carte) : papier cartonné 250-300 g, recto-verso « retourner sur les bords longs » — le verso tombe au dos du recto, puis découper.
+  <b>Feuille 3</b> (étiquettes) : papier autocollant A4, 4 étiquettes 90×62 mm à découper.
+  Remplis « N° ___ » au stylo doré ou noir fin sur chaque exemplaire.
+</div>
+
+</body>
+</html>
