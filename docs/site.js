@@ -50,7 +50,7 @@
               '<li><a href="privacy.html">Politique de confidentialité</a></li>' +
               '<li><a href="cgv.html">Conditions générales de vente</a></li>' +
               '<li><a href="mentions-legales.html">Mentions légales</a></li>' +
-              '<li><a href="mailto:adel.hanifi@yahoo.fr">adel.hanifi@yahoo.fr</a></li>' +
+              '<li><a href="mailto:contact@adhanbox.fr">contact@adhanbox.fr</a></li>' +
             '</ul>' +
           '</div>' +
         '</div>' +
@@ -149,7 +149,7 @@
       }).catch(function () {
         btn.disabled = false;
         btn.innerHTML = original;
-        alert('Une erreur est survenue. Réessayez ou écrivez à adel.hanifi@yahoo.fr');
+        alert('Une erreur est survenue. Réessayez ou écrivez à contact@adhanbox.fr');
       });
     });
   }
