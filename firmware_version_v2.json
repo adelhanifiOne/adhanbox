@@ -1,6 +1,6 @@
 {
-  "version": "2.3.17",
+  "version": "2.3.18",
   "hardware": "v2",
   "url": "https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/build_temp_v2/adhanbox_v2.ino.bin",
-  "changelog": "Controle foyer etendu : la mosquee de reference (Mawaqit) et la mise a jour du firmware sont desormais accessibles a tous les telephones de la maison, sans reappairage. La securite de l'OTA reste assuree par la signature du firmware. Les actions sensibles (WiFi, suppression audio) restent protegees."
+  "changelog": "Page web de la box simplifiee (depannage : gros bouton d'appairage Bluetooth, config WiFi, test de l'adhan, mise a jour firmware). Reset par power-cycle : debrancher/rebrancher 3 fois rapidement (chaque cycle < 10 s) force le mode appairage - pratique pour recuperer une box injoignable par l'app."
 }

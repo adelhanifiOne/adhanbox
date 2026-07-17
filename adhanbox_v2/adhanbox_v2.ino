@@ -2,7 +2,7 @@
 // - Starts an AP when a long-press is detected on CONFIG_BUTTON_PIN
 // - Serves a small webpage that requests navigator.geolocation and POSTs lat/lon
 // - Stores lat/lon/accuracy/timestamp in Preferences (NVS)
-//Version: 2.3.17 (AdhanBox V2 / HW v2)
+//Version: 2.3.18 (AdhanBox V2 / HW v2)
 #include <Arduino.h>
 #include <Wire.h>
 #include <WiFi.h>
@@ -379,6 +379,13 @@ bool forcePlayTrack1 = false;
 // re-initialise PAS a chaque reboot ; c'est ce qui lui permet de survivre au restart.
 #define PAIR_BOOT_MAGIC 0x50414952UL  // "PAIR"
 RTC_NOINIT_ATTR uint32_t g_pairBootMagic;
+// [RESET FOYER] Reset par power-cycle : débrancher/rebrancher 3x rapidement
+// (chaque cycle < 10 s d'allumage) force le mode appairage. Le compteur est
+// stocké en NVS (flash) car elle survit à la coupure d'alimentation,
+// contrairement à la mémoire RTC. g_forcePairing est armé au boot ; le compteur
+// est remis à zéro par loop() une fois la box allumée > 10 s.
+bool g_forcePairing = false;
+bool g_pcycleCleared = false;
 // Global LED brightness (0-100, default 50%)
 int ledBrightness = 50;
 // Track sequence: adhan plays first, then duaa (track 1) plays after adhan finishes
@@ -1403,7 +1410,7 @@ void handleOtaUploadComplete() {
 // GET /api/firmware/version
 void handleFirmwareVersion() {
   server.send(200, "application/json",
-              "{\"version\":\"2.3.17\",\"hardware\":\"v2\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
+              "{\"version\":\"2.3.18\",\"hardware\":\"v2\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
 }
 
 // Returns true if the request carries the correct API key (or if token not yet set).
@@ -1435,11 +1442,11 @@ void handleDeviceInfo() {
   char buf[512];
   if (pairingWindow || hasValidToken) {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"2.3.17\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
+             "{\"version\":\"2.3.18\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
              OTA_HOSTNAME, _apiToken.c_str(), _otaPass.c_str());
   } else {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"2.3.17\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"paired\":true}",
+             "{\"version\":\"2.3.18\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"paired\":true}",
              OTA_HOSTNAME);
   }
   server.send(200, "application/json", buf);
@@ -3785,7 +3792,7 @@ void v2Tick() {
 void setup() {
   Serial.begin(115200);
   delay(100);
-  Serial.println("AdhanBox V2 firmware v2.3.17 starting...");
+  Serial.println("AdhanBox V2 firmware v2.3.18 starting...");
 
   // [SECU] Watchdog materiel : on REGLE juste le timeout ici (30s, reboot sur
   // panic) et on DESABONNE les taches idle. L'abonnement de la tache loop() se
@@ -3797,6 +3804,24 @@ void setup() {
   }
 
   pinMode(CONFIG_BUTTON_PIN, INPUT_PULLUP);
+
+  // [RESET FOYER] Compteur de power-cycle : incrémenté à chaque boot. Au 3e
+  // débranchement/rebranchement rapide, on force le mode appairage (utile si la
+  // box est "coincée" sur un WiFi et injoignable par l'app). loop() remet le
+  // compteur à zéro après 10 s d'allumage -> un reboot normal ne s'accumule pas.
+  {
+    prefs.begin("adhancfg", false);
+    int pc = prefs.getInt("pcycle", 0) + 1;
+    if (pc >= 3) {
+      prefs.putInt("pcycle", 0);
+      g_forcePairing = true;
+      Serial.println("[RESET FOYER] 3 power-cycles detectes -> mode appairage force");
+    } else {
+      prefs.putInt("pcycle", pc);
+      Serial.printf("[RESET FOYER] power-cycle #%d (3 rapides = appairage)\n", pc);
+    }
+    prefs.end();
+  }
 
   // Charge les preferences NVS
   prefs.begin("adhancfg", true);
@@ -3985,7 +4010,7 @@ void setup() {
   // ou connexion echouee) -> fini les 5 min hors ligne a chaque redemarrage.
   // (mark_valid est deja fait plus haut -> le WDT bootloader ne gene pas cette attente.)
   // pairBoot : demande d'appairage via /api/pair (survit au reboot via memoire RTC).
-  bool pairBoot = (g_pairBootMagic == PAIR_BOOT_MAGIC);
+  bool pairBoot = (g_pairBootMagic == PAIR_BOOT_MAGIC) || g_forcePairing;
   g_pairBootMagic = 0;   // one-shot : consomme
   Serial.printf("Boot: pairBoot=%d\n", pairBoot ? 1 : 0);
 
@@ -4163,6 +4188,16 @@ void loop() {
   esp_task_wdt_reset();
   audio.pump();
   v2Tick();          // [V2] azkar/coran + sync contenu
+
+  // [RESET FOYER] Box allumée > 10 s -> le power-cycle a été "normal", on remet
+  // le compteur à zéro. Seuls 3 débranchements rapprochés (chacun < 10 s)
+  // atteignent 3 et déclenchent l'appairage.
+  if (!g_pcycleCleared && millis() > 10000) {
+    prefs.begin("adhancfg", false);
+    prefs.putInt("pcycle", 0);
+    prefs.end();
+    g_pcycleCleared = true;
+  }
 
   // [V2] Desactive le modem-sleep WiFi des la 1ere connexion (tous chemins :
   // boot, BLE, reconnexion). Le modem-sleep par defaut reveille le WiFi par
