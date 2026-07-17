@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/quran_data.dart';
 import '../providers/adhanbox_provider.dart';
+import '../providers/playback_provider.dart';
 import '../theme/app_theme.dart';
 
 /// Lecteur Coran : choisir un récitateur puis une sourate (jouée sur l'AdhanBox).
@@ -30,7 +31,13 @@ class _QuranPlayerScreenState extends ConsumerState<QuranPlayerScreen> {
       _playing = s.number;
     });
     try {
-      await api.playFile(surahPath(kReciters[_reciter].slug, s.number));
+      // [PLAYER] On construit la file des 114 sourates du récitateur choisi et
+      // on démarre à la sourate cliquée -> la barre de lecture pilote ensuite
+      // pause/reprise/suivant/lecture auto/aléatoire.
+      final slug = kReciters[_reciter].slug;
+      final queue = kSurahs.map((x) => surahPath(slug, x.number)).toList();
+      final index = kSurahs.indexWhere((x) => x.number == s.number);
+      await ref.read(playbackProvider.notifier).playQueue(queue, index < 0 ? 0 : index);
     } catch (e) {
       _playing = null;
       _snack('Lecture impossible (fichier absent sur la carte ?)');

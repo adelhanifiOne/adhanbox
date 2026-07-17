@@ -9,6 +9,7 @@ import 'screens/azkar_coran_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/tutorial_screen.dart';
 import 'theme/app_theme.dart';
+import 'widgets/now_playing_bar.dart';
 
 final themeModeProvider = StateProvider<ThemeMode>((ref) => ThemeMode.dark);
 
@@ -203,7 +204,13 @@ class _MainNavState extends ConsumerState<MainNav> {
 
     return Scaffold(
       body: IndexedStack(index: _index, children: _pages),
-      bottomNavigationBar: Container(
+      // [PLAYER] Barre « en cours de lecture » persistante, juste au-dessus de
+      // la navigation — visible sur tous les onglets sans gêner l'utilisation.
+      bottomNavigationBar: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const NowPlayingBar(),
+          Container(
         decoration: BoxDecoration(
           border: Border(
             top: BorderSide(
@@ -223,6 +230,8 @@ class _MainNavState extends ConsumerState<MainNav> {
             label: item.label,
           )).toList(),
         ),
+          ),
+        ],
       ),
     );
   }

@@ -53,6 +53,33 @@ class _LedControlScreenState extends ConsumerState<LedControlScreen> {
   Future<void> _loadState() async {
     final api = ref.read(adhanboxApiProvider);
     if (api == null) return;
+    // [ETAT REEL] Lit l'état LED complet depuis la box (/api/led/status,
+    // firmware >= 2.3.19) : le bouton power reflète l'état RÉEL dès l'ouverture
+    // et après un changement d'appareil — fini le « éteint » par défaut.
+    try {
+      final st = await api.getLedStatus();
+      if (!mounted) return;
+      setState(() {
+        _brightness = ((st['brightness'] as num?)?.toDouble() ?? _brightness);
+        final custom = st['custom'] == true;
+        final scene = (st['scenario'] as num?)?.toInt() ?? _kSceneOff;
+        if (custom) {
+          final r = (st['r'] as num?)?.toInt() ?? 255;
+          final g = (st['g'] as num?)?.toInt() ?? 200;
+          final b = (st['b'] as num?)?.toInt() ?? 0;
+          _customColor = Color.fromARGB(255, r, g, b);
+          _lastOnColor = _customColor!;
+          if (scene != _kSceneOff) _currentScene = scene;
+        } else {
+          _customColor = null;
+          _currentScene = scene;
+          if (scene != _kSceneOff) _lastOnScene = scene;
+        }
+      });
+      return;
+    } catch (_) {
+      // Firmware plus ancien : on retombe sur la luminosité seule.
+    }
     try {
       final b = await api.getLedBrightness();
       if (mounted) setState(() => _brightness = b.toDouble());
@@ -100,6 +127,11 @@ class _LedControlScreenState extends ConsumerState<LedControlScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // [ETAT REEL] L'écran vit dans l'IndexedStack (jamais recréé) : quand
+    // l'utilisateur change d'AdhanBox, on recharge l'état réel de la nouvelle.
+    ref.listen<String?>(currentDeviceIpProvider, (prev, next) {
+      if (prev != next && next != null) _loadState();
+    });
     final isDark = Theme.of(context).brightness == Brightness.dark;
     // Layout FIXE (pas de scroll) : tout tient a l'ecran et le geste de la roue
     // n'entre plus en conflit avec le defilement de la page.

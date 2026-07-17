@@ -190,6 +190,17 @@ class AdhanBoxAPI {
     } catch (_) {}
   }
 
+  /// [PLAYER] Met la lecture en pause (firmware >= 2.3.19). La position est
+  /// conservée : resumeAudio() reprend où on en était.
+  Future<void> pauseAudio() async {
+    await http.get(Uri.parse('$baseUrl/api/audio/pause')).timeout(timeout);
+  }
+
+  /// [PLAYER] Reprend la lecture après une pause.
+  Future<void> resumeAudio() async {
+    await http.get(Uri.parse('$baseUrl/api/audio/resume')).timeout(timeout);
+  }
+
   /// Joue un fichier par chemin (Coran, azkar…) via /api/audio/play?f=...
   /// Endpoint protege -> on envoie le token en header X-API-Key.
   Future<void> playFile(String path, {int? volume}) async {

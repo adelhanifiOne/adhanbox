@@ -64,6 +64,9 @@ class MawaqitConfigScreen extends ConsumerStatefulWidget {
 
 class _MawaqitConfigScreenState extends ConsumerState<MawaqitConfigScreen> {
   bool _isConfiguring = false;
+  // UUID de la mosquée en cours de synchro : le spinner ne s'affiche QUE sur
+  // la carte cliquée (null = mode « horaires calculés » / fallback).
+  String? _configuringUuid;
   bool _isSearching = false;
   String? _error;
   String? _configuredMosque;
@@ -392,7 +395,7 @@ class _MawaqitConfigScreenState extends ConsumerState<MawaqitConfigScreen> {
       return;
     }
 
-    setState(() { _isConfiguring = true; _error = null; });
+    setState(() { _isConfiguring = true; _configuringUuid = mosque.uuid; _error = null; });
 
     try {
       final token = await _resolveApiToken(deviceIp);
@@ -460,7 +463,7 @@ class _MawaqitConfigScreenState extends ConsumerState<MawaqitConfigScreen> {
     } catch (e) {
       setState(() { _error = e.toString().replaceFirst('Exception: ', ''); });
     } finally {
-      setState(() => _isConfiguring = false);
+      setState(() { _isConfiguring = false; _configuringUuid = null; });
     }
   }
 
@@ -495,7 +498,7 @@ class _MawaqitConfigScreenState extends ConsumerState<MawaqitConfigScreen> {
     } catch (e) {
       setState(() { _error = 'Erreur: $e'; });
     } finally {
-      setState(() => _isConfiguring = false);
+      setState(() { _isConfiguring = false; _configuringUuid = null; });
     }
   }
 
@@ -586,7 +589,7 @@ class _MawaqitConfigScreenState extends ConsumerState<MawaqitConfigScreen> {
                         mosque: mosque,
                         distance: dist,
                         isConfigured: _configuredMosque == mosque.name,
-                        isLoading: _isConfiguring,
+                        isLoading: _configuringUuid == mosque.uuid,
                         isDark: isDark,
                         onTap: _isConfiguring ? null : () => _configureMosque(mosque),
                       )
@@ -609,7 +612,7 @@ class _MawaqitConfigScreenState extends ConsumerState<MawaqitConfigScreen> {
                   _FallbackCard(
                     isDark: isDark,
                     selectedMethod: _selectedCalcMethod,
-                    isLoading: _isConfiguring,
+                    isLoading: _isConfiguring && _configuringUuid == null,
                     onMethodChanged: (v) => setState(() => _selectedCalcMethod = v),
                     onActivate: _activateCalculatedFallback,
                     methods: _calcMethods,

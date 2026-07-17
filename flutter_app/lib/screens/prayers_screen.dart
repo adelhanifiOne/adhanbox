@@ -37,7 +37,7 @@ class _SplashView extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const _MosqueIcon(size: 72)
+            const _AppLogo(size: 72)
                 .animate()
                 .scale(duration: 600.ms, curve: Curves.elasticOut),
             const SizedBox(height: 24),
@@ -71,7 +71,7 @@ class _NoDeviceView extends StatelessWidget {
           child: Column(
             children: [
               const SizedBox(height: 60),
-              const _MosqueIcon(size: 88)
+              const _AppLogo(size: 88)
                   .animate()
                   .scale(duration: 500.ms, curve: Curves.elasticOut)
                   .then()
@@ -257,7 +257,7 @@ class _ConnectedView extends ConsumerWidget {
               ),
               title: Row(
                 children: [
-                  const _MosqueIcon(size: 24, color: Colors.white),
+                  const _AppLogo(size: 24),
                   const SizedBox(width: 10),
                   Text(
                     'AdhanBox',
@@ -938,6 +938,26 @@ class _MosqueIcon extends StatelessWidget {
         shape: BoxShape.circle,
       ),
       child: Icon(Icons.mosque_rounded, size: size * 0.5, color: color),
+    );
+  }
+}
+
+/// Logo officiel de l'app (assets/images/app_logo.png), coins arrondis.
+/// Remplace l'icône mosquée générique sur le splash et l'en-tête.
+class _AppLogo extends StatelessWidget {
+  final double size;
+  const _AppLogo({this.size = 48});
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(size * 0.22),
+      child: Image.asset(
+        'assets/images/app_logo.png',
+        width: size,
+        height: size,
+        fit: BoxFit.cover,
+      ),
     );
   }
 }
