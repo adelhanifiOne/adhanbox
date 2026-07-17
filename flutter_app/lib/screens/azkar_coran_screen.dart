@@ -56,7 +56,16 @@ class _AzkarCoranScreenState extends ConsumerState<AzkarCoranScreen> {
       _error = null;
     });
     try {
-      final api = ref.read(adhanboxApiProvider);
+      // L'IP de l'appareil est renseignee de facon ASYNCHRONE au lancement
+      // (autoReconnect, ~1-3s). Plutot que d'echouer des le 1er affichage, on
+      // attend que l'API soit prete (jusqu'a ~6s) -> la page s'affiche sans avoir
+      // a cliquer "Reessayer".
+      var api = ref.read(adhanboxApiProvider);
+      for (int i = 0; api == null && i < 20; i++) {
+        await Future.delayed(const Duration(milliseconds: 300));
+        if (!mounted) return;
+        api = ref.read(adhanboxApiProvider);
+      }
       if (api == null) throw Exception('Aucun appareil connecté');
       final d = await api.getAzkarCoran();
       void fill(_Item it, String k) {
@@ -279,6 +288,11 @@ class _AzkarCoranScreenState extends ConsumerState<AzkarCoranScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // [ETAT REEL] Recharge les rappels (heures + activés/désactivés) depuis la
+    // box quand on change d'AdhanBox -> réglages exacts de l'appareil sélectionné.
+    ref.listen<String?>(currentDeviceIpProvider, (prev, next) {
+      if (prev != next && next != null) _load();
+    });
     return Scaffold(
       appBar: AppBar(
         title: const Text('Azkar & Coran'),
