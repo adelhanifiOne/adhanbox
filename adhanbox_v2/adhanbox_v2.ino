@@ -2,7 +2,7 @@
 // - Starts an AP when a long-press is detected on CONFIG_BUTTON_PIN
 // - Serves a small webpage that requests navigator.geolocation and POSTs lat/lon
 // - Stores lat/lon/accuracy/timestamp in Preferences (NVS)
-//Version: 2.3.18 (AdhanBox V2 / HW v2)
+//Version: 2.3.19 (AdhanBox V2 / HW v2)
 #include <Arduino.h>
 #include <Wire.h>
 #include <WiFi.h>
@@ -260,6 +260,8 @@ class I2SAudio {
   float gain = 0.5f;
   bool  _sdOk = false;
   uint32_t _sdClock = 0;
+  bool _paused = false;          // [PLAYER] pause logicielle : pump() suspend le decodage
+  char _curPath[64] = {0};       // [PLAYER] fichier en cours (pour /api/audio/status)
  public:
   uint32_t sdClock() const { return _sdClock; }
   // Bench debit SD : lit `bytes` octets d'un fichier existant et renvoie ko/s.
@@ -319,10 +321,24 @@ class I2SAudio {
     if (wav) { wav->stop(); delete wav; wav = nullptr; }
     if (buf) { delete buf; buf = nullptr; }
     if (src) { delete src; src = nullptr; }
+    _paused = false;
+    _curPath[0] = 0;
   }
+  // [PLAYER] Pause/reprise : on suspend simplement le decodage dans pump().
+  // Le DMA I2S se vide (~0.2s) puis silence ; resume() reprend ou on en etait.
+  void pause()  { if (isRunning()) _paused = true; }
+  void resume() { _paused = false; }
+  bool isPaused() const { return _paused; }
+  const char* currentPath() const { return _curPath; }
+  // Position/taille en octets du fichier source (progression approximative,
+  // suffisante pour une barre de lecture ; MP3 CBR -> quasi lineaire).
+  uint32_t posBytes()  { return src ? (uint32_t)src->getPos()  : 0; }
+  uint32_t sizeBytes() { return src ? (uint32_t)src->getSize() : 0; }
   bool playPath(const char *path) {
     stop();
     if (!_sdOk || !SD.exists(path)) return false;
+    strncpy(_curPath, path, sizeof(_curPath) - 1);   // [PLAYER] memorise le fichier
+    _curPath[sizeof(_curPath) - 1] = 0;
     src = new AudioFileSourceSD(path);
     // Buffer fichier 32 Ko (~2s). Le vrai levier n'est pas la taille mais le DEBIT
     // SD (voir SD.begin plus haut) : un buffer plus gros ne fait que retarder si le
@@ -353,6 +369,7 @@ class I2SAudio {
   }
   bool isRunning() { return (mp3 && mp3->isRunning()) || (wav && wav->isRunning()); }
   void pump() {
+    if (_paused) return;   // [PLAYER] en pause : on ne decode plus, la position est conservee
     if (mp3 && mp3->isRunning()) { if (!mp3->loop()) stop(); }
     if (wav && wav->isRunning()) { if (!wav->loop()) stop(); }
   }
@@ -992,6 +1009,48 @@ void handleGetVolume() {
   server.send(200, "application/json", String(buf));
 }
 
+// [PLAYER] GET /api/audio/status — etat de lecture complet pour la barre de
+// lecture de l'app : fichier en cours, position/taille (octets), pause, volume.
+void handleAudioStatus() {
+  prefs.begin("adhancfg", true);
+  int vol = prefs.getInt("volume", 20);
+  prefs.end();
+  char buf[256];
+  snprintf(buf, sizeof(buf),
+           "{\"playing\":%s,\"paused\":%s,\"file\":\"%s\",\"pos\":%lu,\"size\":%lu,\"volume\":%d}",
+           (isPlaying && audio.isRunning()) ? "true" : "false",
+           audio.isPaused() ? "true" : "false",
+           audio.currentPath(),
+           (unsigned long)audio.posBytes(),
+           (unsigned long)audio.sizeBytes(),
+           vol);
+  server.send(200, "application/json", String(buf));
+}
+
+// [PLAYER] GET /api/audio/pause & /api/audio/resume — pause/reprise sans
+// repartir de zero. [CONTROLE FOYER] pas d'auth : tout le foyer peut piloter.
+void handleAudioPause() {
+  audio.pause();
+  server.send(200, "application/json", "{\"ok\":true,\"paused\":true}");
+}
+void handleAudioResume() {
+  audio.resume();
+  server.send(200, "application/json", "{\"ok\":true,\"paused\":false}");
+}
+
+// [ETAT REEL] GET /api/led/status — etat LED complet, ce que l'app lit pour
+// afficher le vrai etat (bouton power correct des l'ouverture).
+void handleLedStatus() {
+  char buf[160];
+  bool on = ledCustomActive || (ledScenario != 0);
+  snprintf(buf, sizeof(buf),
+           "{\"on\":%s,\"scenario\":%d,\"brightness\":%d,\"custom\":%s,\"r\":%d,\"g\":%d,\"b\":%d}",
+           on ? "true" : "false", ledScenario, ledBrightness,
+           ledCustomActive ? "true" : "false",
+           (int)ledCustomR, (int)ledCustomG, (int)ledCustomB);
+  server.send(200, "application/json", String(buf));
+}
+
 // Set brightness via POST JSON {"bright":number}
 void handleSetBrightness() {
   // [SECU] contrôle foyer (luminosité) — ouvert sur le LAN, comme /play
@@ -1410,7 +1469,7 @@ void handleOtaUploadComplete() {
 // GET /api/firmware/version
 void handleFirmwareVersion() {
   server.send(200, "application/json",
-              "{\"version\":\"2.3.18\",\"hardware\":\"v2\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
+              "{\"version\":\"2.3.19\",\"hardware\":\"v2\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
 }
 
 // Returns true if the request carries the correct API key (or if token not yet set).
@@ -1442,11 +1501,11 @@ void handleDeviceInfo() {
   char buf[512];
   if (pairingWindow || hasValidToken) {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"2.3.18\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
+             "{\"version\":\"2.3.19\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
              OTA_HOSTNAME, _apiToken.c_str(), _otaPass.c_str());
   } else {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"2.3.18\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"paired\":true}",
+             "{\"version\":\"2.3.19\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"paired\":true}",
              OTA_HOSTNAME);
   }
   server.send(200, "application/json", buf);
@@ -2594,6 +2653,10 @@ void setupServerRoutes() {
 #endif
   server.on("/api/audio/delete", HTTP_GET, handleAudioDelete);
   server.on("/api/audio/play", HTTP_GET, handlePlayFile);
+  server.on("/api/audio/status", HTTP_GET, handleAudioStatus);   // [PLAYER] etat de lecture
+  server.on("/api/audio/pause", HTTP_GET, handleAudioPause);     // [PLAYER] pause
+  server.on("/api/audio/resume", HTTP_GET, handleAudioResume);   // [PLAYER] reprise
+  server.on("/api/led/status", HTTP_GET, handleLedStatus);       // [ETAT REEL] etat LED complet
   server.on("/api/device/info", HTTP_GET, handleDeviceInfo);
   server.on("/ota/upload", HTTP_POST, handleOtaUploadComplete, handleOtaUpload);
   server.on("/update", HTTP_GET, handleUpdatePage);
@@ -3792,7 +3855,7 @@ void v2Tick() {
 void setup() {
   Serial.begin(115200);
   delay(100);
-  Serial.println("AdhanBox V2 firmware v2.3.18 starting...");
+  Serial.println("AdhanBox V2 firmware v2.3.19 starting...");
 
   // [SECU] Watchdog materiel : on REGLE juste le timeout ici (30s, reboot sur
   // panic) et on DESABONNE les taches idle. L'abonnement de la tache loop() se

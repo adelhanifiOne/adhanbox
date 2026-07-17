@@ -1,6 +1,6 @@
 {
-  "version": "2.3.18",
+  "version": "2.3.19",
   "hardware": "v2",
   "url": "https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/build_temp_v2/adhanbox_v2.ino.bin",
-  "changelog": "Page web de la box simplifiee (depannage : gros bouton d'appairage Bluetooth, config WiFi, test de l'adhan, mise a jour firmware). Reset par power-cycle : debrancher/rebrancher 3 fois rapidement (chaque cycle < 10 s) force le mode appairage - pratique pour recuperer une box injoignable par l'app."
+  "changelog": "Nouveaux endpoints pour l'app : etat de lecture complet (/api/audio/status : fichier, progression, pause, volume), pause/reprise sans repartir de zero (/api/audio/pause, /api/audio/resume), et etat LED complet (/api/led/status) pour que l'app affiche le vrai etat de la box a l'ouverture."
 }
