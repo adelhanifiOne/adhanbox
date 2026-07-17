@@ -1,6 +1,6 @@
 {
-  "version": "2.3.19",
+  "version": "2.3.20",
   "hardware": "v2",
   "url": "https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/build_temp_v2/adhanbox_v2.ino.bin",
-  "changelog": "Nouveaux endpoints pour l'app : etat de lecture complet (/api/audio/status : fichier, progression, pause, volume), pause/reprise sans repartir de zero (/api/audio/pause, /api/audio/resume), et etat LED complet (/api/led/status) pour que l'app affiche le vrai etat de la box a l'ouverture."
+  "changelog": "Reprise de lecture plus propre : warm-up ampli (~0,8 s de silence) a la reprise apres pause -> plus de clic ni de debut de phrase avale a la reprise. Complete les endpoints de lecture (pause/reprise/etat) de la 2.3.19."
 }
