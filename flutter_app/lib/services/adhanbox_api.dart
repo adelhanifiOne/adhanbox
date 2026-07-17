@@ -581,7 +581,9 @@ class AdhanBoxAPI {
           .post(
             Uri.parse('$baseUrl/api/audio/volume'),
             headers: _authHeaders,
-            body: jsonEncode({'level': level}),
+            // Le firmware attend la clé "vol" (comme /set_volume) ; envoyer
+            // "level" renvoyait 400 -> le volume du mini-player ne changeait pas.
+            body: jsonEncode({'vol': level}),
           )
           .timeout(timeout);
 

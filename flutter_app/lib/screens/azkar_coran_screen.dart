@@ -291,7 +291,12 @@ class _AzkarCoranScreenState extends ConsumerState<AzkarCoranScreen> {
     // [ETAT REEL] Recharge les rappels (heures + activés/désactivés) depuis la
     // box quand on change d'AdhanBox -> réglages exacts de l'appareil sélectionné.
     ref.listen<String?>(currentDeviceIpProvider, (prev, next) {
-      if (prev != next && next != null) _load();
+      if (prev != next && next != null) {
+        // Annule toute sauvegarde en attente (débounce) de l'ANCIENNE box :
+        // sinon un réglage modifié juste avant le switch s'écrirait sur la NOUVELLE.
+        _saveTimer?.cancel();
+        _load();
+      }
     });
     return Scaffold(
       appBar: AppBar(
