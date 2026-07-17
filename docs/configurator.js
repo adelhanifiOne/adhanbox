@@ -317,7 +317,7 @@
 
     // ─── Précommande : le bouton final mène au paiement Stripe,
     //     en transmettant la configuration choisie (client_reference_id) ───
-    const STRIPE_PAYMENT_LINK = 'https://buy.stripe.com/4gM6oIaMv6o7doQ9RvfjG00';
+    const STRIPE_PAYMENT_LINK = 'https://buy.stripe.com/00w00kg6P7sb5Woe7LfjG01';
     function slug(s) {
       return (s || '').toLowerCase()
         .normalize('NFD').replace(/[̀-ͯ]/g, '')
@@ -337,6 +337,6 @@
       }
       const cta = document.getElementById('config-cta');
       cta.href = STRIPE_PAYMENT_LINK + '?client_reference_id=' + encodeURIComponent(ref);
-      cta.textContent = 'Précommander cette configuration — 119 €';
+      cta.textContent = 'Précommander cette configuration — 95 €';
     }
     updateQuoteLink();
