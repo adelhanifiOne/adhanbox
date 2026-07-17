@@ -1,6 +1,6 @@
 {
-  "version": "2.3.20",
+  "version": "2.3.21",
   "hardware": "v2",
   "url": "https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/build_temp_v2/adhanbox_v2.ino.bin",
-  "changelog": "Reprise de lecture plus propre : warm-up ampli (~0,8 s de silence) a la reprise apres pause -> plus de clic ni de debut de phrase avale a la reprise. Complete les endpoints de lecture (pause/reprise/etat) de la 2.3.19."
+  "changelog": "Correction du son de 'disque raye' a la pause : en pause, la box alimente desormais la sortie audio en silence au lieu de laisser le peripherique I2S reboucler le dernier tampon. Reprise immediate et propre."
 }

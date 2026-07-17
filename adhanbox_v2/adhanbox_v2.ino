@@ -2,7 +2,7 @@
 // - Starts an AP when a long-press is detected on CONFIG_BUTTON_PIN
 // - Serves a small webpage that requests navigator.geolocation and POSTs lat/lon
 // - Stores lat/lon/accuracy/timestamp in Preferences (NVS)
-//Version: 2.3.20 (AdhanBox V2 / HW v2)
+//Version: 2.3.21 (AdhanBox V2 / HW v2)
 #include <Arduino.h>
 #include <Wire.h>
 #include <WiFi.h>
@@ -324,24 +324,13 @@ class I2SAudio {
     _paused = false;
     _curPath[0] = 0;
   }
-  // [PLAYER] Pause/reprise : on suspend simplement le decodage dans pump().
-  // Le DMA I2S se vide (~0.2s) puis silence ; resume() reprend ou on en etait.
+  // [PLAYER] Pause/reprise : on suspend le DECODAGE (position conservee) mais
+  // pump() continue d'alimenter le DMA I2S en SILENCE (voir pump). Sans ce
+  // silence, le peripherique I2S rebouclait le dernier tampon -> son de "disque
+  // raye". Le flux de silence garde aussi l'ampli synchronise (BCLK continue),
+  // donc la reprise est immediate et propre, sans warm-up ni clic.
   void pause()  { if (isRunning()) _paused = true; }
-  void resume() {
-    if (!_paused) return;
-    // [PLAYER] Warm-up ampli a la reprise : pendant la pause le MAX98357A perd
-    // son horloge BCLK et se met en veille. On lui renvoie ~800ms de silence
-    // AVANT de reprendre le decodage -> il se resynchronise proprement, sans
-    // clic ni debut de phrase avale (meme principe qu'au demarrage d'un fichier).
-    if (out && isRunning()) {
-      int16_t silence[2] = {0, 0};
-      unsigned long t0 = millis();
-      while (millis() - t0 < 800) {
-        if (!out->ConsumeSample(silence)) delay(1);
-      }
-    }
-    _paused = false;
-  }
+  void resume() { _paused = false; }
   bool isPaused() const { return _paused; }
   const char* currentPath() const { return _curPath; }
   // Position/taille en octets du fichier source (progression approximative,
@@ -383,7 +372,14 @@ class I2SAudio {
   }
   bool isRunning() { return (mp3 && mp3->isRunning()) || (wav && wav->isRunning()); }
   void pump() {
-    if (_paused) return;   // [PLAYER] en pause : on ne decode plus, la position est conservee
+    if (_paused) {
+      // [PLAYER] En pause : on ne decode plus (position conservee), mais on
+      // REMPLIT le DMA I2S de silence pour eviter que le peripherique reboucle
+      // le dernier tampon (son de "disque raye"). ConsumeSample renvoie false
+      // quand le tampon est plein -> boucle bornee, non bloquante.
+      if (out) { int16_t s[2] = {0, 0}; while (out->ConsumeSample(s)) {} }
+      return;
+    }
     if (mp3 && mp3->isRunning()) { if (!mp3->loop()) stop(); }
     if (wav && wav->isRunning()) { if (!wav->loop()) stop(); }
   }
@@ -1483,7 +1479,7 @@ void handleOtaUploadComplete() {
 // GET /api/firmware/version
 void handleFirmwareVersion() {
   server.send(200, "application/json",
-              "{\"version\":\"2.3.20\",\"hardware\":\"v2\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
+              "{\"version\":\"2.3.21\",\"hardware\":\"v2\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
 }
 
 // Returns true if the request carries the correct API key (or if token not yet set).
@@ -1515,11 +1511,11 @@ void handleDeviceInfo() {
   char buf[512];
   if (pairingWindow || hasValidToken) {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"2.3.20\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
+             "{\"version\":\"2.3.21\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
              OTA_HOSTNAME, _apiToken.c_str(), _otaPass.c_str());
   } else {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"2.3.20\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"paired\":true}",
+             "{\"version\":\"2.3.21\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"paired\":true}",
              OTA_HOSTNAME);
   }
   server.send(200, "application/json", buf);
@@ -3869,7 +3865,7 @@ void v2Tick() {
 void setup() {
   Serial.begin(115200);
   delay(100);
-  Serial.println("AdhanBox V2 firmware v2.3.20 starting...");
+  Serial.println("AdhanBox V2 firmware v2.3.21 starting...");
 
   // [SECU] Watchdog materiel : on REGLE juste le timeout ici (30s, reboot sur
   // panic) et on DESABONNE les taches idle. L'abonnement de la tache loop() se
