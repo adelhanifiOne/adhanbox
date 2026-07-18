@@ -5,6 +5,9 @@
 //   2. notification « nouvelle commande » à contact@adhanbox.fr.
 // Emails envoyés via Resend. Si RESEND_API_KEY est absente, le webhook
 // répond 200 sans rien envoyer (le reçu Stripe standard part quand même).
+//
+// Signature Node (req, res), helpers désactivés (NODEJS_HELPERS=0) : on lit
+// le corps BRUT du flux — indispensable pour vérifier la signature Stripe.
 import Stripe from 'stripe';
 import { Resend } from 'resend';
 
@@ -17,6 +20,12 @@ const FROM_EMAIL = process.env.FROM_EMAIL || 'AdhanBox <commande@adhanbox.fr>';
 
 const euros = (cents) =>
   (cents / 100).toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' });
+
+async function readRawBody(req) {
+  const chunks = [];
+  for await (const c of req) chunks.push(c);
+  return Buffer.concat(chunks);
+}
 
 function addressHtml(name, a) {
   if (!a) return '';
@@ -109,25 +118,32 @@ function sellerEmailHtml({ ref, config, amount, name, email, phone, shipTo, piId
 </div>`;
 }
 
-export default async function handler(request) {
-  if (request.method !== 'POST') return new Response('Method Not Allowed', { status: 405 });
+export default async function handler(req, res) {
+  if (req.method !== 'POST') { res.statusCode = 405; return res.end('Method Not Allowed'); }
 
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
-  const rawBody = await request.text();
-  const signature = request.headers.get('stripe-signature');
+  const rawBody = await readRawBody(req);
+  const signature = req.headers['stripe-signature'];
 
   let event;
   try {
     event = stripe.webhooks.constructEvent(rawBody, signature, process.env.STRIPE_WEBHOOK_SECRET);
   } catch (err) {
     console.error('webhook signature invalide:', err && err.message);
-    return new Response('Signature invalide', { status: 400 });
+    res.statusCode = 400;
+    return res.end('Signature invalide');
   }
+
+  const done = (obj) => {
+    res.statusCode = 200;
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify(obj));
+  };
 
   const isPaid =
     (event.type === 'checkout.session.completed' && event.data.object.payment_status === 'paid') ||
     event.type === 'checkout.session.async_payment_succeeded';
-  if (!isPaid) return Response.json({ received: true });
+  if (!isPaid) return done({ received: true });
 
   const session = event.data.object;
   const details = session.customer_details || {};
@@ -141,7 +157,7 @@ export default async function handler(request) {
 
   if (!process.env.RESEND_API_KEY) {
     console.log('RESEND_API_KEY absente — emails non envoyés. Commande:', ref, config);
-    return Response.json({ received: true, emails: 'skipped' });
+    return done({ received: true, emails: 'skipped' });
   }
 
   const resend = new Resend(process.env.RESEND_API_KEY);
@@ -177,5 +193,5 @@ export default async function handler(request) {
     console.error('email vendeur échoué:', err && err.message);
   }
 
-  return Response.json({ received: true });
+  return done({ received: true });
 }

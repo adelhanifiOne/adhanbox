@@ -3,6 +3,10 @@
 // adhanbox.fr/personnaliser.html : le client ne choisit qu'UNE fois (sur le
 // site), et la config est visible partout (page de paiement, dashboard,
 // reçu, email de confirmation) via le nom de l'article + les métadonnées.
+//
+// Signature Node (req, res) — les fonctions Vercel de ce projet tournent
+// SANS les helpers (@vercel/node, NODEJS_HELPERS=0) : lecture du flux et
+// réponses en Node pur, comportement identique en local et en prod.
 import Stripe from 'stripe';
 
 // Palette alignée sur docs/configurator.js (10 couleurs).
@@ -22,34 +26,39 @@ const SITE = process.env.SITE_URL || 'https://adhanbox.fr';
 // via la variable d'environnement AMOUNT_CENTS (puis redéployer).
 const AMOUNT_CENTS = parseInt(process.env.AMOUNT_CENTS || '9500', 10);
 
-function corsHeaders(request) {
-  const origin = request.headers.get('origin') || '';
-  const h = {
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
-    'Vary': 'Origin',
-  };
-  if (ALLOWED_ORIGINS.includes(origin)) h['Access-Control-Allow-Origin'] = origin;
-  return h;
+async function readJson(req) {
+  const chunks = [];
+  for await (const c of req) chunks.push(c);
+  try { return JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { return {}; }
 }
 
-export default async function handler(request) {
-  const cors = corsHeaders(request);
-  if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
-  if (request.method !== 'POST') {
-    return Response.json({ error: 'Méthode non autorisée' }, { status: 405, headers: cors });
-  }
+function applyCors(req, res) {
+  const origin = req.headers.origin || '';
+  if (ALLOWED_ORIGINS.includes(origin)) res.setHeader('Access-Control-Allow-Origin', origin);
+  res.setHeader('Vary', 'Origin');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+}
 
-  let body;
-  try { body = await request.json(); } catch { body = {}; }
+function sendJson(res, status, obj) {
+  res.statusCode = status;
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  res.end(JSON.stringify(obj));
+}
 
+export default async function handler(req, res) {
+  applyCors(req, res);
+  if (req.method === 'OPTIONS') { res.statusCode = 204; return res.end(); }
+  if (req.method !== 'POST') return sendJson(res, 405, { error: 'Méthode non autorisée' });
+
+  const body = await readJson(req);
   const chassis = PALETTE[body.finish];
   const m = parseInt(body.mandala, 10);
   const motifColor = PALETTE[body.mandalaColor];
   // Validation stricte côté serveur : le prix et les options ne peuvent pas
   // être manipulés depuis le navigateur.
   if (!chassis || !(m >= 0 && m <= 5) || (m > 0 && !motifColor)) {
-    return Response.json({ error: 'Configuration invalide' }, { status: 400, headers: cors });
+    return sendJson(res, 400, { error: 'Configuration invalide' });
   }
 
   const configLabel = m === 0
@@ -92,9 +101,9 @@ export default async function handler(request) {
       cancel_url: `${SITE}/personnaliser.html`,
     });
 
-    return Response.json({ url: session.url }, { status: 200, headers: cors });
+    return sendJson(res, 200, { url: session.url });
   } catch (err) {
     console.error('checkout error:', err && err.message);
-    return Response.json({ error: 'Erreur serveur — réessayez.' }, { status: 500, headers: cors });
+    return sendJson(res, 500, { error: 'Erreur serveur — réessayez.' });
   }
 }
