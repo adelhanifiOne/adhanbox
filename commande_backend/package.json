@@ -1,0 +1,9 @@
+{
+  "name": "adhanbox-commande",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "stripe": "^18.0.0",
+    "resend": "^4.0.0"
+  }
+}

@@ -313,8 +313,11 @@
       });
     });
 
-    // ─── Précommande : le bouton final mène au paiement Stripe,
-    //     en transmettant la configuration choisie (client_reference_id) ───
+    // ─── Précommande : le bouton crée la commande via le backend
+    //     (config transmise UNE fois, visible dans Stripe + email de
+    //     confirmation personnalisé). Si le backend est indisponible,
+    //     secours automatique : Payment Link direct (client_reference_id).
+    const CHECKOUT_BACKEND = 'https://adhanbox-commande.vercel.app';
     const STRIPE_PAYMENT_LINK = 'https://buy.stripe.com/00w00kg6P7sb5Woe7LfjG01';
     function slug(s) {
       return (s || '').toLowerCase()
@@ -338,3 +341,35 @@
       cta.textContent = 'Précommander cette configuration — 95 €';
     }
     updateQuoteLink();
+
+    // Paiement via le backend : on intercepte le clic, on crée la session
+    // Checkout (config incluse) puis on redirige. En cas d'échec (backend
+    // down, réseau), on laisse suivre le lien Stripe de secours (cta.href).
+    document.getElementById('config-cta').addEventListener('click', function (e) {
+      const cta = e.currentTarget;
+      if (!CHECKOUT_BACKEND || cta.dataset.busy) return; // secours : lien direct
+      e.preventDefault();
+      cta.dataset.busy = '1';
+      const prevText = cta.textContent;
+      cta.textContent = 'Ouverture du paiement sécurisé…';
+      fetch(CHECKOUT_BACKEND + '/api/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          finish: state.finish,
+          mandala: state.mandala,
+          mandalaColor: state.mandalaColor
+        })
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          if (d && d.url) { window.location.href = d.url; }
+          else { throw new Error((d && d.error) || 'réponse invalide'); }
+        })
+        .catch(function () {
+          // Secours : Payment Link direct (la config passe en client_reference_id)
+          delete cta.dataset.busy;
+          cta.textContent = prevText;
+          window.location.href = cta.href;
+        });
+    });
