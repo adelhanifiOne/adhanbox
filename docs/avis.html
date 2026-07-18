@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Avis clients — AdhanBox</title>
+  <meta name="description" content="Les avis de celles et ceux qui utilisent — ou ont testé — l'AdhanBox. Laissez le vôtre : quelques mots suffisent.">
+  <meta name="theme-color" content="#0C5B45">
+  <link rel="canonical" href="https://adhanbox.fr/avis.html">
+  <meta name="robots" content="index, follow, max-image-preview:large">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="AdhanBox">
+  <meta property="og:url" content="https://adhanbox.fr/avis.html">
+  <meta property="og:title" content="Avis clients — AdhanBox">
+  <meta property="og:description" content="Les avis de celles et ceux qui utilisent l'AdhanBox. Laissez le vôtre.">
+  <meta property="og:locale" content="fr_FR">
+  <meta property="og:image" content="https://adhanbox.fr/og-adhanbox.jpg">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:image" content="https://adhanbox.fr/og-adhanbox.jpg">
+  <link rel="icon" type="image/png" href="logo-app.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=Amiri:wght@400;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <script defer src="site.js"></script>
+  <script defer src="pixel.js"></script>
+  <style>
+    /* ── Spécifique à la page Avis ── */
+    .avis-summary { display:flex; align-items:center; justify-content:center; gap:16px; flex-wrap:wrap; margin-top:22px; }
+    .avis-summary .big { font-size:2.6rem; font-weight:800; color:var(--emerald); line-height:1; font-family:'Fraunces',serif; }
+    .stars { color:#C9A227; letter-spacing:2px; font-size:1.15rem; }
+    .stars .empty { color:#DBD3C2; }
+    .avis-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:20px; margin-top:38px; }
+    .avis-card { background:#fff; border:1px solid rgba(0,0,0,.08); border-radius:16px; padding:22px 24px; box-shadow:0 6px 22px rgba(0,0,0,.04); }
+    .avis-card .txt { font-style:italic; color:#333; line-height:1.6; margin:12px 0 16px; }
+    .avis-card .who { font-weight:700; color:var(--emerald); }
+    .avis-card .where { color:#9a9a9a; font-weight:500; }
+    .badge-verifie { display:inline-flex; align-items:center; gap:5px; font-size:.72rem; font-weight:700; color:var(--emerald); background:var(--emerald-soft); border-radius:999px; padding:3px 9px; margin-top:10px; }
+    .avis-empty { text-align:center; color:#888; padding:26px 0 0; }
+
+    /* Formulaire */
+    .avis-form-wrap { max-width:620px; margin:0 auto; background:#fff; border:1px solid rgba(0,0,0,.08); border-radius:18px; padding:32px 30px; box-shadow:0 8px 30px rgba(0,0,0,.05); }
+    .avis-form label { display:block; font-weight:600; color:var(--ink); margin:16px 0 6px; font-size:.95rem; }
+    .avis-form input, .avis-form textarea { width:100%; box-sizing:border-box; border:1px solid #d7d2c7; border-radius:10px; padding:12px 14px; font:inherit; color:var(--ink); background:#fbfaf7; }
+    .avis-form input:focus, .avis-form textarea:focus { outline:none; border-color:var(--emerald); box-shadow:0 0 0 3px rgba(12,91,69,.12); }
+    .avis-form textarea { min-height:120px; resize:vertical; }
+    .avis-form .hint { color:#9a9a9a; font-size:.82rem; margin-top:4px; }
+    .avis-form .row2 { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+    @media (max-width:520px){ .avis-form .row2 { grid-template-columns:1fr; } }
+    .hp { position:absolute; left:-9999px; opacity:0; height:0; overflow:hidden; }
+
+    /* Sélecteur d'étoiles (row-reverse : le CSS :checked ~ label colore les précédentes) */
+    .star-pick { display:inline-flex; flex-direction:row-reverse; gap:4px; font-size:2rem; line-height:1; }
+    .star-pick input { position:absolute; opacity:0; width:0; height:0; }
+    .star-pick label { cursor:pointer; color:#DBD3C2; transition:color .12s; margin:0; }
+    .star-pick label:hover, .star-pick label:hover ~ label,
+    .star-pick input:checked ~ label { color:#C9A227; }
+    .star-pick input:focus-visible + label { outline:2px solid var(--emerald); outline-offset:3px; border-radius:4px; }
+
+    .avis-msg { text-align:center; border-radius:12px; padding:16px 18px; margin-top:18px; font-weight:600; display:none; }
+    .avis-msg.ok { display:block; background:var(--emerald-soft); color:var(--emerald); }
+    .avis-msg.err { display:block; background:#FBEAEA; color:#B23A3A; }
+    .avis-legal { text-align:center; color:#9a9a9a; font-size:.8rem; max-width:560px; margin:24px auto 0; line-height:1.6; }
+    .avis-form-section { background:var(--emerald-soft); }
+  </style>
+</head>
+<body data-page="avis">
+  <main>
+
+  <!-- ── En-tête + liste des avis ── -->
+  <section id="avis" class="first-section">
+    <div class="container">
+      <div class="section-head reveal">
+        <div class="eyebrow">Avis vérifiés &amp; testeurs</div>
+        <h2>Ce qu'en disent celles et ceux <em>qui l'utilisent</em></h2>
+        <p>Clients comme testeurs — chaque avis est le bienvenu. Publiés après une courte modération, jamais retouchés.</p>
+        <div class="avis-summary" id="avis-summary" hidden>
+          <span class="big" id="avis-avg">—</span>
+          <span style="text-align:left;">
+            <span class="stars" id="avis-avg-stars"></span><br>
+            <span style="color:#777;font-size:.9rem;" id="avis-count"></span>
+          </span>
+        </div>
+      </div>
+
+      <div class="avis-grid" id="avis-grid"></div>
+      <p class="avis-empty" id="avis-empty" hidden>Soyez la première personne à laisser un avis 🌙</p>
+    </div>
+  </section>
+
+  <!-- ── Formulaire ── -->
+  <section id="laisser-avis" class="avis-form-section">
+    <div class="container">
+      <div class="section-head reveal">
+        <div class="eyebrow">Votre tour</div>
+        <h2>Laissez votre <em>avis</em></h2>
+        <p>Vous avez reçu votre AdhanBox, ou vous avez pu la tester ? Partagez votre ressenti en quelques mots.</p>
+      </div>
+
+      <div class="avis-form-wrap reveal">
+        <form id="avis-form" class="avis-form" novalidate>
+          <label id="note-label">Votre note</label>
+          <div class="star-pick" role="radiogroup" aria-labelledby="note-label">
+            <input type="radio" name="note" id="n5" value="5"><label for="n5" title="5 étoiles" aria-label="5 étoiles">★</label>
+            <input type="radio" name="note" id="n4" value="4"><label for="n4" title="4 étoiles" aria-label="4 étoiles">★</label>
+            <input type="radio" name="note" id="n3" value="3"><label for="n3" title="3 étoiles" aria-label="3 étoiles">★</label>
+            <input type="radio" name="note" id="n2" value="2"><label for="n2" title="2 étoiles" aria-label="2 étoiles">★</label>
+            <input type="radio" name="note" id="n1" value="1"><label for="n1" title="1 étoile" aria-label="1 étoile">★</label>
+          </div>
+
+          <label for="f-texte">Votre avis</label>
+          <textarea id="f-texte" name="texte" maxlength="1000" placeholder="Ce que vous avez ressenti, ce que vous aimez, à qui vous la conseilleriez…" required></textarea>
+          <div class="hint">Entre 10 et 1000 caractères, sans lien.</div>
+
+          <div class="row2">
+            <div>
+              <label for="f-prenom">Prénom</label>
+              <input type="text" id="f-prenom" name="prenom" maxlength="40" placeholder="Karim" required autocomplete="given-name">
+            </div>
+            <div>
+              <label for="f-ville">Ville <span style="font-weight:400;color:#9a9a9a;">(facultatif)</span></label>
+              <input type="text" id="f-ville" name="ville" maxlength="60" placeholder="Lyon" autocomplete="address-level2">
+            </div>
+          </div>
+
+          <label for="f-email">Email <span style="font-weight:400;color:#9a9a9a;">(facultatif — jamais publié)</span></label>
+          <input type="email" id="f-email" name="email" maxlength="120" placeholder="vous@email.fr" autocomplete="email">
+          <div class="hint">Si votre email correspond à une commande, votre avis affichera le badge « Acheteur vérifié ».</div>
+
+          <!-- Piège à bots : ne pas remplir -->
+          <div class="hp" aria-hidden="true">
+            <label for="f-hp">Ne pas remplir</label>
+            <input type="text" id="f-hp" name="hp" tabindex="-1" autocomplete="off">
+          </div>
+
+          <div style="margin-top:26px;text-align:center;">
+            <button type="submit" class="btn btn-gold" id="avis-submit">Publier mon avis</button>
+          </div>
+
+          <div class="avis-msg" id="avis-msg" role="status"></div>
+        </form>
+
+        <p class="avis-legal">
+          Les avis sont publiés après vérification manuelle pour écarter le spam, sans jamais modifier vos mots.
+          Le badge « Acheteur vérifié » est attribué automatiquement lorsque l'email fourni correspond à une commande réglée.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  </main>
+
+<script>
+(function () {
+  var API = 'https://adhanbox-commande.vercel.app';
+
+  function starsHtml(n) {
+    var full = Math.round(n), out = '';
+    for (var i = 1; i <= 5; i++) out += i <= full ? '★' : '<span class="empty">★</span>';
+    return out;
+  }
+
+  // ── Chargement et rendu des avis approuvés ──
+  fetch(API + '/api/reviews')
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      var grid = document.getElementById('avis-grid');
+      var reviews = (data && data.reviews) || [];
+
+      if (!reviews.length) { document.getElementById('avis-empty').hidden = false; return; }
+
+      var sum = document.getElementById('avis-summary');
+      sum.hidden = false;
+      document.getElementById('avis-avg').textContent = String(data.average || 0).replace('.', ',');
+      document.getElementById('avis-avg-stars').innerHTML = starsHtml(data.average || 0);
+      document.getElementById('avis-count').textContent = data.count + (data.count > 1 ? ' avis publiés' : ' avis publié');
+
+      reviews.forEach(function (rv) {
+        var card = document.createElement('article');
+        card.className = 'avis-card';
+
+        var stars = document.createElement('div');
+        stars.className = 'stars';
+        stars.innerHTML = starsHtml(rv.note);
+        card.appendChild(stars);
+
+        var txt = document.createElement('p');
+        txt.className = 'txt';
+        txt.textContent = '« ' + rv.texte + ' »';   // textContent = anti-XSS
+        card.appendChild(txt);
+
+        var who = document.createElement('div');
+        var w1 = document.createElement('span'); w1.className = 'who'; w1.textContent = rv.prenom || 'Anonyme';
+        who.appendChild(w1);
+        if (rv.ville) { var w2 = document.createElement('span'); w2.className = 'where'; w2.textContent = ' · ' + rv.ville; who.appendChild(w2); }
+        card.appendChild(who);
+
+        if (rv.verifie) {
+          var b = document.createElement('div');
+          b.className = 'badge-verifie';
+          b.textContent = '✔ Acheteur vérifié';
+          card.appendChild(b);
+        }
+        grid.appendChild(card);
+      });
+    })
+    .catch(function () { document.getElementById('avis-empty').hidden = false; });
+
+  // ── Envoi du formulaire ──
+  var form = document.getElementById('avis-form');
+  var msg = document.getElementById('avis-msg');
+  var btn = document.getElementById('avis-submit');
+
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    msg.className = 'avis-msg';
+
+    var noteEl = form.querySelector('input[name="note"]:checked');
+    var note = noteEl ? noteEl.value : '';
+    var texte = form.texte.value.trim();
+    var prenom = form.prenom.value.trim();
+
+    if (!note) { return show('err', 'Choisissez une note (1 à 5 étoiles).'); }
+    if (texte.length < 10) { return show('err', 'Votre avis est un peu court (10 caractères minimum).'); }
+    if (!prenom) { return show('err', 'Merci d\'indiquer votre prénom.'); }
+
+    var original = btn.textContent;
+    btn.disabled = true; btn.textContent = 'Envoi…';
+
+    fetch(API + '/api/review', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        note: parseInt(note, 10),
+        texte: texte,
+        prenom: prenom,
+        ville: form.ville.value.trim(),
+        email: form.email.value.trim(),
+        hp: form.hp.value
+      })
+    })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+      .then(function (res) {
+        btn.disabled = false; btn.textContent = original;
+        if (res.ok && res.j.ok) {
+          form.reset();
+          show('ok', 'Merci ! 🌙 Votre avis a bien été reçu. Il apparaîtra après validation.');
+        } else {
+          show('err', (res.j && res.j.error) || 'Une erreur est survenue. Réessayez.');
+        }
+      })
+      .catch(function () {
+        btn.disabled = false; btn.textContent = original;
+        show('err', 'Une erreur réseau est survenue. Réessayez ou écrivez à contact@adhanbox.fr');
+      });
+  });
+
+  function show(kind, text) {
+    msg.className = 'avis-msg ' + kind;
+    msg.textContent = text;
+    msg.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+})();
+</script>
+</body>
+</html>

@@ -22,6 +22,7 @@
         '<a href="index.html" data-nav="accueil">Accueil</a>' +
         '<a href="personnaliser.html" data-nav="personnaliser">Personnaliser</a>' +
         '<a href="produit.html" data-nav="produit">Le produit</a>' +
+        '<a href="avis.html" data-nav="avis">Avis</a>' +
         '<a href="faq.html" data-nav="faq">FAQ</a>' +
         '<a href="contact.html" data-nav="contact">Contact</a>' +
       '</nav>' +
@@ -40,6 +41,7 @@
             '<ul>' +
               '<li><a href="personnaliser.html">Personnaliser</a></li>' +
               '<li><a href="produit.html">Le produit</a></li>' +
+              '<li><a href="avis.html">Avis</a></li>' +
               '<li><a href="faq.html">FAQ</a></li>' +
               '<li><a href="contact.html">Contact</a></li>' +
             '</ul>' +

@@ -318,6 +318,7 @@
     <ul class="nav-links">
       <li><a href="#experience">L'expérience</a></li>
       <li><a href="personnaliser.html">Personnaliser</a></li>
+      <li><a href="avis.html">Avis</a></li>
       <li><a href="#faq">Questions</a></li>
       <li><a href="contact.html">Contact</a></li>
     </ul>
@@ -455,51 +456,22 @@
   </div>
 </section>
 
-<!-- ── ILS L'UTILISENT DÉJÀ ──
-     Section PRÊTE, à activer dès que les vrais témoignages sont là :
-     1. Remplacer chaque [PRÉNOM], [VILLE] et [TÉMOIGNAGE] par du VRAI
-        (jamais de faux avis — c'est illégal et ça se voit).
-     2. Déposer les photos dans docs/temoignages/ (t1.jpg, t2.jpg, t3.jpg,
-        format paysage, ~1200px de large).
-     3. Retirer les balises de commentaire autour de la section.
-
-<section class="block" id="temoignages">
+<!-- ── ILS L'UTILISENT DÉJÀ (avis dynamiques) ──
+     Alimentée automatiquement par les avis approuvés (backend /api/reviews).
+     Reste masquée tant qu'aucun avis n'est publié. Gestion : adhanbox.fr/avis.html -->
+<section class="block" id="temoignages" hidden>
   <div class="container">
     <div class="center">
       <p class="eyebrow">Ils l'utilisent déjà</p>
       <h2>Dans de vrais <em>foyers</em>, chaque jour</h2>
-      <p class="lead">Les premières AdhanBox rythment déjà les prières de plusieurs familles en France.</p>
+      <p class="lead" id="temoignages-lead">Ce qu'en disent celles et ceux qui vivent avec l'AdhanBox.</p>
     </div>
-    <div class="reveal" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:22px;margin-top:34px;">
-
-      <figure style="margin:0;background:var(--card,#fff);border:1px solid rgba(0,0,0,.08);border-radius:16px;overflow:hidden;">
-        <img src="temoignages/t1.jpg" alt="AdhanBox dans le salon de [PRÉNOM]" loading="lazy" style="width:100%;aspect-ratio:4/3;object-fit:cover;">
-        <figcaption style="padding:18px 20px;">
-          <p style="margin:0 0 10px;font-style:italic;">« [TÉMOIGNAGE — 1 à 2 phrases, dans ses mots à elle/lui] »</p>
-          <p style="margin:0;font-weight:600;color:#0C5B45;">[PRÉNOM] · [VILLE]</p>
-        </figcaption>
-      </figure>
-
-      <figure style="margin:0;background:var(--card,#fff);border:1px solid rgba(0,0,0,.08);border-radius:16px;overflow:hidden;">
-        <img src="temoignages/t2.jpg" alt="AdhanBox chez [PRÉNOM]" loading="lazy" style="width:100%;aspect-ratio:4/3;object-fit:cover;">
-        <figcaption style="padding:18px 20px;">
-          <p style="margin:0 0 10px;font-style:italic;">« [TÉMOIGNAGE] »</p>
-          <p style="margin:0;font-weight:600;color:#0C5B45;">[PRÉNOM] · [VILLE]</p>
-        </figcaption>
-      </figure>
-
-      <figure style="margin:0;background:var(--card,#fff);border:1px solid rgba(0,0,0,.08);border-radius:16px;overflow:hidden;">
-        <img src="temoignages/t3.jpg" alt="AdhanBox chez [PRÉNOM]" loading="lazy" style="width:100%;aspect-ratio:4/3;object-fit:cover;">
-        <figcaption style="padding:18px 20px;">
-          <p style="margin:0 0 10px;font-style:italic;">« [TÉMOIGNAGE] »</p>
-          <p style="margin:0;font-weight:600;color:#0C5B45;">[PRÉNOM] · [VILLE]</p>
-        </figcaption>
-      </figure>
-
+    <div id="temoignages-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:22px;margin-top:34px;"></div>
+    <div class="center" style="margin-top:30px;">
+      <a href="avis.html" class="btn btn-outline">Voir tous les avis &amp; laisser le vôtre</a>
     </div>
   </div>
 </section>
-FIN SECTION TÉMOIGNAGES -->
 
 <!-- ── PRÉCOMMANDE ── -->
 <section class="block alt" id="precommande">
@@ -711,6 +683,38 @@ var SHIP_DATE = "automne 2026";
         .catch(function () { alert('Une erreur est survenue — réessayez ou écrivez-nous.'); });
     });
   }
+
+  // ── Avis (témoignages) : chargés depuis le backend, section masquée si vide ──
+  (function () {
+    fetch('https://adhanbox-commande.vercel.app/api/reviews')
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        var reviews = (data && data.reviews) || [];
+        if (!reviews.length) return; // section reste masquée
+        var grid = document.getElementById('temoignages-grid');
+        if (!grid) return;
+        reviews.slice(0, 3).forEach(function (rv) {
+          var stars = '';
+          for (var i = 1; i <= 5; i++) stars += i <= Math.round(rv.note) ? '★' : '☆';
+          var fig = document.createElement('figure');
+          fig.style.cssText = 'margin:0;background:var(--card,#fff);border:1px solid rgba(0,0,0,.08);border-radius:16px;padding:22px 24px;';
+          var s = document.createElement('div');
+          s.style.cssText = 'color:#C9A227;letter-spacing:2px;font-size:1.05rem;';
+          s.textContent = stars;
+          var q = document.createElement('p');
+          q.style.cssText = 'margin:12px 0 14px;font-style:italic;line-height:1.6;';
+          q.textContent = '« ' + rv.texte + ' »'; // textContent = anti-XSS
+          var who = document.createElement('p');
+          who.style.cssText = 'margin:0;font-weight:600;color:#0C5B45;';
+          who.textContent = (rv.prenom || 'Anonyme') + (rv.ville ? ' · ' + rv.ville : '') + (rv.verifie ? ' ✔' : '');
+          fig.appendChild(s); fig.appendChild(q); fig.appendChild(who);
+          grid.appendChild(fig);
+        });
+        var sec = document.getElementById('temoignages');
+        if (sec) sec.hidden = false;
+      })
+      .catch(function () { /* silencieux : la section reste masquée */ });
+  })();
 
   // ── HERO 3D : la vraie box, auto-rotation ──
   function init3D() {
