@@ -12,12 +12,10 @@
       'noir':   { label: 'Noir',    hex: '#2A2A2A', color: 0x2A2A2A, roughness: 0.85, metalness: 0.0 },
       'dore':   { label: 'Doré',    hex: '#C9A227', color: 0xC9A227, roughness: 0.7,  metalness: 0.15 },
       'rouge':  { label: 'Rouge',   hex: '#B23A3A', color: 0xB23A3A, roughness: 0.85, metalness: 0.0 },
-      'orange': { label: 'Orange',  hex: '#C97A35', color: 0xC97A35, roughness: 0.85, metalness: 0.0 },
-      'jaune':  { label: 'Jaune',   hex: '#D6B23A', color: 0xD6B23A, roughness: 0.85, metalness: 0.0 },
       'vert':   { label: 'Vert',    hex: '#4A7A52', color: 0x4A7A52, roughness: 0.85, metalness: 0.0 },
       'bleu':   { label: 'Bleu',    hex: '#3D5A8C', color: 0x3D5A8C, roughness: 0.85, metalness: 0.0 },
-      'violet': { label: 'Violet',  hex: '#6B4E8C', color: 0x6B4E8C, roughness: 0.85, metalness: 0.0 },
-      'rose':   { label: 'Rose',    hex: '#CE8BA3', color: 0xCE8BA3, roughness: 0.85, metalness: 0.0 }
+      'violet': { label: 'Violet',  hex: '#6B4E8C', color: 0x6B4E8C, roughness: 0.85, metalness: 0.0 }
+      // Palette alignée sur les 10 options du paiement Stripe (max 10 par menu déroulant).
     };
     const FINISHES = PALETTE;
     const MANDALA_COLORS = PALETTE;
