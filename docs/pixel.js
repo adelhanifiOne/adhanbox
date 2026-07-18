@@ -26,8 +26,14 @@
     if (page === 'personnaliser') {
       fbq('track', 'ViewContent', { content_name: 'Configurateur AdhanBox', value: 95, currency: 'EUR' });
     }
-    if (page === 'merci' && window.location.search.indexOf('session_id') !== -1) {
-      fbq('track', 'Purchase', { content_name: 'AdhanBox — Précommande', value: 95, currency: 'EUR' });
+    // Purchase déclenché uniquement après un vrai paiement (session_id présent).
+    // eventID = id de session Stripe : le backend envoie le même Purchase via
+    // l'API Conversions avec cet id -> Meta déduplique, pas de double comptage.
+    var sid = window.location.search.match(/[?&]session_id=([^&]+)/);
+    if (page === 'merci' && sid) {
+      fbq('track', 'Purchase',
+        { content_name: 'AdhanBox — Précommande', value: 95, currency: 'EUR' },
+        { eventID: decodeURIComponent(sid[1]) });
     }
   }
 
