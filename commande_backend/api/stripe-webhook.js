@@ -27,11 +27,34 @@ async function readRawBody(req) {
   return Buffer.concat(chunks);
 }
 
-function addressHtml(name, a) {
-  if (!a) return '';
-  const lines = [name, a.line1, a.line2, `${a.postal_code || ''} ${a.city || ''}`.trim(), a.country]
+function addressLines(name, a) {
+  if (!a) return [];
+  return [name, a.line1, a.line2, `${a.postal_code || ''} ${a.city || ''}`.trim(), a.country]
     .filter(Boolean);
-  return lines.join('<br>');
+}
+
+// Version texte brut de l'email client — un multipart HTML+texte passe
+// nettement mieux les filtres anti-spam qu'un HTML seul.
+function clientEmailText({ firstName, ref, config, amount, shipToLines }) {
+  return [
+    `As-salāmu ʿalaykum${firstName ? ' ' + firstName : ''},`,
+    '',
+    'Merci du fond du cœur pour votre précommande AdhanBox.',
+    'Votre boîtier sera fabriqué à la main, à la commande, exactement dans la configuration que vous avez choisie.',
+    '',
+    `Votre configuration : ${config}`,
+    `Commande : N° ${ref}`,
+    `Total payé : ${amount} (livraison offerte)`,
+    '',
+    ...(shipToLines.length ? ['Adresse de livraison :', ...shipToLines, ''] : []),
+    `Expédition prévue : ${SHIP_DATE}. Vous serez tenu informé à chaque étape : confirmation, assemblage, envoi avec numéro de suivi.`,
+    '',
+    'Garantie 2 ans · Retour 14 jours · Paiement sécurisé Stripe',
+    'Une question ? Répondez à cet email ou écrivez-nous : contact@adhanbox.fr',
+    '',
+    'AdhanBox — Fait main en France',
+    SITE,
+  ].join('\n');
 }
 
 // ── Email client : merci + détail complet de la commande ──
@@ -153,7 +176,8 @@ export default async function handler(req, res) {
   const config = session.metadata?.config || 'Configuration standard';
   const amount = euros(session.amount_total ?? 0);
   const firstName = (details.name || '').trim().split(/\s+/)[0] || '';
-  const shipTo = shipping ? addressHtml(shipping.name || details.name, shipping.address) : '';
+  const shipToLines = shipping ? addressLines(shipping.name || details.name, shipping.address) : [];
+  const shipTo = shipToLines.join('<br>');
 
   if (!process.env.RESEND_API_KEY) {
     console.log('RESEND_API_KEY absente — emails non envoyés. Commande:', ref, config);
@@ -171,6 +195,7 @@ export default async function handler(req, res) {
         replyTo: 'contact@adhanbox.fr',
         subject: `Votre précommande AdhanBox est confirmée 🌙 (n° ${ref})`,
         html: clientEmailHtml({ firstName, ref, config, amount, shipTo }),
+        text: clientEmailText({ firstName, ref, config, amount, shipToLines }),
       });
     }
   } catch (err) {
@@ -188,6 +213,15 @@ export default async function handler(req, res) {
         name: details.name, email: details.email, phone: details.phone,
         shipTo, piId,
       }),
+      text: [
+        `Nouvelle précommande AdhanBox`,
+        `Commande : N° ${ref}`,
+        `Configuration : ${config}`,
+        `Montant : ${amount}`,
+        `Client : ${details.name || '-'} · ${details.email || '-'} · ${details.phone || '-'}`,
+        ...(shipToLines.length ? ['Livraison :', ...shipToLines] : []),
+        `https://dashboard.stripe.com/payments/${piId}`,
+      ].join('\n'),
     });
   } catch (err) {
     console.error('email vendeur échoué:', err && err.message);
