@@ -108,6 +108,49 @@
       renderer.render(scene, camera);
     }
 
+    // ── Mise en avant du motif ──
+    // Au choix d'un motif ou de sa couleur : la caméra glisse face à la
+    // façade (face -X monde) et la rotation est verrouillée 5 s, le temps
+    // d'apprécier le rendu. Un nouveau choix pendant le verrou relance le
+    // compte à rebours.
+    let focusTimer = null;
+    let focusAnim = null;
+    function focusMotifFace() {
+      if (!controls || !camera) return;
+
+      controls.autoRotate = false;
+      controls.enableRotate = false;
+      controls.enableZoom = false;
+      // Purge l'inertie d'un drag en cours : sans damping, update() applique
+      // le reliquat d'un coup puis le remet à zéro — la caméra ne dérive plus.
+      controls.enableDamping = false;
+      controls.update();
+      if (focusTimer) clearTimeout(focusTimer);
+      focusTimer = setTimeout(() => {
+        controls.enableRotate = true;
+        controls.enableZoom = true;
+        controls.enableDamping = true;
+        focusTimer = null;
+      }, 5000);
+
+      // Même distance qu'actuellement (pas de saut de zoom), légère plongée
+      const dist = camera.position.distanceTo(controls.target);
+      const dir = new THREE.Vector3(-1, 0.28, 0).normalize();
+      const from = camera.position.clone();
+      const to = controls.target.clone().add(dir.multiplyScalar(dist));
+
+      const start = performance.now();
+      if (focusAnim) cancelAnimationFrame(focusAnim);
+      const step = (now) => {
+        const t = Math.min((now - start) / 800, 1);
+        const e = 1 - Math.pow(1 - t, 3); // easeOutCubic
+        camera.position.lerpVectors(from, to, e);
+        camera.lookAt(controls.target);
+        focusAnim = t < 1 ? requestAnimationFrame(step) : null;
+      };
+      focusAnim = requestAnimationFrame(step);
+    }
+
     // Coque lumineuse uniforme + port USB-C rond — identiques au hero d'accueil.
     // Ces objets ne sont pas affectés par applyFinish (qui ne touche que boxMesh/lidMesh),
     // donc la lueur reste chaude et le port reste noir quelle que soit la couleur choisie.
@@ -300,6 +343,7 @@
     buildSwatches('mcolor-swatches', state.mandalaColor, (key) => {
       state.mandalaColor = key;
       applyMandalaColor();
+      if (state.mandala !== 0) focusMotifFace();
     });
 
     const mandalaBtns = document.querySelectorAll('[data-mandala]');
@@ -310,6 +354,7 @@
         document.getElementById('mandala-color-group').style.display = state.mandala === 0 ? 'none' : 'block';
         loadMandala(state.mandala);
         updateQuoteLink();
+        if (state.mandala !== 0) focusMotifFace();
       });
     });
 
