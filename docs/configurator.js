@@ -110,7 +110,7 @@
 
     // ── Mise en avant du motif ──
     // Au choix d'un motif ou de sa couleur : la caméra glisse face à la
-    // façade (face -X monde) et la rotation est verrouillée 5 s, le temps
+    // façade (face -X monde) et la rotation est verrouillée 3 s, le temps
     // d'apprécier le rendu. Un nouveau choix pendant le verrou relance le
     // compte à rebours.
     let focusTimer = null;
@@ -131,7 +131,7 @@
         controls.enableZoom = true;
         controls.enableDamping = true;
         focusTimer = null;
-      }, 5000);
+      }, 3000);
 
       // Même distance qu'actuellement (pas de saut de zoom), légère plongée
       const dist = camera.position.distanceTo(controls.target);
