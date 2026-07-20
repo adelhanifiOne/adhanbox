@@ -2,7 +2,7 @@
 // - Starts an AP when a long-press is detected on CONFIG_BUTTON_PIN
 // - Serves a small webpage that requests navigator.geolocation and POSTs lat/lon
 // - Stores lat/lon/accuracy/timestamp in Preferences (NVS)
-//Version: 2.3.21 (AdhanBox V2 / HW v2)
+//Version: 3.0.0 (AdhanBox V3 / HW v3)
 #include <Arduino.h>
 #include <Wire.h>
 #include <WiFi.h>
@@ -10,6 +10,7 @@
 #include <WebServer.h>
 #include <Preferences.h>
 #include <RTClib.h>
+#include "rx8025t.h"   // [V3] RTC Epson RX-8025T (remplace le DS3231)
 #include <SPI.h>
 #include <SD.h>
 #include <AudioOutputI2S.h>
@@ -239,7 +240,7 @@ unsigned long apStartTime = 0;
 DNSServer dnsServer;
 const byte DNS_PORT = 53;
 
-RTC_DS3231 rtc;
+RX8025T rtc;   // [V3] DTCXO integre, I2C 0x32, /INT -> GPIO7
 bool rtcPresent = false;
 // ===== AdhanBox V2 : moteur audio I2S + microSD =====
 #define I2S_DIN_PIN   1
@@ -260,8 +261,6 @@ class I2SAudio {
   float gain = 0.5f;
   bool  _sdOk = false;
   uint32_t _sdClock = 0;
-  bool _paused = false;          // [PLAYER] pause logicielle : pump() suspend le decodage
-  char _curPath[64] = {0};       // [PLAYER] fichier en cours (pour /api/audio/status)
  public:
   uint32_t sdClock() const { return _sdClock; }
   // Bench debit SD : lit `bytes` octets d'un fichier existant et renvoie ko/s.
@@ -321,27 +320,10 @@ class I2SAudio {
     if (wav) { wav->stop(); delete wav; wav = nullptr; }
     if (buf) { delete buf; buf = nullptr; }
     if (src) { delete src; src = nullptr; }
-    _paused = false;
-    _curPath[0] = 0;
   }
-  // [PLAYER] Pause/reprise : on suspend le DECODAGE (position conservee) mais
-  // pump() continue d'alimenter le DMA I2S en SILENCE (voir pump). Sans ce
-  // silence, le peripherique I2S rebouclait le dernier tampon -> son de "disque
-  // raye". Le flux de silence garde aussi l'ampli synchronise (BCLK continue),
-  // donc la reprise est immediate et propre, sans warm-up ni clic.
-  void pause()  { if (isRunning()) _paused = true; }
-  void resume() { _paused = false; }
-  bool isPaused() const { return _paused; }
-  const char* currentPath() const { return _curPath; }
-  // Position/taille en octets du fichier source (progression approximative,
-  // suffisante pour une barre de lecture ; MP3 CBR -> quasi lineaire).
-  uint32_t posBytes()  { return src ? (uint32_t)src->getPos()  : 0; }
-  uint32_t sizeBytes() { return src ? (uint32_t)src->getSize() : 0; }
   bool playPath(const char *path) {
     stop();
     if (!_sdOk || !SD.exists(path)) return false;
-    strncpy(_curPath, path, sizeof(_curPath) - 1);   // [PLAYER] memorise le fichier
-    _curPath[sizeof(_curPath) - 1] = 0;
     src = new AudioFileSourceSD(path);
     // Buffer fichier 32 Ko (~2s). Le vrai levier n'est pas la taille mais le DEBIT
     // SD (voir SD.begin plus haut) : un buffer plus gros ne fait que retarder si le
@@ -372,14 +354,6 @@ class I2SAudio {
   }
   bool isRunning() { return (mp3 && mp3->isRunning()) || (wav && wav->isRunning()); }
   void pump() {
-    if (_paused) {
-      // [PLAYER] En pause : on ne decode plus (position conservee), mais on
-      // REMPLIT le DMA I2S de silence pour eviter que le peripherique reboucle
-      // le dernier tampon (son de "disque raye"). ConsumeSample renvoie false
-      // quand le tampon est plein -> boucle bornee, non bloquante.
-      if (out) { int16_t s[2] = {0, 0}; while (out->ConsumeSample(s)) {} }
-      return;
-    }
     if (mp3 && mp3->isRunning()) { if (!mp3->loop()) stop(); }
     if (wav && wav->isRunning()) { if (!wav->loop()) stop(); }
   }
@@ -406,13 +380,6 @@ bool forcePlayTrack1 = false;
 // re-initialise PAS a chaque reboot ; c'est ce qui lui permet de survivre au restart.
 #define PAIR_BOOT_MAGIC 0x50414952UL  // "PAIR"
 RTC_NOINIT_ATTR uint32_t g_pairBootMagic;
-// [RESET FOYER] Reset par power-cycle : débrancher/rebrancher 3x rapidement
-// (chaque cycle < 10 s d'allumage) force le mode appairage. Le compteur est
-// stocké en NVS (flash) car elle survit à la coupure d'alimentation,
-// contrairement à la mémoire RTC. g_forcePairing est armé au boot ; le compteur
-// est remis à zéro par loop() une fois la box allumée > 10 s.
-bool g_forcePairing = false;
-bool g_pcycleCleared = false;
 // Global LED brightness (0-100, default 50%)
 int ledBrightness = 50;
 // Track sequence: adhan plays first, then duaa (track 1) plays after adhan finishes
@@ -616,124 +583,581 @@ const int TOTAL_SCENES = 13;
 
 // Simple webpage (served from RAM) — improved multi‑page UI with CSS
 const char index_html[] PROGMEM = R"HTML(
-<!DOCTYPE html><html lang="fr"><head>
-<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AdhanBox — Dépannage</title>
-<style>
-  *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:-apple-system,system-ui,sans-serif;background:#0f1512;color:#eaf2ed;padding:18px;max-width:520px;margin:0 auto;line-height:1.5}
-  header{text-align:center;margin:10px 0 22px}
-  header .ar{font-size:26px;color:#EBD9A8}
-  header h1{font-size:20px;margin-top:2px}
-  header .info{font-size:12.5px;color:#9fb0a7;margin-top:8px}
-  .card{background:#16201b;border:1px solid #26332c;border-radius:16px;padding:18px;margin-bottom:16px}
-  .card h2{font-size:15px;margin-bottom:6px}
-  .card p.hint{font-size:13px;color:#9fb0a7;margin-bottom:12px}
-  button,.btn{display:block;width:100%;border:none;border-radius:12px;padding:16px;font-size:16px;font-weight:600;cursor:pointer;color:#fff;text-align:center;text-decoration:none}
-  .btn-pair{background:#3B82F6;font-size:18px;padding:20px}
-  .btn-emerald{background:#12A67B}
-  .btn-ghost{background:transparent;border:1px solid #26332c;color:#eaf2ed;font-weight:500}
-  .btn-red{background:#EF4444}
-  .btn-row{display:flex;gap:10px;margin-top:10px}
-  .btn-row button{margin:0}
-  .msg{font-size:13px;color:#9fb0a7;margin-top:10px;min-height:16px}
-  input{width:100%;padding:14px;border-radius:12px;border:1px solid #26332c;background:#0f1512;color:#fff;font-size:16px;margin-top:8px}
-  .net{display:flex;justify-content:space-between;align-items:center;padding:12px 14px;border:1px solid #26332c;border-radius:10px;margin-top:8px;cursor:pointer}
-  .net:active{background:#0f1512}
-  .net .lock{color:#9fb0a7;font-size:13px}
-  .hidden{display:none}
-  a.update{display:block;text-align:center;color:#EBD9A8;font-size:14px;margin-top:12px}
-</style></head><body>
-<header>
-  <div class="ar">أذان</div>
-  <h1>AdhanBox — Dépannage</h1>
-  <div class="info" id="devInfo">Chargement…</div>
-</header>
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AdhanBox — Configuration</title>
+  <style>
+    :root{ --bg:#0f1724; --card:#111827; --muted:#9CA3AF; --accent:#EF4444; --accent2:#06B6D4; --card-pad:14px; --radius:10px; color-scheme: dark; }
+    html,body{ height:100%; margin:0; font-family:system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial; background:linear-gradient(180deg,#071022 0%, #071630 60%); color:#E5E7EB; }
+    .container{ max-width:900px; margin:18px auto; padding:16px; }
+    header{ display:flex; align-items:center; gap:12px; }
+    header h1{ font-size:20px; margin:0; }
+    nav{ margin-top:12px; display:flex; gap:8px; }
+    .tab{ background:transparent; border:1px solid rgba(255,255,255,0.04); padding:8px 12px; border-radius:8px; cursor:pointer; color:var(--muted); }
+    .tab.active{ background:linear-gradient(90deg,var(--accent)55,var(--accent2)22); color:#081225; font-weight:600; }
+    .grid{ display:grid; grid-template-columns:1fr 320px; gap:16px; margin-top:16px; }
+    .card{ background:var(--card); padding:var(--card-pad); border-radius:var(--radius); box-shadow:0 6px 18px rgba(2,6,23,0.6); }
+    .small{ font-size:13px; color:var(--muted); }
+    .field{ display:flex; flex-direction:column; gap:6px; margin-bottom:10px; }
+    input[type=text], input[type=number], input[type=password]{ background:#0b1220; border:1px solid rgba(255,255,255,0.04); padding:8px 10px; color:#fff; border-radius:6px; }
+    button.btn{ background:var(--accent); color:#fff; border:none; padding:8px 12px; border-radius:8px; cursor:pointer; }
+    button.ghost{ background:transparent; border:1px solid rgba(255,255,255,0.06); color:var(--muted); padding:8px 10px; border-radius:8px; cursor:pointer; }
+    table{ width:100%; border-collapse:collapse; }
+    td, th{ padding:6px 4px; }
+    tr:nth-child(odd) td{ background:rgba(255,255,255,0.01); }
+    .muted{ color:var(--muted); font-size:13px; }
+    footer{ margin-top:18px; text-align:center; color:var(--muted); font-size:13px; }
+    @media(max-width:880px){ .grid{ grid-template-columns:1fr; } .container{ padding:10px; } }
+    /* start overlay */
+    .overlay{ position:fixed; inset:0; background:rgba(7, 10, 19, 0.85); backdrop-filter: blur(8px); display:flex; align-items:center; justify-content:center; z-index:40; }
+    .overlay-card{ background:#111827; border: 1px solid rgba(255,255,255,0.08); padding:24px; border-radius:14px; width:min(500px,94%); box-shadow:0 20px 50px rgba(0,0,0,0.7); }
+    .net-list{ max-height:260px; overflow-y:auto; margin-top:16px; border-radius:8px; background:#0b1220; border:1px solid rgba(255,255,255,0.04); }
+    
+    /* WiFi list items */
+    .net-row{ display:flex; align-items:center; justify-content:space-between; padding:12px 16px; border-bottom:1px solid rgba(255,255,255,0.02); cursor:pointer; transition:background 0.2s ease, transform 0.1s ease; }
+    .net-row:last-child{ border-bottom:none; }
+    .net-row:hover{ background:rgba(255,255,255,0.04); }
+    .net-row:active{ transform:scale(0.99); }
+    
+    .net-details{ display:flex; align-items:center; gap:12px; }
+    .net-name{ font-weight:600; font-size:15px; color:#f3f4f6; text-align:left; }
+    .net-rssi-val{ font-size:12px; color:var(--muted); text-align:left; }
+    
+    .net-icons{ display:flex; align-items:center; gap:8px; }
+    
+    /* Icon SVGs */
+    .icon-svg{ width:20px; height:20px; display:block; }
+    .icon-lock{ width:16px; height:16px; fill:#9CA3AF; display:block; }
 
-<div class="card">
-  <h2>📱 Connecter à l'application</h2>
-  <p class="hint">Passe la box en mode appairage pour l'ajouter (ou la ré-ajouter) dans l'app AdhanBox — même depuis un autre téléphone du foyer.</p>
-  <button class="btn-pair" id="pairBtn">Appairer avec l'app (Bluetooth)</button>
-  <div class="msg" id="pairMsg"></div>
-</div>
-
-<div class="card">
-  <h2>📶 Réseau Wi-Fi</h2>
-  <p class="hint">Configurer ou changer le réseau Wi-Fi de la box.</p>
-  <button class="btn-ghost" id="scanBtn">Rechercher les réseaux</button>
-  <div id="netList"></div>
-  <div id="wifiForm" class="hidden">
-    <input id="ssid" type="text" readonly>
-    <input id="pass" type="password" placeholder="Mot de passe Wi-Fi">
-    <div class="btn-row">
-      <button class="btn-ghost" id="wifiCancel">Annuler</button>
-      <button class="btn-emerald" id="wifiConnect">Se connecter</button>
+    /* Modal for Password Entry */
+    .modal-overlay{ position:fixed; inset:0; background:rgba(7, 10, 19, 0.8); backdrop-filter: blur(6px); display:flex; align-items:center; justify-content:center; z-index:50; }
+    .modal-card{ background:#111827; border:1px solid rgba(255,255,255,0.08); padding:24px; border-radius:14px; width:min(400px,90%); box-shadow:0 20px 45px rgba(0,0,0,0.8); }
+    .modal-title{ font-size:18px; font-weight:600; margin:0 0 16px 0; color:#fff; }
+    
+    /* Password field with toggle button */
+    .pwd-wrapper{ position:relative; display:flex; align-items:center; width: 100%; }
+    .pwd-wrapper input{ width:100%; padding-right:40px; box-sizing:border-box; }
+    .pwd-toggle{ position:absolute; right:10px; background:transparent; border:none; color:var(--muted); cursor:pointer; font-size:16px; padding:4px; display:flex; align-items:center; justify-content:center; }
+    
+    /* Spinner for loading state */
+    .spinner{ display:inline-block; width:14px; height:14px; border:2px solid rgba(255,255,255,0.3); border-top-color:#fff; border-radius:50%; animation:spin-ani 0.8s linear infinite; }
+    @keyframes spin-ani { to { transform:rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Start overlay: choose WiFi available / not available -->
+    <div id="startOverlay" class="overlay">
+      <div class="overlay-card">
+        <h2 style="margin:0 0 12px 0; text-align:center; font-size:22px;">Bienvenue — Configuration</h2>
+        <p class="small" style="text-align:center; margin-bottom:18px;">Commencez par indiquer si vous avez un réseau Wi‑Fi à portée.</p>
+        <!-- Buttons stacked and larger for clarity -->
+        <div style="display:flex;flex-direction:column;gap:12px;margin-top:12px;">
+          <button class="btn" id="startWifiBtn" style="font-size:18px;padding:14px;font-weight:600;">WiFi disponible</button>
+          <button class="ghost" id="startNoWifiBtn" style="font-size:18px;padding:14px;">WiFi non disponible</button>
+        </div>
+        <div id="scanContainer" style="margin-top:20px; display:none;">
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;">
+            <strong style="font-size:16px;">Réseaux trouvés</strong>
+            <button class="ghost" id="refreshScanBtn" style="margin-left:auto; padding:6px 12px; font-size:13px;">Rafraîchir</button>
+          </div>
+          <div id="netList" class="net-list"></div>
+        </div>
+      </div>
     </div>
+
+    <!-- WiFi Password Modal -->
+    <div id="wifiModal" class="modal-overlay" style="display:none;">
+      <div class="modal-card">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+          <h3 class="modal-title" style="margin:0;">Connexion Wi‑Fi</h3>
+          <button class="ghost" id="closeWifiModalBtn" style="border:none; padding:4px 8px; font-size:20px; line-height:1; cursor:pointer;">&times;</button>
+        </div>
+        
+        <div class="field" style="margin-bottom:14px;">
+          <label class="small" style="color:var(--muted); margin-bottom:6px; font-weight:500; text-align:left;">SSID</label>
+          <input id="selSsid" type="text" readonly style="background:#090d16; border-color:rgba(255,255,255,0.06); font-weight:600; color:#fff;" />
+        </div>
+        
+        <div class="field" style="margin-bottom:18px;">
+          <label class="small" style="color:var(--muted); margin-bottom:6px; font-weight:500; text-align:left;">Mot de passe</label>
+          <div class="pwd-wrapper">
+            <input id="selPass" type="password" placeholder="Entrez le mot de passe" />
+            <button id="toggleShowPassBtn" type="button" class="pwd-toggle">👁️</button>
+          </div>
+          <span class="small" style="margin-top:4px; font-size:11px; color:var(--muted); text-align:left;">(laissez vide si réseau ouvert)</span>
+        </div>
+        
+        <div style="display:flex; gap:10px; justify-content:flex-end;">
+          <button class="ghost" id="cancelWifiModalBtn" style="padding:10px 16px;">Annuler</button>
+          <button class="btn" id="overlayConnectBtn" style="padding:10px 20px; font-weight:600; display:flex; align-items:center; gap:8px;">
+            <span>Se connecter</span>
+            <span id="connectSpinner" style="display:none;" class="spinner"></span>
+          </button>
+        </div>
+        <div id="overlayWifiStatus" class="muted" style="margin-top:16px; text-align:center; font-weight:500;"></div>
+      </div>
+    </div>
+    <header>
+      <img src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 24 24' fill='%23EF4444'><path d='M12 2l2.1 4.8L19 8l-3.5 3.1L16 16l-4-2.4L8 16l.5-4.9L5 8l4.9-.9L12 2z'/></svg>" alt="logo">
+      <h1>AdhanBox — Configuration</h1>
+      <button class="ghost" id="showWifiAutoBtn" style="margin-left:12px; height:36px; align-self:center;">Afficher paramètres Wi‑Fi</button>
+    </header>
+
+    <nav>
+      <div class="tab active" data-page="dashboard">Tableau</div>
+      <div class="tab" data-page="location">Localisation</div>
+      <div class="tab" data-page="prayers">Horaires</div>
+      <div class="tab" data-page="advanced">Avancé</div>
+    </nav>
+
+    <div class="grid">
+      <div>
+        <!-- Dashboard -->
+        <section class="card page" id="page-dashboard">
+          <h3>Statut</h3>
+          <div style="margin:0 0 14px 0; padding:12px; border:1px solid rgba(255,255,255,0.10); border-radius:10px; background:rgba(59,130,246,0.10);">
+            <div class="small" style="margin-bottom:8px;">Pour ajouter cette AdhanBox à l'application :</div>
+            <button class="btn" id="pairBtn" style="background:#3B82F6; font-weight:600;">Appairer avec l'app (Bluetooth)</button>
+            <div id="pairMsg" class="small" style="margin-top:8px;"></div>
+          </div>
+          <p class="small">Heure du module (DS3231)</p>
+          <div style="display:flex;align-items:center;gap:12px;">
+            <div style="font-size:18px;font-weight:600;"> <span id="rtcTime">--:--:--</span></div>
+            <button class="ghost" id="rtcRefresh">Actualiser</button>
+            <!-- removed duplicate Test Adhan from dashboard -->
+          </div>
+          <div style="margin-top:10px; display:flex; align-items:center; gap:10px;">
+            <label class="small" for="volSlider">Volume</label>
+            <input id="volSlider" type="range" min="0" max="30" value="20" style="width:220px; height:18px;">
+            <span id="volLbl" class="small" style="font-size:16px; font-weight:600;">20</span>
+            <button class="ghost" id="volSetBtn">Set</button>
+          </div>
+          <div style="margin-top:10px; display:flex; align-items:center; gap:10px;">
+            <label class="small" for="brightSlider">Luminosité</label>
+            <input id="brightSlider" type="range" min="0" max="100" value="50" style="width:220px; height:18px;">
+            <span id="brightLbl" class="small" style="font-size:16px; font-weight:600;">50%</span>
+            <button class="ghost" id="brightSetBtn">Appliquer</button>
+          </div>
+          <div style="margin-top:12px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+            <label class="small">Tester pistes:</label>
+            <button class="ghost" id="testTrack1Btn">Duaa (piste 1)</button>
+            <button class="ghost" id="testTrack2Btn">Adhan (piste 2)</button>
+            <button class="ghost" id="testTrack3Btn">Adhan alt (piste 3)</button>
+            <button class="btn" id="stopTestBtn" style="background:#EF4444;">Arrêter</button>
+          </div>
+          <div style="margin-top:12px; display:flex; gap:8px; align-items:center;">
+            <label class="small">Scénario lumineux</label>
+            <select id="dashLedSelect" style="min-width:160px;">
+              <option value="0">Off</option>
+              <option value="1">Red</option>
+              <option value="2">Pink</option>
+              <option value="3">Blue</option>
+              <option value="4">Violet</option>
+              <option value="5">Green</option>
+              <option value="6">Yellow</option>
+              <option value="8">Dynamic hue</option>
+              <option value="9">Dynamic fade</option>
+            </select>
+            <button class="ghost" id="dashSetSceneBtn">Appliquer</button>
+            <button class="btn" id="dashStopAPBtn" style="margin-left:auto;background:#10B981;">Sauvegarder la configuration et arrêter l'AP</button>
+          </div>
+          <p class="muted" id="statusMsg">Connectez votre téléphone au réseau AdhanBox pour configurer.</p>
+          <hr style="margin:12px 0; opacity:0.06">
+          <h4 style="margin:6px 0">Infos rapides</h4>
+          <div class="small">Localisation: <span id="quick_loc">--</span></div>
+          <div class="small">Fuseau utilisé: <span id="quick_tz">--</span></div>
+          <div style="margin-top:10px;">
+            <h4 style="margin:8px 0 6px 0">Horaires (aperçu)</h4>
+            <table style="width:100%;font-size:14px;">
+              <tbody>
+                <tr><td>Fajr</td><td id="dash_p_fajr">--:--</td></tr>
+                <tr><td>Dhuhr</td><td id="dash_p_dhuhr">--:--</td></tr>
+                <tr><td>Asr</td><td id="dash_p_asr">--:--</td></tr>
+                <tr><td>Maghrib</td><td id="dash_p_maghrib">--:--</td></tr>
+                <tr><td>Isha</td><td id="dash_p_isha">--:--</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- Location page -->
+        <section class="card page" id="page-location" style="display:none;">
+              <h3>Localisation</h3>
+              <p class="small">Entrez manuellement la position utilisée pour calculer les horaires.</p>
+              <hr>
+              <div class="field">
+                      <label>Latitude: <input id="latInput" type="text" placeholder="48.8566"></label>
+                      <label>Longitude: <input id="lonInput" type="text" placeholder="2.3522"></label>
+                      <label>Précision (m): <input id="accInput" type="number" placeholder="10"></label>
+                      <div style="display:flex;gap:8px"><button class="btn" id="manualBtn">Enregistrer manuellement</button><div id="manualStatus" class="muted"></div></div>
+                      <div style="margin-top:10px; display:flex; gap:8px; align-items:center;"><button class="btn" id="locAutoBtn">Auto-locate (ESP)</button><div id="locAutoStatus" class="muted"></div></div>
+                            <details style="margin-top:12px; border-top:1px solid rgba(255,255,255,0.03); padding-top:10px;">
+                              <summary style="cursor:pointer; color:var(--muted);">Paramètres avancés de localisation</summary>
+                              <div style="margin-top:8px; display:flex; flex-direction:column; gap:8px;">
+                                <label>Clé API HERE (optionnelle): <input id="geoKeyInput" type="text" placeholder="paste HERE API key"></label>
+                                <div style="display:flex;gap:8px;"><button class="btn" id="saveGeoKeyBtn">Enregistrer la clé</button><div id="geoStatus" class="muted"></div></div>
+                              </div>
+                            </details>
+              </div>
+            </section>
+
+        <!-- Timezone page -->
+        <!-- Timezone settings moved into Advanced / manual time section per UI request -->
+
+        <!-- Prayer times page -->
+        <section class="card page" id="page-prayers" style="display:none;">
+          <h3>Horaires de prière</h3>
+          <p class="small">Horaires calculés localement à partir de la position et fuseau.</p>
+          <table>
+            <tbody>
+              <tr><td>Fajr</td><td id="p_fajr">--:--</td></tr>
+              <tr><td>Sunrise</td><td id="p_sunrise">--:--</td></tr>
+              <tr><td>Dhuhr</td><td id="p_dhuhr">--:--</td></tr>
+              <tr><td>Asr</td><td id="p_asr">--:--</td></tr>
+              <tr><td>Maghrib</td><td id="p_maghrib">--:--</td></tr>
+              <tr><td>Isha</td><td id="p_isha">--:--</td></tr>
+            </tbody>
+          </table>
+          <p class="muted">Fuseau: <span id="tzUsed">--</span> (<span id="tzSource">--</span>)</p>
+          <div style="margin-top:10px;">
+            <button class="ghost" id="recalcTimesBtn">Recalculer horaires</button>
+          </div>
+        </section>
+
+        <!-- Advanced page -->
+        <section class="card page" id="page-advanced" style="display:none;">
+          <h3>Avancé</h3>
+          <p class="small">Commandes utiles et diagnostics.</p>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn" id="setrtcBtn">Réglage horaire(compilation)</button>
+            <div style="display:flex;gap:6px;align-items:center;">
+              <input type="date" id="rtcDate" />
+              <input type="time" id="rtcTimeInput" step="1" />
+              <button class="btn" id="setRtcManualBtn">Réglage horaire manuel</button>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;margin-top:8px;">
+              <label class="small">Fuseau (offset minutes):</label>
+              <input id="tzInput" type="number" placeholder="60" style="width:100px;padding:8px;">
+              <select id="tzSelect">
+                <option value="">Choisir...</option>
+                <option value="-120">UTC-2 (-120)</option>
+                <option value="-60">UTC-1 (-60)</option>
+                <option value="0">UTC+0 (0)</option>
+                <option value="60">UTC+1 (60)</option>
+                <option value="120">UTC+2 (120)</option>
+                <option value="180">UTC+3 (180)</option>
+                <option value="330">UTC+5:30 (330)</option>
+              </select>
+              <div style="display:flex;gap:8px"><button class="btn" id="tzBtn">Enregistrer fuseau</button><div id="tzStatus" class="muted"></div></div>
+            </div>
+            <button class="ghost" id="ledTestBtn">Test LED</button>
+            <select id="ledSceneSelect" style="min-width:140px">
+              <option value="0">Off</option>
+              <option value="1">Red</option>
+              <option value="2">Pink</option>
+              <option value="3">Blue</option>
+              <option value="4">Violet</option>
+              <option value="5">Green</option>
+              <option value="6">Yellow</option>
+              <option value="8">Dynamic hue</option>
+              <option value="9">Dynamic fade</option>
+            </select>
+            <button class="ghost" id="setSceneBtn">Set Scene</button>
+            <button class="ghost" id="ledOffBtn">Éteindre LEDs</button>
+            <button class="btn" id="advPlayTestBtn">Test Adhan</button>
+            <button class="ghost" id="finishConfigBtn">Sauvegarder la configuration et arrêter l'AP</button>
+            <button class="ghost" id="dumpStatusBtn">Dump status</button>
+          </div>
+          <pre id="dumpArea" style="margin-top:8px; max-height:220px; overflow:auto; background:#051018; padding:8px; border-radius:8px; color:#9CA3AF;">(dump)</pre>
+          <hr style="margin:8px 0; opacity:0.06">
+          <p class="muted">Options avancées retirées de cette page pour simplifier l'interface. Voir l'onglet « Localisation » pour la clé HERE.</p>
+        </section>
+
+      </div>
+
+      <aside>
+        <div class="card">
+          <h4>Prochaine Adhan</h4>
+          <div style="font-size:20px;font-weight:700;text-align:center;padding:10px;" id="aside_next">--:--</div>
+        </div>
+        <div class="card" style="margin-top:12px;">
+          <h4>Actions rapides</h4>
+          <div style="display:flex;gap:8px;flex-direction:column;">
+            <button class="ghost" id="openAP">Rouvrir la page de configuration</button>
+          </div>
+        </div>
+      </aside>
+    </div>
+
+    <footer>AdhanBox — Configurez la position et le fuseau pour obtenir des horaires précis.</footer>
   </div>
-  <div class="msg" id="wifiMsg"></div>
-</div>
 
-<div class="card">
-  <h2>🔧 Vérifications</h2>
-  <p class="hint">Tester le haut-parleur, ou mettre à jour le logiciel.</p>
-  <div class="btn-row">
-    <button class="btn-emerald" id="testBtn">▶ Tester l'adhan</button>
-    <button class="btn-red" id="stopBtn">■ Arrêter</button>
-  </div>
-  <a class="update" href="/update">Mise à jour du logiciel (firmware) →</a>
-  <div class="msg" id="testMsg"></div>
-</div>
+  <script>
+    // Surface JS errors in the page so users see why handlers may not run
+    window.onerror = function(message, source, lineno, colno, error){
+      try{
+        var s = document.getElementById('statusMsg');
+        if(s) s.innerText = 'JS error: ' + message + ' (line ' + lineno + ')';
+      }catch(e){}
+      console.error('JS error', message, 'at', lineno, colno, error);
+      return false;
+    };
+    // simple page navigation
+    document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click', function(){
+      document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+      this.classList.add('active');
+      let page = this.getAttribute('data-page');
+      document.querySelectorAll('.page').forEach(p=>p.style.display='none');
+      document.getElementById('page-'+page).style.display='block';
+    }));
 
-<script>
-  function $(id){return document.getElementById(id);}
-  fetch('/api/device/info').then(function(r){return r.json();}).then(function(j){
-    $('devInfo').textContent = 'Version '+(j.version||'?')+' · '+(j.hostname||location.hostname);
-  }).catch(function(){ $('devInfo').textContent = location.hostname; });
+    // Start overlay handlers: scan/select/connect WiFi or skip to config
+    var hideStartOverlay = function(){ document.getElementById('startOverlay').style.display = 'none'; document.querySelector('.tab.active').click(); };
+    var hideWifiModal = function() { document.getElementById('wifiModal').style.display = 'none'; };
 
-  $('pairBtn').onclick=function(){
-    var b=this; $('pairMsg').textContent='Démarrage du Bluetooth…'; b.disabled=true;
-    fetch('/api/pair').then(function(r){return r.json();}).then(function(){
-      $('pairMsg').textContent="Bluetooth actif (~5 min). Ouvrez l'app → Réglages → Associer un autre appareil, puis patientez sur l'écran Bluetooth.";
-    }).catch(function(){ $('pairMsg').textContent='Erreur. Réessayez.'; b.disabled=false; });
-  };
+    // Bind overlay buttons safely
+    var btnNoWifi = document.getElementById('startNoWifiBtn');
+    if(btnNoWifi) btnNoWifi.addEventListener('click', function(){
+      // skip WiFi: go directly to dashboard (Tableau) page
+      hideStartOverlay();
+      var dashTab = document.querySelector('.tab[data-page="dashboard"]'); if(dashTab) dashTab.click();
+    });
+    var btnWifi = document.getElementById('startWifiBtn');
+    if(btnWifi) btnWifi.addEventListener('click', function(){
+      var sc = document.getElementById('scanContainer'); if(sc) sc.style.display = 'block';
+      try{ doScan(); }catch(e){ console.error('doScan failed', e); }
+    });
 
-  $('scanBtn').onclick=function(){
-    var b=this; b.textContent='Recherche…'; b.disabled=true; $('netList').innerHTML=''; $('wifiMsg').textContent='';
-    fetch('/scan_wifi').then(function(r){return r.json();}).then(function(list){
-      b.textContent='Rechercher les réseaux'; b.disabled=false;
-      list.sort(function(a,c){return c.rssi-a.rssi;});
-      var seen={};
-      list.forEach(function(net){
-        if(!net.ssid||seen[net.ssid])return; seen[net.ssid]=1;
-        var d=document.createElement('div'); d.className='net';
-        d.innerHTML='<span></span><span class="lock">'+(net.secure?'🔒':'')+'</span>';
-        d.firstChild.textContent=net.ssid;
-        d.onclick=function(){ $('ssid').value=net.ssid; $('pass').value=''; $('wifiForm').classList.remove('hidden'); $('pass').focus(); };
-        $('netList').appendChild(d);
+    document.getElementById('refreshScanBtn').onclick = function(){ doScan(); };
+    document.getElementById('closeWifiModalBtn').onclick = hideWifiModal;
+    document.getElementById('cancelWifiModalBtn').onclick = hideWifiModal;
+
+    document.getElementById('toggleShowPassBtn').onclick = function() {
+      var passInput = document.getElementById('selPass');
+      if (passInput.type === 'password') {
+        passInput.type = 'text';
+        this.innerText = '🔒';
+      } else {
+        passInput.type = 'password';
+        this.innerText = '👁️';
+      }
+    };
+
+    var getWifiIcon = function(rssi, secure) {
+      var color = '#EF4444'; // poor
+      if (rssi >= -55) color = '#06B6D4'; // excellent (cyan)
+      else if (rssi >= -70) color = '#10B981'; // good (green)
+      else if (rssi >= -85) color = '#F59E0B'; // fair (orange)
+      
+      var lockSvg = secure ? '<svg class="icon-lock" viewBox="0 0 24 24"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg>' : '';
+      var wifiSvg = '<svg class="icon-svg" viewBox="0 0 24 24" style="fill: ' + color + ';"><path d="M12 21l-12-14.3c.7-.6 5-4.7 12-4.7s11.3 4.1 12 4.7l-12 14.3z"/></svg>';
+      return '<div class="net-icons">' + lockSvg + wifiSvg + '</div>';
+    };
+
+    var doScan = function(){
+      document.getElementById('netList').innerHTML = '<div class="muted" style="padding: 16px; text-align:center;">Recherche des réseaux...</div>';
+      fetch('/scan_wifi').then(r=>{ if(!r.ok) throw r.status; return r.json(); }).then(list=>{
+        if(!list || list.length==0){ document.getElementById('netList').innerHTML = '<div class="muted" style="padding: 16px; text-align:center;">Aucun réseau trouvé</div>'; return; }
+        let html='';
+        list.sort((a,b)=>b.rssi - a.rssi);
+        list.forEach(n=>{
+          html += '<div class="net-row" data-ssid="' + n.ssid + '"><div class="net-details"><div class="net-name">' + n.ssid + '</div><div class="net-rssi-val">' + n.rssi + ' dBm</div></div>' + getWifiIcon(n.rssi, n.secure) + '</div>';
+        });
+        document.getElementById('netList').innerHTML = html;
+        document.querySelectorAll('.net-row').forEach(row => row.addEventListener('click', function(){
+          var ssid = this.getAttribute('data-ssid');
+          document.getElementById('selSsid').value = ssid;
+          document.getElementById('selPass').value = '';
+          document.getElementById('overlayWifiStatus').innerText = '';
+          document.getElementById('toggleShowPassBtn').innerText = '👁️';
+          document.getElementById('selPass').type = 'password';
+          document.getElementById('wifiModal').style.display = 'flex';
+        }));
+      }).catch(e=>{ document.getElementById('netList').innerHTML = '<div class="muted" style="padding: 16px; text-align:center;">Scan error</div>'; });
+    }
+
+    document.getElementById('overlayConnectBtn').onclick = function(){
+      var ssid = document.getElementById('selSsid').value.trim();
+      var pass = document.getElementById('selPass').value || '';
+      if(!ssid) return alert('Choisissez un SSID');
+      document.getElementById('overlayWifiStatus').innerText = 'Connexion en cours...';
+      document.getElementById('overlayConnectBtn').disabled = true;
+      var spinner = document.getElementById('connectSpinner');
+      if(spinner) spinner.style.display = 'inline-block';
+      fetch('/connect_wifi', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ ssid: ssid, pass: pass }) }).then(r=>r.text()).then(t=>{
+        document.getElementById('overlayWifiStatus').innerText = t;
+        // on success, hide overlay and open dashboard, refresh location/status
+        if(t && (t.indexOf('Connected')>=0 || t.indexOf('Already connected')>=0)){
+          setTimeout(()=>{
+            hideWifiModal();
+            hideStartOverlay();
+            document.querySelector('.tab[data-page="dashboard"]').click();
+            // hide Wi-Fi auto block in advanced page as it's now redundant
+            var wab = document.getElementById('wifiAutoBlock'); if(wab) wab.style.display='none';
+            // refresh UI and fetch stored location to show in dashboard
+            refreshAll();
+            fetch('/show_loc').then(r=>r.json()).then(j=>{ if(j && j.lat){ document.getElementById('quick_loc').innerText = j.lat+','+j.lon; } }).catch(e=>{});
+          }, 1200);
+        }
+      }).catch(e=>{ document.getElementById('overlayWifiStatus').innerText = 'Erreur'; }).finally(()=>{
+        document.getElementById('overlayConnectBtn').disabled = false;
+        if(spinner) spinner.style.display = 'none';
       });
-      if(!$('netList').children.length) $('wifiMsg').textContent='Aucun réseau trouvé.';
-    }).catch(function(){ b.textContent='Rechercher les réseaux'; b.disabled=false; $('wifiMsg').textContent='Erreur de scan.'; });
-  };
-  $('wifiCancel').onclick=function(){ $('wifiForm').classList.add('hidden'); };
-  $('wifiConnect').onclick=function(){
-    var b=this; var ssid=$('ssid').value.trim(); var pass=$('pass').value||'';
-    if(!ssid)return;
-    $('wifiMsg').textContent='Connexion à '+ssid+'…'; b.disabled=true;
-    fetch('/connect_wifi',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ssid:ssid,pass:pass})})
-      .then(function(r){return r.text();}).then(function(t){
-        b.disabled=false;
-        if(t&&(t.indexOf('Connected')>=0||t.indexOf('Already connected')>=0)){
-          $('wifiMsg').textContent='✅ Connecté à '+ssid+' !';
-          $('wifiForm').classList.add('hidden');
-        } else { $('wifiMsg').textContent='❌ Échec : '+t; }
-      }).catch(function(){ b.disabled=false; $('wifiMsg').textContent='Erreur de connexion.'; });
-  };
+    };
 
-  $('testBtn').onclick=function(){ $('testMsg').textContent="Lecture de l'adhan…"; fetch('/play?track=2').catch(function(){}); };
-  $('stopBtn').onclick=function(){ $('testMsg').textContent=''; fetch('/stopplay').catch(function(){}); };
-</script>
-</body></html>
-)HTML";
+    // reuse existing handlers (re-bind buttons to new IDs)
+    // Geolocation via browser removed for security reasons; manual entry only
+
+    document.getElementById('manualBtn').onclick = function(){
+      var lat = parseFloat(document.getElementById('latInput').value);
+      var lon = parseFloat(document.getElementById('lonInput').value);
+      var acc = parseFloat(document.getElementById('accInput').value) || 9999;
+      if(isNaN(lat) || isNaN(lon)){
+        document.getElementById('manualStatus').innerText = 'Latitude et longitude valides requises.';
+        return;
+      }
+      var data = { lat: lat, lon: lon, accuracy: acc, timestamp: Date.now() };
+      fetch('/set_location', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data) })
+        .then(r=>r.text()).then(t=>{ document.getElementById('manualStatus').innerText='Réponse: '+t; refreshAll(); })
+        .catch(e=>{ document.getElementById('manualStatus').innerText='Erreur: '+e; });
+    };
+
+    var tzSelect = document.getElementById('tzSelect'); if(tzSelect) tzSelect.onchange = function(){ if(this.value){ var tzInput = document.getElementById('tzInput'); if(tzInput) tzInput.value = this.value; } };
+    var tzBtnEl = document.getElementById('tzBtn'); if(tzBtnEl) tzBtnEl.onclick = function(){ var tzInput = document.getElementById('tzInput'); var tzStatus = document.getElementById('tzStatus'); var tz = tzInput ? parseInt(tzInput.value) : NaN; if(isNaN(tz)){ if(tzStatus) tzStatus.innerText = 'Offset invalide.'; return; } var data = { tz_min: tz }; fetch('/set_tz', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data) }).then(r=>r.text()).then(t=>{ if(tzStatus) tzStatus.innerText='Réponse: '+t; refreshAll(); }).catch(e=>{ if(tzStatus) tzStatus.innerText='Erreur: '+e; }); };
+
+    // play test buttons
+    var doPlayTest = function(){ fetch('/playtest').then(r=>r.text()).then(t=>{ document.getElementById('playStatus') && (document.getElementById('playStatus').innerText = t); }).catch(e=>{ console.log('play err',e); }); };
+    // Test Adhan button moved to Advanced page (binding below)
+
+    // Volume slider handling
+    var refreshVolume = function(){ fetch('/get_volume').then(r=>r.json()).then(j=>{ if(j && typeof j.vol !== 'undefined'){ document.getElementById('volSlider').value = j.vol; document.getElementById('volLbl').innerText = j.vol; } }).catch(e=>{}); };
+    var volSlider = document.getElementById('volSlider'); if(volSlider) volSlider.oninput = function(){ var volLbl = document.getElementById('volLbl'); if(volLbl) volLbl.innerText = this.value; };
+    var volSetBtn = document.getElementById('volSetBtn'); if(volSetBtn) volSetBtn.onclick = function(){ var vs = document.getElementById('volSlider'); var v = vs ? parseInt(vs.value) : 0; fetch('/set_volume', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ vol: v }) }).then(r=>r.text()).then(t=>{ alert('Volume saved: '+v); }).catch(e=>{ alert('Erreur'); }); };
+    refreshVolume();
+    // Brightness slider handling
+    var refreshBrightness = function(){ fetch('/get_brightness').then(r=>r.json()).then(j=>{ if(j && typeof j.bright !== 'undefined'){ document.getElementById('brightSlider').value = j.bright; document.getElementById('brightLbl').innerText = j.bright+'%'; } }).catch(e=>{}); };
+    var brightSlider = document.getElementById('brightSlider'); if(brightSlider) brightSlider.oninput = function(){ var brightLbl = document.getElementById('brightLbl'); if(brightLbl) brightLbl.innerText = this.value+'%'; };
+    var brightSetBtn = document.getElementById('brightSetBtn'); if(brightSetBtn) brightSetBtn.onclick = function(){ var bs = document.getElementById('brightSlider'); var b = bs ? parseInt(bs.value) : 50; fetch('/set_brightness', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ bright: b }) }).then(r=>r.text()).then(t=>{ alert('Luminosité appliquée: '+b+'%'); refreshBrightness(); }).catch(e=>{ alert('Erreur'); }); };
+    refreshBrightness();
+    // Test track buttons
+    var pairBtn = document.getElementById('pairBtn'); if(pairBtn) pairBtn.onclick = function(){ var m=document.getElementById('pairMsg'); if(m) m.textContent="Demarrage du Bluetooth..."; pairBtn.disabled=true; fetch('/api/pair').then(function(r){return r.json();}).then(function(t){ if(m) m.textContent="Bluetooth actif (5 min). Ouvrez l'app -> Reglages -> Associer un autre appareil, et patientez sur l'ecran Bluetooth."; }).catch(function(e){ if(m) m.textContent="Erreur de demarrage"; pairBtn.disabled=false; }); };
+    var testTrack1Btn = document.getElementById('testTrack1Btn'); if(testTrack1Btn) testTrack1Btn.onclick = function(){ fetch('/play?track=1').then(r=>r.text()).then(t=>{ console.log('Playing track 1:', t); }).catch(e=>{ alert('Erreur lecture piste 1'); }); };
+    var testTrack2Btn = document.getElementById('testTrack2Btn'); if(testTrack2Btn) testTrack2Btn.onclick = function(){ fetch('/play?track=2').then(r=>r.text()).then(t=>{ console.log('Playing track 2:', t); }).catch(e=>{ alert('Erreur lecture piste 2'); }); };
+    var testTrack3Btn = document.getElementById('testTrack3Btn'); if(testTrack3Btn) testTrack3Btn.onclick = function(){ fetch('/play?track=3').then(r=>r.text()).then(t=>{ console.log('Playing track 3:', t); }).catch(e=>{ alert('Erreur lecture piste 3'); }); };
+    var stopTestBtn = document.getElementById('stopTestBtn'); if(stopTestBtn) stopTestBtn.onclick = function(){ fetch('/stopplay').then(r=>r.text()).then(t=>{ console.log('Stopped:', t); }).catch(e=>{ alert('Erreur arrêt'); }); };
+
+    // advanced actions
+    var setrtcBtn = document.getElementById('setrtcBtn'); if(setrtcBtn) setrtcBtn.onclick = function(){ fetch('/setrtc').then(r=>r.text()).then(t=>{ alert(t); refreshAll(); }).catch(e=>{ alert('Erreur'); }); };
+    var setRtcManualBtn = document.getElementById('setRtcManualBtn');
+    if(setRtcManualBtn) setRtcManualBtn.onclick = function(){
+      var dateEl = document.getElementById('rtcDate'); var timeEl = document.getElementById('rtcTimeInput');
+      var d = dateEl ? dateEl.value : '';
+      var t = timeEl ? timeEl.value : '';
+      if(!d){ alert('Choisir une date'); return; }
+      // time optional, default to 00:00:00
+      if(!t) t = '00:00:00';
+      var payload = JSON.stringify({ date: d, time: t });
+      fetch('/set_rtc_manual', { method: 'POST', headers: {'Content-Type':'application/json'}, body: payload }).then(r=>r.text()).then(txt=>{ alert(txt); refreshAll(); }).catch(e=>{ alert('Erreur: '+e); });
+    };
+    var setAlarmTestBtn = document.getElementById('setAlarmTest'); if(setAlarmTestBtn) setAlarmTestBtn.onclick = function(){ fetch('/set_alarm_test').then(r=>r.text()).then(t=>{ alert(t); refreshAll(); }).catch(e=>{ alert('Erreur'); }); };
+    var cancelAlarmsBtn = document.getElementById('cancelAlarms'); if(cancelAlarmsBtn) cancelAlarmsBtn.onclick = function(){ fetch('/cancel_alarms').then(r=>r.text()).then(t=>{ alert(t); refreshAll(); }).catch(e=>{ alert('Erreur'); }); };
+    var openAPBtn = document.getElementById('openAP'); if(openAPBtn) openAPBtn.onclick = function(){ alert('La page de configuration est déjà ouverte via cet AP.'); };
+    var ledTestBtn = document.getElementById('ledTestBtn'); if(ledTestBtn) ledTestBtn.onclick = function(){ fetch('/led_test').then(r=>r.text()).then(t=>{ alert(t); refreshAll(); }).catch(e=>{ alert('Erreur'); }); };
+    var setSceneBtn = document.getElementById('setSceneBtn');
+    var ledSceneSelect = document.getElementById('ledSceneSelect');
+    if(setSceneBtn) setSceneBtn.onclick = function(){
+      var s = ledSceneSelect ? ledSceneSelect.value : '0';
+      // Preview the selected scene for 2.5s (does not persist)
+      fetch('/set_led?scene='+encodeURIComponent(s)+'&preview=1').then(r=>r.text()).then(t=>{
+        // short visual confirmation
+        console.log('Previewing scene', s, t);
+        // after 2.5s restore the config blink indicator (BLINK_INDEX = 7)
+        setTimeout(function(){ fetch('/set_led?scene=7&preview=1').then(()=>{ refreshAll(); }).catch(()=>{ refreshAll(); }); }, 2500);
+      }).catch(e=>{ alert('Erreur'); });
+    };
+    // Dashboard scene controls
+    var dashSetSceneBtn = document.getElementById('dashSetSceneBtn');
+    var dashLedSelect = document.getElementById('dashLedSelect');
+    if(dashSetSceneBtn){
+      dashSetSceneBtn.onclick = function(){
+        var s = dashLedSelect ? dashLedSelect.value : '0';
+        fetch('/set_led?scene='+encodeURIComponent(s)).then(r=>r.text()).then(t=>{ alert('Scène appliquée'); refreshAll(); }).catch(e=>{ alert('Erreur'); });
+      };
+    }
+    var dashStopAPBtn = document.getElementById('dashStopAPBtn'); if(dashStopAPBtn) dashStopAPBtn.onclick = function(){ fetch('/stop_ap').then(r=>r.text()).then(t=>{ alert('Fin de configuration: '+t); }).catch(e=>{ alert('Erreur arrêt AP'); }); };
+    var ledOffBtn = document.getElementById('ledOffBtn'); if(ledOffBtn) ledOffBtn.onclick = function(){ fetch('/led_off').then(r=>r.text()).then(t=>{ alert(t); refreshAll(); }).catch(e=>{ alert('Erreur'); }); };
+    var advPlayTestBtn = document.getElementById('advPlayTestBtn'); if(advPlayTestBtn) advPlayTestBtn.onclick = doPlayTest;
+    var recalcTimesBtn = document.getElementById('recalcTimesBtn'); if(recalcTimesBtn) recalcTimesBtn.onclick = function(){ refreshAll(); alert('Horaires recalculés (si localisation stockée).'); };
+    var dumpBtn = document.getElementById('dumpStatusBtn');
+    if(dumpBtn){
+      dumpBtn.onclick = function(){ var dumpArea = document.getElementById('dumpArea'); if(dumpArea) dumpArea.innerText = 'Fetching...'; fetch('/dump_status').then(r=>r.json()).then(j=>{ if(dumpArea) dumpArea.innerText = JSON.stringify(j, null, 2); }).catch(e=>{ if(dumpArea) dumpArea.innerText = 'Error'; }); };
+    }
+    var finishConfigBtn = document.getElementById('finishConfigBtn'); if(finishConfigBtn) finishConfigBtn.onclick = function(){ fetch('/stop_ap').then(r=>r.text()).then(t=>{ alert('Fin de configuration: '+t); }).catch(e=>{ alert('Erreur arrêt AP'); }); };
+    // Toggle to show/hide the Wi-Fi auto-localisation block (useful if hidden)
+    var showWifiAutoBtn = document.getElementById('showWifiAutoBtn');
+    if(showWifiAutoBtn){
+      showWifiAutoBtn.onclick = function(){
+        var wab = document.getElementById('wifiAutoBlock');
+        if(!wab){ alert('Bloc wifiAutoBlock introuvable'); return; }
+        wab.style.display = (wab.style.display === 'none' || wab.style.display === '') ? 'block' : 'none';
+        // scroll to it if now visible
+        if(wab.style.display === 'block') wab.scrollIntoView({behavior: 'smooth', block: 'center'});
+      };
+    }
+    // Wi-Fi connect & auto-locate
+    var wifiConnectBtn = document.getElementById('wifiConnectBtn'); if(wifiConnectBtn) wifiConnectBtn.onclick = function(){ var ssidEl = document.getElementById('wifiSsid'); var passEl = document.getElementById('wifiPass'); var statusEl = document.getElementById('wifiStatus'); var ssid = ssidEl ? ssidEl.value.trim() : ''; var pass = passEl ? passEl.value : ''; if(!ssid){ alert('Please enter SSID'); return; } if(statusEl) statusEl.innerText = 'Connecting...'; fetch('/connect_wifi', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ ssid: ssid, pass: pass }) }).then(r=>r.text()).then(t=>{ if(statusEl) statusEl.innerText = t; refreshAll(); }).catch(e=>{ if(statusEl) statusEl.innerText = 'Error'; }); };
+    var wifiDisconnectBtn = document.getElementById('wifiDisconnectBtn'); if(wifiDisconnectBtn) wifiDisconnectBtn.onclick = function(){ var statusEl = document.getElementById('wifiStatus'); fetch('/disconnect_wifi').then(r=>r.text()).then(t=>{ if(statusEl) statusEl.innerText = t; refreshAll(); }).catch(e=>{ if(statusEl) statusEl.innerText='Error'; }); };
+    var saveBtn = document.getElementById('saveGeoKeyBtn');
+    if(saveBtn){
+      saveBtn.onclick = function(){ var keyEl = document.getElementById('geoKeyInput'); var geoStatusEl = document.getElementById('geoStatus'); var k = keyEl ? keyEl.value.trim() : ''; if(!k){ alert('Enter key'); return; } fetch('/set_geo_key', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ key: k }) }).then(r=>r.text()).then(t=>{ if(geoStatusEl) geoStatusEl.innerText = t; }).catch(e=>{ if(geoStatusEl) geoStatusEl.innerText = 'Error'; }); };
+    }
+    var locBtn = document.getElementById('locAutoBtn');
+    if(locBtn){
+      locBtn.onclick = function(){ var locAutoStatus = document.getElementById('locAutoStatus'); if(locAutoStatus) locAutoStatus.innerText = 'Locating...'; fetch('/geo_wifi').then(r=>{ if(!r.ok) throw r.status; return r.json(); }).then(j=>{ if(j.lat){ if(locAutoStatus) locAutoStatus.innerText = 'Located: '+j.lat+','+j.lon; var q = document.getElementById('quick_loc'); if(q) q.innerText = j.lat+','+j.lon; refreshAll(); } else if(locAutoStatus) locAutoStatus.innerText='No result'; }).catch(e=>{ if(locAutoStatus) locAutoStatus.innerText='Error'; }); };
+    }
+
+    // RTC and prayer times polling (defensive: avoid exceptions if elements are missing or fetch fails)
+    var updateRTCTime = function(){
+      fetch('/rtc_time')
+        .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.text(); })
+        .then(function(t){ var el = document.getElementById('rtcTime'); if(el) el.innerText = t; var aside = document.getElementById('aside_rtc'); if(aside) aside.innerText = t; })
+        .catch(function(e){ var el = document.getElementById('rtcTime'); if(el) el.innerText = 'Erreur'; var aside = document.getElementById('aside_rtc'); if(aside) aside.innerText = 'Erreur'; if(window && window.console) console.log('updateRTCTime error', e); });
+    };
+    var rtcRefreshBtn = document.getElementById('rtcRefresh'); if(rtcRefreshBtn) rtcRefreshBtn.onclick = updateRTCTime;
+    setInterval(updateRTCTime, 5000);
+    updateRTCTime();
+
+    var updatePrayerTimes = function(){ fetch('/prayer_times').then(r=>r.json()).then(j=>{ if(j.error){ var el = document.getElementById('page-prayers'); if(el) el.querySelector('.small').innerText = 'Erreur: '+j.error; return; } var pf = document.getElementById('p_fajr'); if(pf) pf.innerText = j.fajr; var ps = document.getElementById('p_sunrise'); if(ps) ps.innerText = j.sunrise; var pd = document.getElementById('p_dhuhr'); if(pd) pd.innerText = j.dhuhr; var pa = document.getElementById('p_asr'); if(pa) pa.innerText = j.asr; var pm = document.getElementById('p_maghrib'); if(pm) pm.innerText = j.maghrib; var pi = document.getElementById('p_isha'); if(pi) pi.innerText = j.isha; var tzu = document.getElementById('tzUsed'); if(tzu) tzu.innerText = j.tz_min; var tzs = document.getElementById('tzSource'); if(tzs) tzs.innerText = j.tz_source; var aside = document.getElementById('aside_next'); if(aside){ if(typeof j.next !== 'undefined') aside.innerText = j.next; else aside.innerText = j.dhuhr; } var qt = document.getElementById('quick_tz'); if(qt) qt.innerText = j.tz_min; // also update dashboard compact view if present
+      var d_pf = document.getElementById('dash_p_fajr'); if(d_pf) d_pf.innerText = j.fajr;
+      var d_pd = document.getElementById('dash_p_dhuhr'); if(d_pd) d_pd.innerText = j.dhuhr;
+      var d_pa = document.getElementById('dash_p_asr'); if(d_pa) d_pa.innerText = j.asr;
+      var d_pm = document.getElementById('dash_p_maghrib'); if(d_pm) d_pm.innerText = j.maghrib;
+      var d_pi = document.getElementById('dash_p_isha'); if(d_pi) d_pi.innerText = j.isha;
+    }).catch(e=>{ /* ignore */ }); };
+    setInterval(updatePrayerTimes, 10000); updatePrayerTimes();
+    // On load show stored location (if any) and populate inputs
+    fetch('/show_loc').then(r=>r.json()).then(j=>{
+      if(j && j.lat){
+        document.getElementById('quick_loc').innerText = j.lat+','+j.lon;
+        var li = document.getElementById('latInput'); if(li) li.value = j.lat;
+        var lo = document.getElementById('lonInput'); if(lo) lo.value = j.lon;
+        var ac = document.getElementById('accInput'); if(ac) ac.value = j.acc || '';
+      } else {
+        document.getElementById('quick_loc').innerText = 'Non configurée';
+      }
+    }).catch(e=>{ document.getElementById('quick_loc').innerText = 'Erreur'; });
+    
+    // convenience refresh after changes (hoisted so handlers can call it earlier)
+    function refreshAll(){ updateRTCTime(); updatePrayerTimes(); }
+
+  </script>
+</body>
+</html>
+ )HTML";
 
 // Helpers to get request body robustly
 static String getRequestBody() {
@@ -987,7 +1411,7 @@ void handleStopPlay() {
 
 // Set volume via POST JSON {"vol":number}
 void handleSetVolume() {
-  // [SECU] contrôle foyer (volume) — ouvert sur le LAN, comme /play
+  if (!requireApiKey()) return;  // [SECU] auth requise
   if (server.method() != HTTP_POST) {
     server.send(405, "text/plain", "Method not allowed");
     return;
@@ -1019,51 +1443,9 @@ void handleGetVolume() {
   server.send(200, "application/json", String(buf));
 }
 
-// [PLAYER] GET /api/audio/status — etat de lecture complet pour la barre de
-// lecture de l'app : fichier en cours, position/taille (octets), pause, volume.
-void handleAudioStatus() {
-  prefs.begin("adhancfg", true);
-  int vol = prefs.getInt("volume", 20);
-  prefs.end();
-  char buf[256];
-  snprintf(buf, sizeof(buf),
-           "{\"playing\":%s,\"paused\":%s,\"file\":\"%s\",\"pos\":%lu,\"size\":%lu,\"volume\":%d}",
-           (isPlaying && audio.isRunning()) ? "true" : "false",
-           audio.isPaused() ? "true" : "false",
-           audio.currentPath(),
-           (unsigned long)audio.posBytes(),
-           (unsigned long)audio.sizeBytes(),
-           vol);
-  server.send(200, "application/json", String(buf));
-}
-
-// [PLAYER] GET /api/audio/pause & /api/audio/resume — pause/reprise sans
-// repartir de zero. [CONTROLE FOYER] pas d'auth : tout le foyer peut piloter.
-void handleAudioPause() {
-  audio.pause();
-  server.send(200, "application/json", "{\"ok\":true,\"paused\":true}");
-}
-void handleAudioResume() {
-  audio.resume();
-  server.send(200, "application/json", "{\"ok\":true,\"paused\":false}");
-}
-
-// [ETAT REEL] GET /api/led/status — etat LED complet, ce que l'app lit pour
-// afficher le vrai etat (bouton power correct des l'ouverture).
-void handleLedStatus() {
-  char buf[160];
-  bool on = ledCustomActive || (ledScenario != 0);
-  snprintf(buf, sizeof(buf),
-           "{\"on\":%s,\"scenario\":%d,\"brightness\":%d,\"custom\":%s,\"r\":%d,\"g\":%d,\"b\":%d}",
-           on ? "true" : "false", ledScenario, ledBrightness,
-           ledCustomActive ? "true" : "false",
-           (int)ledCustomR, (int)ledCustomG, (int)ledCustomB);
-  server.send(200, "application/json", String(buf));
-}
-
 // Set brightness via POST JSON {"bright":number}
 void handleSetBrightness() {
-  // [SECU] contrôle foyer (luminosité) — ouvert sur le LAN, comme /play
+  if (!requireApiKey()) return;  // [SECU] auth requise
   if (server.method() != HTTP_POST) {
     server.send(405, "text/plain", "Method not allowed");
     return;
@@ -1099,7 +1481,7 @@ void handleGetBrightness() {
 
 // Set LED scenario via POST JSON {"scenario": number}
 void handleSetLedScenario() {
-  // [SECU] contrôle foyer (scénario LED) — ouvert sur le LAN, comme /play
+  if (!requireApiKey()) return;  // [SECU] auth requise
   if (server.method() != HTTP_POST) {
     server.send(405, "text/plain", "Method not allowed");
     return;
@@ -1136,7 +1518,7 @@ void handleSetLedScenario() {
 
 // Couleur RGB libre : POST JSON {"r":0-255,"g":0-255,"b":0-255}
 void handleSetLedRgb() {
-  // [SECU] contrôle foyer (couleur LED) — ouvert sur le LAN, comme /play
+  if (!requireApiKey()) return;  // [SECU] auth requise
   if (server.method() != HTTP_POST) {
     server.send(405, "text/plain", "Method not allowed");
     return;
@@ -1178,7 +1560,7 @@ void handleLedTest() {
 
 // Set LED scenario via query ?scene=N
 void handleSetLed() {
-  // [SECU] contrôle foyer (LED) — ouvert sur le LAN, comme /play
+  if (!requireApiKey()) return;  // [SECU] auth requise
   String s = server.arg("scene");
   if (s.length() == 0) {
     server.send(400, "text/plain", "Missing scene");
@@ -1210,7 +1592,7 @@ void handleSetLed() {
 
 // Turn off LEDs
 void handleLedOff() {
-  // [SECU] contrôle foyer (LED off) — ouvert sur le LAN, comme /play
+  if (!requireApiKey()) return;  // [SECU] auth requise
   ledScenario = 0;
   setLedDuty(0);
   if (useAddressableLEDs) stripSetAll(0, 0, 0);
@@ -1382,10 +1764,22 @@ static UpdaterECDSAVerifier *_otaVerifier = nullptr;
 
 // OTA update via HTTP multipart upload (POST /ota/upload)
 void handleOtaUpload() {
-  // [CONTROLE FOYER] Pas d'auth par token sur l'OTA : n'importe quel appareil
-  // du foyer (Wi-Fi local) peut lancer une mise à jour. La vraie protection est
-  // la SIGNATURE ECDSA du firmware (voir UPDATE_SIGN) : la box refuse tout binaire
-  // non signé par la clé privée hors-repo, un token n'ajoutait donc rien.
+  // Verify authorization at the start of the upload to prevent writing unauthorized chunks
+  bool auth = true;
+  if (_apiToken.length() > 0 && !apRunning) {
+    String key = server.header("X-API-Key");
+    if (key.length() == 0) {
+      key = server.arg("token");
+    }
+    if (key != _apiToken) {
+      auth = false;
+    }
+  }
+
+  if (!auth) {
+    return;
+  }
+
   HTTPUpload &upload = server.upload();
   if (upload.status == UPLOAD_FILE_START) {
     size_t total = (size_t)server.arg("size").toInt();  // taille du .bin signe (firmware+512)
@@ -1466,7 +1860,7 @@ void handleUpdatePage() {
 }
 
 void handleOtaUploadComplete() {
-  // [CONTROLE FOYER] Voir handleOtaUpload : protection assurée par la signature ECDSA.
+  if (!requireApiKey()) { return; }
   if (Update.hasError()) {
     server.send(500, "application/json", "{\"ok\":false,\"error\":\"Update failed\"}");
   } else {
@@ -1479,7 +1873,7 @@ void handleOtaUploadComplete() {
 // GET /api/firmware/version
 void handleFirmwareVersion() {
   server.send(200, "application/json",
-              "{\"version\":\"2.3.21\",\"hardware\":\"v2\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
+              "{\"version\":\"3.0.0\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
 }
 
 // Returns true if the request carries the correct API key (or if token not yet set).
@@ -1511,11 +1905,11 @@ void handleDeviceInfo() {
   char buf[512];
   if (pairingWindow || hasValidToken) {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"2.3.21\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
+             "{\"version\":\"3.0.0\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
              OTA_HOSTNAME, _apiToken.c_str(), _otaPass.c_str());
   } else {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"2.3.21\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"paired\":true}",
+             "{\"version\":\"3.0.0\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"paired\":true}",
              OTA_HOSTNAME);
   }
   server.send(200, "application/json", buf);
@@ -1685,9 +2079,8 @@ void handleMawaqitConfig() {
     server.send(405, "application/json", "{\"error\":\"Method not allowed\"}");
     return;
   }
-  // [CONTROLE FOYER] Config de la mosquée de référence accessible à tout
-  // appareil du réseau local (pas d'auth) : un 2e téléphone du foyer, non
-  // appairé, doit pouvoir régler les horaires sans re-jumeler.
+  if (!requireApiKey()) return;
+
   String body = getRequestBody();
   Serial.print("/api/mawaqit/config body: ");
   Serial.println(body);
@@ -1988,7 +2381,8 @@ void handleMawaqitSync() {
     server.send(405, "application/json", "{\"error\":\"Method not allowed\"}");
     return;
   }
-  // [CONTROLE FOYER] Synchro Mawaqit accessible à tout appareil du réseau local.
+  if (!requireApiKey()) return;
+
   String err;
   if (performMawaqitSync(err)) {
     scheduleNextPrayerAlarm();
@@ -2663,10 +3057,6 @@ void setupServerRoutes() {
 #endif
   server.on("/api/audio/delete", HTTP_GET, handleAudioDelete);
   server.on("/api/audio/play", HTTP_GET, handlePlayFile);
-  server.on("/api/audio/status", HTTP_GET, handleAudioStatus);   // [PLAYER] etat de lecture
-  server.on("/api/audio/pause", HTTP_GET, handleAudioPause);     // [PLAYER] pause
-  server.on("/api/audio/resume", HTTP_GET, handleAudioResume);   // [PLAYER] reprise
-  server.on("/api/led/status", HTTP_GET, handleLedStatus);       // [ETAT REEL] etat LED complet
   server.on("/api/device/info", HTTP_GET, handleDeviceInfo);
   server.on("/ota/upload", HTTP_POST, handleOtaUploadComplete, handleOtaUpload);
   server.on("/update", HTTP_GET, handleUpdatePage);
@@ -3133,60 +3523,45 @@ static inline uint8_t bcdToDec(uint8_t val) {
   return ((val >> 4) * 10) + (val & 0x0F);
 }
 
-// Write a single register to DS3231 (addr 0x68)
+// [V3] Acces registres RTC RX-8025T (addr 0x32) — noms ds3231* conserves pour diff minimal
 void ds3231WriteReg(uint8_t reg, uint8_t value) {
-  Wire.beginTransmission(0x68);
-  Wire.write(reg);
-  Wire.write(value);
-  Wire.endTransmission();
+  RX8025T::writeReg(reg, value);   // [V3] RX-8025T @0x32
 }
 
-// Read a single register from DS3231
 uint8_t ds3231ReadReg(uint8_t reg) {
-  Wire.beginTransmission(0x68);
-  Wire.write(reg);
-  Wire.endTransmission(false);
-  Wire.requestFrom(0x68, (uint8_t)1);
-  if (Wire.available()) return Wire.read();
-  return 0;
+  return RX8025T::readReg(reg);    // [V3] RX-8025T @0x32
 }
 
-// Clear alarm flags A1F/A2F in status register (0x0F)
+// [V3] Efface le flag alarme AF (reg 0x0E bit3) du RX-8025T.
 void ds3231ClearAlarmFlags() {
-  uint8_t status = ds3231ReadReg(0x0F);
-  status &= ~0x03;  // clear A2F (bit1) and A1F (bit0)
-  ds3231WriteReg(0x0F, status);
+  uint8_t f = ds3231ReadReg(RX_REG_FLAG);
+  ds3231WriteReg(RX_REG_FLAG, f & ~RX_FLAG_AF);
 }
 
-// Enable Alarm2 interrupt (and INTCN) in control reg (0x0E)
+// [V3] Active l'interruption alarme (AIE, reg 0x0F bit3) du RX-8025T.
 void ds3231EnableAlarm2Interrupt() {
-  uint8_t ctrl = ds3231ReadReg(0x0E);
-  ctrl |= 0x06;  // INTCN (bit2) + A2IE (bit1)
-  ds3231WriteReg(0x0E, ctrl);
   ds3231ClearAlarmFlags();
+  uint8_t c = ds3231ReadReg(RX_REG_CTRL);
+  ds3231WriteReg(RX_REG_CTRL, c | RX_CTRL_AIE);
 }
 
-// Disable alarm interrupts
+// [V3] Coupe l'alarme RX-8025T.
 void ds3231DisableAlarms() {
-  uint8_t ctrl = ds3231ReadReg(0x0E);
-  ctrl &= ~0x06;  // clear INTCN and A2IE
-  ds3231WriteReg(0x0E, ctrl);
+  uint8_t c = ds3231ReadReg(RX_REG_CTRL);
+  ds3231WriteReg(RX_REG_CTRL, c & ~RX_CTRL_AIE);
   ds3231ClearAlarmFlags();
 }
 
-// Set Alarm2 to trigger daily at given hour/minute (minute resolution)
-// Uses Alarm2 registers 0x0B (min), 0x0C (hour), 0x0D (day/date)
+// [V3] Alarme quotidienne hh:mm sur RX-8025T :
+//   0x08 = minute (AE=0), 0x09 = heure (AE=0), 0x0A = AE=1 (jour ignore).
+//   WADA=1 (mode jour-du-mois) pour que 0x0A soit bien "jour" et non "semaine".
 bool ds3231SetAlarm2Daily(uint8_t hour, uint8_t minute) {
   if (hour > 23 || minute > 59) return false;
-  // A2M2 (min) = 0 -> match minute
-  uint8_t minReg = decToBcd(minute) & 0x7F;  // ensure MSB=0
-  // A2M3 (hour) = 0 -> match hour; keep 24-hour mode (bit6=0)
-  uint8_t hourReg = decToBcd(hour) & 0x3F;
-  // A2M4 (day) = 1 -> ignore day/date (daily)
-  uint8_t dayReg = 0x80 | decToBcd(1);
-  ds3231WriteReg(0x0B, minReg);
-  ds3231WriteReg(0x0C, hourReg);
-  ds3231WriteReg(0x0D, dayReg);
+  uint8_t ext = ds3231ReadReg(RX_REG_EXT);
+  ds3231WriteReg(RX_REG_EXT, ext | RX_EXT_WADA);
+  ds3231WriteReg(RX_REG_ALMIN, rxDecToBcd(minute) & 0x7F);
+  ds3231WriteReg(RX_REG_ALHR,  rxDecToBcd(hour)   & 0x3F);
+  ds3231WriteReg(RX_REG_ALWD,  RX_ALARM_AE);
   ds3231EnableAlarm2Interrupt();
   return true;
 }
@@ -3865,7 +4240,7 @@ void v2Tick() {
 void setup() {
   Serial.begin(115200);
   delay(100);
-  Serial.println("AdhanBox V2 firmware v2.3.21 starting...");
+  Serial.println("AdhanBox V3 firmware v3.0.0 starting...");
 
   // [SECU] Watchdog materiel : on REGLE juste le timeout ici (30s, reboot sur
   // panic) et on DESABONNE les taches idle. L'abonnement de la tache loop() se
@@ -3877,24 +4252,6 @@ void setup() {
   }
 
   pinMode(CONFIG_BUTTON_PIN, INPUT_PULLUP);
-
-  // [RESET FOYER] Compteur de power-cycle : incrémenté à chaque boot. Au 3e
-  // débranchement/rebranchement rapide, on force le mode appairage (utile si la
-  // box est "coincée" sur un WiFi et injoignable par l'app). loop() remet le
-  // compteur à zéro après 10 s d'allumage -> un reboot normal ne s'accumule pas.
-  {
-    prefs.begin("adhancfg", false);
-    int pc = prefs.getInt("pcycle", 0) + 1;
-    if (pc >= 3) {
-      prefs.putInt("pcycle", 0);
-      g_forcePairing = true;
-      Serial.println("[RESET FOYER] 3 power-cycles detectes -> mode appairage force");
-    } else {
-      prefs.putInt("pcycle", pc);
-      Serial.printf("[RESET FOYER] power-cycle #%d (3 rapides = appairage)\n", pc);
-    }
-    prefs.end();
-  }
 
   // Charge les preferences NVS
   prefs.begin("adhancfg", true);
@@ -4083,7 +4440,7 @@ void setup() {
   // ou connexion echouee) -> fini les 5 min hors ligne a chaque redemarrage.
   // (mark_valid est deja fait plus haut -> le WDT bootloader ne gene pas cette attente.)
   // pairBoot : demande d'appairage via /api/pair (survit au reboot via memoire RTC).
-  bool pairBoot = (g_pairBootMagic == PAIR_BOOT_MAGIC) || g_forcePairing;
+  bool pairBoot = (g_pairBootMagic == PAIR_BOOT_MAGIC);
   g_pairBootMagic = 0;   // one-shot : consomme
   Serial.printf("Boot: pairBoot=%d\n", pairBoot ? 1 : 0);
 
@@ -4261,16 +4618,6 @@ void loop() {
   esp_task_wdt_reset();
   audio.pump();
   v2Tick();          // [V2] azkar/coran + sync contenu
-
-  // [RESET FOYER] Box allumée > 10 s -> le power-cycle a été "normal", on remet
-  // le compteur à zéro. Seuls 3 débranchements rapprochés (chacun < 10 s)
-  // atteignent 3 et déclenchent l'appairage.
-  if (!g_pcycleCleared && millis() > 10000) {
-    prefs.begin("adhancfg", false);
-    prefs.putInt("pcycle", 0);
-    prefs.end();
-    g_pcycleCleared = true;
-  }
 
   // [V2] Desactive le modem-sleep WiFi des la 1ere connexion (tous chemins :
   // boot, BLE, reconnexion). Le modem-sleep par defaut reveille le WiFi par

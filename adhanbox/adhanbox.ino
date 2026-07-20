@@ -4400,17 +4400,49 @@ void loop() {
           float breath = 0.5f + 0.5f * sinf((float)now * (2.0f * 3.14159265f / 4000.0f));
           stripSetAll(0, (uint8_t)(180 * breath), (uint8_t)(212 * breath));
         } else if (ledScenario == SCENE_CANDLE) {
-          // Candle effect: warm amber/orange with independent flickering per LED
+          // Effet bougie. Une vraie flamme ne suit pas une sinusoide : elle
+          // vacille de facon irreguliere et, de temps en temps, un courant
+          // d'air la fait plonger avant qu'elle ne remonte. On superpose donc
+          // trois choses : une flamme globale qui derive vers des cibles
+          // tirees au hasard, des rafales ponctuelles, et une micro-variation
+          // propre a chaque LED pour que la lumiere bouge dans le boitier.
+          static float candleLevel = 0.85f, candleTarget = 0.85f;
+          static uint32_t candleNextAt = 0;
+          static float candleGust = 0.0f;
+          static uint32_t candleGustUntil = 0;
+          static float candleOfs[LED_NUM];
+
+          if (now >= candleNextAt) {
+            candleTarget = 0.52f + (float)random(0, 480) / 1000.0f;  // 0.52 .. 1.00
+            candleNextAt = now + 60 + random(0, 120);                // 60 .. 180 ms
+          }
+          candleLevel += (candleTarget - candleLevel) * 0.28f;
+
+          // Rafale : environ une fois par seconde et demie, creux marque puis
+          // remontee progressive. C'est ce creux qui rend l'effet lisible.
+          if (now > candleGustUntil && random(0, 1000) < 14) {
+            candleGust = 0.30f + (float)random(0, 320) / 1000.0f;
+            candleGustUntil = now + 160 + random(0, 260);
+          }
+          if (candleGust > 0.0f) {
+            candleGust *= 0.90f;
+            if (candleGust < 0.01f) candleGust = 0.0f;
+          }
+
           leds.clear();
           for (uint16_t i = 0; i < LED_NUM; i++) {
-            float wave = sinf((float)now * 0.005f + i * 0.8f) * 0.3f + sinf((float)now * 0.012f - i * 1.5f) * 0.2f;
-            float noise = (float)(random(0, 100) - 50) / 500.0f;
-            float intensity = 0.75f + wave + noise;
-            intensity = constrain(intensity, 0.4f, 1.0f);
+            float ofsTarget = (float)(random(0, 200) - 100) / 1000.0f;  // +/- 0.10
+            candleOfs[i] += (ofsTarget - candleOfs[i]) * 0.35f;
 
+            float intensity = candleLevel - candleGust + candleOfs[i];
+            intensity = constrain(intensity, 0.10f, 1.0f);
+
+            // Temperature de flamme : rouge sombre quand elle faiblit,
+            // ambre lumineux quand elle reprend.
+            float warm = intensity * intensity;
             uint8_t r = 255;
-            uint8_t g = (uint8_t)(80 + 35.0f * intensity);
-            uint8_t b = 5;
+            uint8_t g = (uint8_t)(18.0f + 150.0f * warm);
+            uint8_t b = (uint8_t)(10.0f * warm);
 
             uint8_t r_adj = (uint8_t)((r * intensity * ledBrightness) / 100);
             uint8_t g_adj = (uint8_t)((g * intensity * ledBrightness) / 100);
@@ -4462,10 +4494,29 @@ void loop() {
         v = (v * ledBrightness) / 100;
         setLedDuty(v);
       } else if (ledScenario == SCENE_CANDLE) {
-        // Candle effect for single PWM pin: simple global flicker
-        float wave = sinf((float)now * 0.007f) * 0.25f + sinf((float)now * 0.015f) * 0.15f;
-        float intensity = 0.75f + wave + (float)(random(0, 100) - 50) / 600.0f;
-        intensity = constrain(intensity, 0.4f, 1.0f);
+        // Effet bougie sur un seul canal PWM : meme flamme et memes rafales
+        // que la version adressable, sans la variation par LED.
+        static float pwmCandleLevel = 0.85f, pwmCandleTarget = 0.85f;
+        static uint32_t pwmCandleNextAt = 0;
+        static float pwmCandleGust = 0.0f;
+        static uint32_t pwmCandleGustUntil = 0;
+
+        if (now >= pwmCandleNextAt) {
+          pwmCandleTarget = 0.52f + (float)random(0, 480) / 1000.0f;
+          pwmCandleNextAt = now + 60 + random(0, 120);
+        }
+        pwmCandleLevel += (pwmCandleTarget - pwmCandleLevel) * 0.28f;
+
+        if (now > pwmCandleGustUntil && random(0, 1000) < 14) {
+          pwmCandleGust = 0.30f + (float)random(0, 320) / 1000.0f;
+          pwmCandleGustUntil = now + 160 + random(0, 260);
+        }
+        if (pwmCandleGust > 0.0f) {
+          pwmCandleGust *= 0.90f;
+          if (pwmCandleGust < 0.01f) pwmCandleGust = 0.0f;
+        }
+
+        float intensity = constrain(pwmCandleLevel - pwmCandleGust, 0.10f, 1.0f);
         uint8_t v = (uint8_t)(255 * intensity);
         v = (v * ledBrightness) / 100;
         setLedDuty(v);
