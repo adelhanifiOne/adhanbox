@@ -212,7 +212,10 @@
   /* ══════════ IMPRESSION ══════════ */
   @page { size:A4 portrait; margin:0; }
   @media print {
-    body { background:#fff; padding:0; display:block; }
+    /* Evite la page blanche parasite : la page ne doit rien deborder */
+    html, body { height:297mm; overflow:hidden; }
+    body { background:#fff; padding:0; margin:0; display:block; }
+    .poster { transform:none !important; margin:0 !important; }
     .toolbar { display:none; }
     .poster { box-shadow:none; width:210mm; height:297mm; }
   }
