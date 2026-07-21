@@ -2,7 +2,7 @@
 // - Starts an AP when a long-press is detected on CONFIG_BUTTON_PIN
 // - Serves a small webpage that requests navigator.geolocation and POSTs lat/lon
 // - Stores lat/lon/accuracy/timestamp in Preferences (NVS)
-//Version: 2.3.22 (AdhanBox V2 / HW v2)
+//Version: 2.3.23 (AdhanBox V2 / HW v2)
 #include <Arduino.h>
 #include <Wire.h>
 #include <WiFi.h>
@@ -1479,7 +1479,7 @@ void handleOtaUploadComplete() {
 // GET /api/firmware/version
 void handleFirmwareVersion() {
   server.send(200, "application/json",
-              "{\"version\":\"2.3.22\",\"hardware\":\"v2\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
+              "{\"version\":\"2.3.23\",\"hardware\":\"v2\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
 }
 
 // Returns true if the request carries the correct API key (or if token not yet set).
@@ -1511,11 +1511,11 @@ void handleDeviceInfo() {
   char buf[512];
   if (pairingWindow || hasValidToken) {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"2.3.22\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
+             "{\"version\":\"2.3.23\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
              OTA_HOSTNAME, _apiToken.c_str(), _otaPass.c_str());
   } else {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"2.3.22\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"paired\":true}",
+             "{\"version\":\"2.3.23\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"paired\":true}",
              OTA_HOSTNAME);
   }
   server.send(200, "application/json", buf);
@@ -4524,49 +4524,69 @@ void loop() {
           float breath = 0.5f + 0.5f * sinf((float)now * (2.0f * 3.14159265f / 4000.0f));
           stripSetAll(0, (uint8_t)(180 * breath), (uint8_t)(212 * breath));
         } else if (ledScenario == SCENE_CANDLE) {
-          // Effet bougie. Une vraie flamme ne suit pas une sinusoide : elle
-          // vacille de facon irreguliere et, de temps en temps, un courant
-          // d'air la fait plonger avant qu'elle ne remonte. On superpose donc
-          // trois choses : une flamme globale qui derive vers des cibles
-          // tirees au hasard, des rafales ponctuelles, et une micro-variation
-          // propre a chaque LED pour que la lumiere bouge dans le boitier.
-          static float candleLevel = 0.85f, candleTarget = 0.85f;
-          static uint32_t candleNextAt = 0;
-          static float candleGust = 0.0f;
-          static uint32_t candleGustUntil = 0;
-          static float candleOfs[LED_NUM];
+          // Effet bougie. Une flamme bouge LENTEMENT : si la lumiere saute a
+          // chaque image, l'oeil lit une panne et non une bougie. On construit
+          // donc un mouvement continu — trois oscillations lentes de periodes
+          // non multiples entre elles (le motif ne se repete jamais vraiment)
+          // plus une derive tres douce — et on n'ajoute qu'un rare « coup
+          // d'air » a enveloppe progressive. La teinte, elle, reste chaude en
+          // permanence : seule la luminosite varie.
+          static float candleDrift = 0.0f, candleDriftTarget = 0.0f;
+          static uint32_t candleDriftAt = 0;
+          static float candleFlutter = 0.0f;
+          static uint32_t candleFlutterStart = 0, candleFlutterDur = 1, candleFlutterAt = 2500;
+          static float candlePhase[LED_NUM];
+          static bool candleReady = false;
 
-          if (now >= candleNextAt) {
-            candleTarget = 0.52f + (float)random(0, 480) / 1000.0f;  // 0.52 .. 1.00
-            candleNextAt = now + 60 + random(0, 120);                // 60 .. 180 ms
+          if (!candleReady) {
+            for (uint16_t i = 0; i < LED_NUM; i++) {
+              candlePhase[i] = (float)random(0, 628) / 100.0f;   // 0 .. 2*PI
+            }
+            candleReady = true;
           }
-          candleLevel += (candleTarget - candleLevel) * 0.28f;
 
-          // Rafale : environ une fois par seconde et demie, creux marque puis
-          // remontee progressive. C'est ce creux qui rend l'effet lisible.
-          if (now > candleGustUntil && random(0, 1000) < 14) {
-            candleGust = 0.30f + (float)random(0, 320) / 1000.0f;
-            candleGustUntil = now + 160 + random(0, 260);
+          float ct = (float)now * 0.001f;   // secondes
+
+          // Derive lente : empeche le motif de se figer, sans etre visible.
+          if (now >= candleDriftAt) {
+            candleDriftTarget = (float)(random(0, 60) - 30) / 1000.0f;   // +/- 0.03
+            candleDriftAt = now + 900 + random(0, 1200);
           }
-          if (candleGust > 0.0f) {
-            candleGust *= 0.90f;
-            if (candleGust < 0.01f) candleGust = 0.0f;
+          candleDrift += (candleDriftTarget - candleDrift) * 0.02f;
+
+          // Coup d'air : toutes les 3 a 7 s, un creux court dont l'entree et la
+          // sortie sont adoucies par une demi-cosinusoide (jamais de saut net).
+          if (now >= candleFlutterAt) {
+            candleFlutter = 0.15f + (float)random(0, 130) / 1000.0f;   // 0.15 .. 0.28
+            candleFlutterStart = now;
+            candleFlutterDur = 300 + random(0, 200);
+            candleFlutterAt = now + 3000 + random(0, 4000);
           }
+          float candleDip = 0.0f;
+          if (now - candleFlutterStart < candleFlutterDur) {
+            float p = (float)(now - candleFlutterStart) / (float)candleFlutterDur;
+            candleDip = candleFlutter * 0.5f * (1.0f - cosf(6.2831853f * p));
+          }
+
+          float candleBase = 0.87f
+                           + 0.055f * sinf(ct * 0.90f)
+                           + 0.035f * sinf(ct * 2.30f + 1.7f)
+                           + 0.022f * sinf(ct * 5.10f + 3.1f)
+                           + candleDrift - candleDip;
 
           leds.clear();
           for (uint16_t i = 0; i < LED_NUM; i++) {
-            float ofsTarget = (float)(random(0, 200) - 100) / 1000.0f;  // +/- 0.10
-            candleOfs[i] += (ofsTarget - candleOfs[i]) * 0.35f;
+            // Chaque LED respire avec son propre decalage : la lumiere se
+            // deplace doucement dans le boitier, sans scintillement parasite.
+            float intensity = candleBase + 0.040f * sinf(ct * 1.40f + candlePhase[i]);
+            intensity = constrain(intensity, 0.35f, 1.0f);
 
-            float intensity = candleLevel - candleGust + candleOfs[i];
-            intensity = constrain(intensity, 0.10f, 1.0f);
-
-            // Temperature de flamme : rouge sombre quand elle faiblit,
-            // ambre lumineux quand elle reprend.
-            float warm = intensity * intensity;
+            // Teinte chaude constante (ambre), a peine plus doree quand la
+            // flamme monte. Plus de bascule vers le rouge sombre.
+            float k = (intensity - 0.35f) / 0.65f;
             uint8_t r = 255;
-            uint8_t g = (uint8_t)(18.0f + 150.0f * warm);
-            uint8_t b = (uint8_t)(10.0f * warm);
+            uint8_t g = (uint8_t)(112.0f + 52.0f * k);
+            uint8_t b = (uint8_t)(10.0f + 10.0f * k);
 
             uint8_t r_adj = (uint8_t)((r * intensity * ledBrightness) / 100);
             uint8_t g_adj = (uint8_t)((g * intensity * ledBrightness) / 100);
@@ -4618,29 +4638,40 @@ void loop() {
         v = (v * ledBrightness) / 100;
         setLedDuty(v);
       } else if (ledScenario == SCENE_CANDLE) {
-        // Effet bougie sur un seul canal PWM : meme flamme et memes rafales
-        // que la version adressable, sans la variation par LED.
-        static float pwmCandleLevel = 0.85f, pwmCandleTarget = 0.85f;
-        static uint32_t pwmCandleNextAt = 0;
-        static float pwmCandleGust = 0.0f;
-        static uint32_t pwmCandleGustUntil = 0;
+        // Effet bougie sur un seul canal PWM : meme mouvement lent que la
+        // version adressable, sans la variation par LED.
+        static float pwmDrift = 0.0f, pwmDriftTarget = 0.0f;
+        static uint32_t pwmDriftAt = 0;
+        static float pwmFlutter = 0.0f;
+        static uint32_t pwmFlutterStart = 0, pwmFlutterDur = 1, pwmFlutterAt = 2500;
 
-        if (now >= pwmCandleNextAt) {
-          pwmCandleTarget = 0.52f + (float)random(0, 480) / 1000.0f;
-          pwmCandleNextAt = now + 60 + random(0, 120);
-        }
-        pwmCandleLevel += (pwmCandleTarget - pwmCandleLevel) * 0.28f;
+        float ct = (float)now * 0.001f;
 
-        if (now > pwmCandleGustUntil && random(0, 1000) < 14) {
-          pwmCandleGust = 0.30f + (float)random(0, 320) / 1000.0f;
-          pwmCandleGustUntil = now + 160 + random(0, 260);
+        if (now >= pwmDriftAt) {
+          pwmDriftTarget = (float)(random(0, 60) - 30) / 1000.0f;
+          pwmDriftAt = now + 900 + random(0, 1200);
         }
-        if (pwmCandleGust > 0.0f) {
-          pwmCandleGust *= 0.90f;
-          if (pwmCandleGust < 0.01f) pwmCandleGust = 0.0f;
+        pwmDrift += (pwmDriftTarget - pwmDrift) * 0.02f;
+
+        if (now >= pwmFlutterAt) {
+          pwmFlutter = 0.15f + (float)random(0, 130) / 1000.0f;
+          pwmFlutterStart = now;
+          pwmFlutterDur = 300 + random(0, 200);
+          pwmFlutterAt = now + 3000 + random(0, 4000);
+        }
+        float pwmDip = 0.0f;
+        if (now - pwmFlutterStart < pwmFlutterDur) {
+          float p = (float)(now - pwmFlutterStart) / (float)pwmFlutterDur;
+          pwmDip = pwmFlutter * 0.5f * (1.0f - cosf(6.2831853f * p));
         }
 
-        float intensity = constrain(pwmCandleLevel - pwmCandleGust, 0.10f, 1.0f);
+        float intensity = 0.87f
+                        + 0.055f * sinf(ct * 0.90f)
+                        + 0.035f * sinf(ct * 2.30f + 1.7f)
+                        + 0.022f * sinf(ct * 5.10f + 3.1f)
+                        + pwmDrift - pwmDip;
+        intensity = constrain(intensity, 0.35f, 1.0f);
+
         uint8_t v = (uint8_t)(255 * intensity);
         v = (v * ledBrightness) / 100;
         setLedDuty(v);
