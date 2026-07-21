@@ -8,6 +8,7 @@
 (function () {
   var PIXEL_ID = '1510675917787927';
   var CONSENT_KEY = 'ab_consent_ads';
+  var BACKEND = 'https://adhanbox-commande.vercel.app';
   var page = document.body.getAttribute('data-page') || '';
 
   function loadMetaPixel() {
@@ -29,11 +30,23 @@
     // Purchase déclenché uniquement après un vrai paiement (session_id présent).
     // eventID = id de session Stripe : le backend envoie le même Purchase via
     // l'API Conversions avec cet id -> Meta déduplique, pas de double comptage.
+    // On demande au backend le montant réellement payé (codes promo déduits)
+    // pour que le ROAS soit juste ; si l'appel échoue, on retombe sur le prix
+    // catalogue plutôt que de perdre la conversion.
     var sid = window.location.search.match(/[?&]session_id=([^&]+)/);
     if (page === 'merci' && sid) {
-      fbq('track', 'Purchase',
-        { content_name: 'AdhanBox — Précommande', value: 95, currency: 'EUR' },
-        { eventID: decodeURIComponent(sid[1]) });
+      var sessionId = decodeURIComponent(sid[1]);
+      var sendPurchase = function (value) {
+        fbq('track', 'Purchase',
+          { content_name: 'AdhanBox — Précommande', value: value, currency: 'EUR' },
+          { eventID: sessionId });
+      };
+      fetch(BACKEND + '/api/order-amount?id=' + encodeURIComponent(sessionId))
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (d) {
+          sendPurchase(d && typeof d.amount === 'number' ? d.amount : 95);
+        })
+        .catch(function () { sendPurchase(95); });
     }
   }
 
