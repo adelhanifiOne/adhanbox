@@ -532,7 +532,7 @@ class _PrayerAdhanCard extends StatelessWidget {
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Text('Volume de l\'Adhan', style: Theme.of(context).textTheme.bodySmall),
-                            Text('$volume / 30', style: Theme.of(context).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.bold)),
+                            Text('${(volume * 100 / 30).round()} %', style: Theme.of(context).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.bold)),
                           ],
                         ),
                         const SizedBox(height: 2),
@@ -540,14 +540,17 @@ class _PrayerAdhanCard extends StatelessWidget {
                           children: [
                             Icon(Icons.volume_mute_rounded, size: 18, color: isDark ? Colors.grey[600] : Colors.grey[400]),
                             Expanded(
+                              // Reglage en pourcentage ; la box attend 0-30.
                               child: Slider(
-                                value: volume.toDouble(),
+                                value: (volume * 100 / 30).clamp(0, 100).toDouble(),
                                 min: 0,
-                                max: 30,
-                                divisions: 30,
+                                max: 100,
+                                divisions: 20,
+                                label: '\${(volume * 100 / 30).round()} %',
                                 activeColor: color,
                                 inactiveColor: color.withOpacity(0.15),
-                                onChanged: (v) => onVolumeChanged(v.toInt()),
+                                onChanged: (pct) =>
+                                    onVolumeChanged((pct * 30 / 100).round()),
                               ),
                             ),
                             Icon(Icons.volume_up_rounded, size: 18, color: color),
@@ -623,7 +626,7 @@ class _GlobalVolumeCard extends StatelessWidget {
               const SizedBox(width: 10),
               Text('Volume général', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
               const Spacer(),
-              Text('$volume / 30', style: Theme.of(context).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.bold)),
+              Text('${(volume * 100 / 30).round()} %', style: Theme.of(context).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.bold)),
             ],
           ),
           const SizedBox(height: 4),
@@ -631,13 +634,17 @@ class _GlobalVolumeCard extends StatelessWidget {
             children: [
               Icon(Icons.volume_mute_rounded, size: 18, color: isDark ? Colors.grey[600] : Colors.grey[400]),
               Expanded(
+                // Reglage en pourcentage ; la box attend 0-30.
                 child: Slider(
-                  value: volume.toDouble(),
+                  value: (volume * 100 / 30).clamp(0, 100).toDouble(),
                   min: 0,
-                  max: 30,
-                  divisions: 30,
+                  max: 100,
+                  divisions: 20,
+                  label: '\${(volume * 100 / 30).round()} %',
                   activeColor: AppTheme.emerald,
-                  onChanged: onChanged != null ? (v) => onChanged!(v.round()) : null,
+                  onChanged: onChanged != null
+                      ? (pct) => onChanged!((pct * 30 / 100).round())
+                      : null,
                 ),
               ),
               Icon(Icons.volume_up_rounded, size: 18, color: AppTheme.emerald),

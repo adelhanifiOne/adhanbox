@@ -4982,26 +4982,35 @@ void loop() {
           }
           leds.show();
         } else if (ledScenario == SCENE_WAVE) {
-          // Vague : une crete lumineuse fait lentement le tour du boitier.
-          // La teinte derive tres doucement du turquoise au bleu profond.
+          // Vague. Attention : un motif qui se contente de se DEPLACER le long
+          // du ruban est invisible ici — le diffuseur melange les 25 LED, et la
+          // somme de lumiere reste constante. L'effet doit donc varier dans le
+          // TEMPS : la vague enfle lentement puis retombe, du bleu profond vers
+          // le turquoise clair, comme une lame qui monte et se brise.
           float wt = (float)now * 0.001f;
-          float head = fmodf(wt * 3.2f, (float)LED_NUM);     // ~3 LED par seconde
-          float hue  = 0.5f + 0.5f * sinf(wt * 0.13f);       // derive lente
+          float p = fmodf(wt / 6.0f, 1.0f);                  // cycle de 6 s
+          float swell = 0.5f * (1.0f - cosf(6.2831853f * p));
+          swell = powf(swell, 1.6f);                         // montee lente, crete franche
+
+          // La crete se deplace aussi le long du ruban : invisible dans un
+          // boitier diffusant, mais joli sur un ruban apparent.
+          float head = fmodf(wt * 3.2f, (float)LED_NUM);
+
+          uint8_t r = (uint8_t)(10.0f + 50.0f * swell);
+          uint8_t g = (uint8_t)(60.0f + 160.0f * swell);
+          uint8_t b = (uint8_t)(180.0f + 75.0f * swell);
 
           leds.clear();
           for (uint16_t i = 0; i < LED_NUM; i++) {
             float d = fabsf((float)i - head);
-            if (d > LED_NUM / 2.0f) d = LED_NUM - d;         // distance circulaire
-            float v = expf(-(d * d) / 7.0f);                 // crete douce
-            float intensity = 0.10f + 0.90f * v;             // le fond reste visible
+            if (d > LED_NUM / 2.0f) d = LED_NUM - d;
+            float local = 0.78f + 0.22f * expf(-(d * d) / 9.0f);
+            float intensity = (0.30f + 0.70f * swell) * local;
 
-            uint8_t r = (uint8_t)(10.0f * intensity);
-            uint8_t g = (uint8_t)((90.0f + 120.0f * hue) * intensity);
-            uint8_t b = (uint8_t)((235.0f - 60.0f * hue) * intensity);
-
-            leds.setPixelColor(i, leds.Color((r * ledBrightness) / 100,
-                                             (g * ledBrightness) / 100,
-                                             (b * ledBrightness) / 100));
+            leds.setPixelColor(i, leds.Color(
+              (uint8_t)((r * intensity * ledBrightness) / 100),
+              (uint8_t)((g * intensity * ledBrightness) / 100),
+              (uint8_t)((b * intensity * ledBrightness) / 100)));
           }
           leds.show();
         } else if (ledScenario == SCENE_DAWN) {

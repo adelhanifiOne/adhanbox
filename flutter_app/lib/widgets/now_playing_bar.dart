@@ -275,13 +275,15 @@ class _NowPlayingSheet extends ConsumerWidget {
             children: [
               const Icon(Icons.volume_down_rounded, size: 20),
               Expanded(
+                // Reglage en pourcentage ; la box attend 0-30.
                 child: Slider(
-                  value: pb.volume.toDouble().clamp(0, 30),
+                  value: (pb.volume * 100 / 30).clamp(0, 100).toDouble(),
                   min: 0,
-                  max: 30,
-                  divisions: 30,
+                  max: 100,
+                  divisions: 20,
+                  label: '${(pb.volume * 100 / 30).round()} %',
                   activeColor: AppTheme.emerald,
-                  onChanged: (v) => ctrl.setVolume(v.round()),
+                  onChanged: (pct) => ctrl.setVolume((pct * 30 / 100).round()),
                 ),
               ),
               const Icon(Icons.volume_up_rounded, size: 20),
