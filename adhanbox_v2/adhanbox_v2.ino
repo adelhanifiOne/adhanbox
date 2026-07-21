@@ -2,7 +2,7 @@
 // - Starts an AP when a long-press is detected on CONFIG_BUTTON_PIN
 // - Serves a small webpage that requests navigator.geolocation and POSTs lat/lon
 // - Stores lat/lon/accuracy/timestamp in Preferences (NVS)
-//Version: 2.3.25 (AdhanBox V2 / HW v2)
+//Version: 2.3.26 (AdhanBox V2 / HW v2)
 #include <Arduino.h>
 #include <Wire.h>
 #include <WiFi.h>
@@ -609,9 +609,11 @@ const int BLINK_INDEX = 7;
 const int DYN_HUE_INDEX = 8;
 const int DYN_FADE_INDEX = 9;
 const int SCENE_PRAYER = 10;
-const int SCENE_BREATH = 11;
+const int SCENE_STARS  = 11;   // ex-« Respiration » : ciel etoile
 const int SCENE_CANDLE = 12;
-const int TOTAL_SCENES = 13;
+const int SCENE_WAVE   = 13;   // vague de couleur qui fait le tour du boitier
+const int SCENE_DAWN   = 14;   // aube : degrade tres lent nuit -> jour
+const int TOTAL_SCENES = 15;
 
 
 // Simple webpage (served from RAM) — improved multi‑page UI with CSS
@@ -1479,7 +1481,7 @@ void handleOtaUploadComplete() {
 // GET /api/firmware/version
 void handleFirmwareVersion() {
   server.send(200, "application/json",
-              "{\"version\":\"2.3.25\",\"hardware\":\"v2\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
+              "{\"version\":\"2.3.26\",\"hardware\":\"v2\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
 }
 
 // Returns true if the request carries the correct API key (or if token not yet set).
@@ -1511,11 +1513,11 @@ void handleDeviceInfo() {
   char buf[512];
   if (pairingWindow || hasValidToken) {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"2.3.25\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
+             "{\"version\":\"2.3.26\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
              OTA_HOSTNAME, _apiToken.c_str(), _otaPass.c_str());
   } else {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"2.3.25\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"paired\":true}",
+             "{\"version\":\"2.3.26\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"paired\":true}",
              OTA_HOSTNAME);
   }
   server.send(200, "application/json", buf);
@@ -4520,9 +4522,45 @@ void loop() {
         } else if (ledScenario == SCENE_PRAYER) {
           float breath = 0.5f + 0.5f * sinf((float)now * (2.0f * 3.14159265f / 4000.0f));
           stripSetAll(0, (uint8_t)(150 * breath), (uint8_t)(105 * breath));
-        } else if (ledScenario == SCENE_BREATH) {
-          float breath = 0.5f + 0.5f * sinf((float)now * (2.0f * 3.14159265f / 4000.0f));
-          stripSetAll(0, (uint8_t)(180 * breath), (uint8_t)(212 * breath));
+        } else if (ledScenario == SCENE_STARS) {
+          // Ciel etoile : fond bleu nuit, et des LED qui s'allument une a une
+          // en points brillants puis s'eteignent. Contrairement aux autres
+          // scenes, rien n'est global : chaque LED a sa propre vie.
+          static uint32_t starAt[LED_NUM];      // debut du scintillement
+          static uint16_t starDur[LED_NUM];     // duree
+          static uint8_t  starPeak[LED_NUM];    // eclat maximal
+          static bool starsReady = false;
+          if (!starsReady) {
+            for (uint16_t i = 0; i < LED_NUM; i++) { starAt[i] = 0; starDur[i] = 0; }
+            starsReady = true;
+          }
+
+          // Environ 3 nouvelles etoiles par seconde, sur une LED libre.
+          if (random(0, 100) < 6) {
+            uint16_t i = random(0, LED_NUM);
+            if (now - starAt[i] >= starDur[i]) {          // seulement si elle est eteinte
+              starAt[i]   = now;
+              starDur[i]  = 900 + random(0, 1400);        // 0,9 .. 2,3 s
+              starPeak[i] = 150 + random(0, 106);         // eclat variable
+            }
+          }
+
+          leds.clear();
+          for (uint16_t i = 0; i < LED_NUM; i++) {
+            // Fond de ciel : bleu nuit tres sombre, jamais tout a fait noir.
+            float v = 0.0f;
+            if (now - starAt[i] < starDur[i]) {
+              float p = (float)(now - starAt[i]) / (float)starDur[i];
+              v = 0.5f * (1.0f - cosf(6.2831853f * p));   // montee puis extinction douce
+            }
+            uint8_t r = (uint8_t)(starPeak[i] * v * 0.80f);
+            uint8_t g = (uint8_t)(starPeak[i] * v * 0.88f);
+            uint8_t b = (uint8_t)(14.0f + starPeak[i] * v);   // 14 = lueur du ciel
+            leds.setPixelColor(i, leds.Color((r * ledBrightness) / 100,
+                                             (g * ledBrightness) / 100,
+                                             (b * ledBrightness) / 100));
+          }
+          leds.show();
         } else if (ledScenario == SCENE_CANDLE) {
           // Effet bougie. Une flamme bouge LENTEMENT : si la lumiere saute a
           // chaque image, l'oeil lit une panne et non une bougie. On construit
@@ -4596,6 +4634,55 @@ void loop() {
             leds.setPixelColor(i, leds.Color(r_adj, g_adj, b_adj));
           }
           leds.show();
+        } else if (ledScenario == SCENE_WAVE) {
+          // Vague : une crete lumineuse fait lentement le tour du boitier.
+          // La teinte derive tres doucement du turquoise au bleu profond.
+          float wt = (float)now * 0.001f;
+          float head = fmodf(wt * 3.2f, (float)LED_NUM);     // ~3 LED par seconde
+          float hue  = 0.5f + 0.5f * sinf(wt * 0.13f);       // derive lente
+
+          leds.clear();
+          for (uint16_t i = 0; i < LED_NUM; i++) {
+            float d = fabsf((float)i - head);
+            if (d > LED_NUM / 2.0f) d = LED_NUM - d;         // distance circulaire
+            float v = expf(-(d * d) / 7.0f);                 // crete douce
+            float intensity = 0.10f + 0.90f * v;             // le fond reste visible
+
+            uint8_t r = (uint8_t)(10.0f * intensity);
+            uint8_t g = (uint8_t)((90.0f + 120.0f * hue) * intensity);
+            uint8_t b = (uint8_t)((235.0f - 60.0f * hue) * intensity);
+
+            leds.setPixelColor(i, leds.Color((r * ledBrightness) / 100,
+                                             (g * ledBrightness) / 100,
+                                             (b * ledBrightness) / 100));
+          }
+          leds.show();
+        } else if (ledScenario == SCENE_DAWN) {
+          // Aube : traversee tres lente de la nuit vers le jour puis retour.
+          // Un cycle complet dure six minutes ; une respiration a peine
+          // perceptible evite que l'ensemble paraisse fige.
+          static const uint8_t DAWN[][3] = {
+            {   6,   8,  46 },   // nuit profonde
+            {  46,  22,  78 },   // premiere lueur violette
+            { 150,  54,  52 },   // horizon rougeoyant
+            { 245, 132,  60 },   // lever du soleil
+            { 255, 198, 146 },   // plein jour, chaud
+          };
+          const uint8_t DAWN_N = 5;
+          const float DAWN_PERIOD = 360.0f;                  // secondes aller-retour
+
+          float dt = fmodf((float)now * 0.001f, DAWN_PERIOD) / DAWN_PERIOD;
+          float tri = (dt < 0.5f) ? (dt * 2.0f) : (2.0f - dt * 2.0f);   // 0->1->0
+          float pos = tri * (DAWN_N - 1);
+          uint8_t k = (uint8_t)pos;
+          if (k >= DAWN_N - 1) k = DAWN_N - 2;
+          float f = pos - k;
+
+          float breathe = 0.94f + 0.06f * sinf((float)now * 0.00042f);
+          uint8_t r = (uint8_t)(((1.0f - f) * DAWN[k][0] + f * DAWN[k + 1][0]) * breathe);
+          uint8_t g = (uint8_t)(((1.0f - f) * DAWN[k][1] + f * DAWN[k + 1][1]) * breathe);
+          uint8_t b = (uint8_t)(((1.0f - f) * DAWN[k][2] + f * DAWN[k + 1][2]) * breathe);
+          stripSetAll(r, g, b);
         } else {
           stripSetAll(0, 0, 0);
         }
@@ -4633,7 +4720,7 @@ void loop() {
         uint16_t bright = ((uint16_t)r + (uint16_t)g + (uint16_t)b) / 3;
         bright = (bright * ledBrightness) / 100;
         setLedDuty(bright);
-      } else if (ledScenario == SCENE_PRAYER || ledScenario == SCENE_BREATH) {
+      } else if (ledScenario == SCENE_PRAYER || ledScenario == SCENE_STARS || ledScenario == SCENE_WAVE || ledScenario == SCENE_DAWN) {
         float breath = 0.5f + 0.5f * sinf((float)now * (2.0f * 3.14159265f / 4000.0f));
         uint8_t v = (uint8_t)(150 * breath);
         v = (v * ledBrightness) / 100;

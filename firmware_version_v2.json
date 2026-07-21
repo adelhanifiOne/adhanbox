@@ -1,6 +1,6 @@
 {
-  "version": "2.3.25",
+  "version": "2.3.26",
   "hardware": "v2",
   "url": "https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/build_temp_v2/adhanbox_v2.ino.bin",
-  "changelog": "Bougie : assombrissements un peu plus frequents et plus legers."
+  "changelog": "Trois nouveaux scenarios lumineux : Ciel etoile (remplace Respiration), Vague et Aube."
 }
