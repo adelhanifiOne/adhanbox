@@ -2,7 +2,7 @@
 // - Starts an AP when a long-press is detected on CONFIG_BUTTON_PIN
 // - Serves a small webpage that requests navigator.geolocation and POSTs lat/lon
 // - Stores lat/lon/accuracy/timestamp in Preferences (NVS)
-//Version: 2.3.24 (AdhanBox V2 / HW v2)
+//Version: 2.3.25 (AdhanBox V2 / HW v2)
 #include <Arduino.h>
 #include <Wire.h>
 #include <WiFi.h>
@@ -1479,7 +1479,7 @@ void handleOtaUploadComplete() {
 // GET /api/firmware/version
 void handleFirmwareVersion() {
   server.send(200, "application/json",
-              "{\"version\":\"2.3.24\",\"hardware\":\"v2\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
+              "{\"version\":\"2.3.25\",\"hardware\":\"v2\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
 }
 
 // Returns true if the request carries the correct API key (or if token not yet set).
@@ -1511,11 +1511,11 @@ void handleDeviceInfo() {
   char buf[512];
   if (pairingWindow || hasValidToken) {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"2.3.24\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
+             "{\"version\":\"2.3.25\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
              OTA_HOSTNAME, _apiToken.c_str(), _otaPass.c_str());
   } else {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"2.3.24\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"paired\":true}",
+             "{\"version\":\"2.3.25\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"paired\":true}",
              OTA_HOSTNAME);
   }
   server.send(200, "application/json", buf);
@@ -4557,10 +4557,10 @@ void loop() {
           // Coup d'air : toutes les 3 a 7 s, un creux court dont l'entree et la
           // sortie sont adoucies par une demi-cosinusoide (jamais de saut net).
           if (now >= candleFlutterAt) {
-            candleFlutter = 0.15f + (float)random(0, 130) / 1000.0f;   // 0.15 .. 0.28
+            candleFlutter = 0.09f + (float)random(0, 90) / 1000.0f;    // 0.09 .. 0.18
             candleFlutterStart = now;
-            candleFlutterDur = 300 + random(0, 200);
-            candleFlutterAt = now + 3000 + random(0, 4000);
+            candleFlutterDur = 320 + random(0, 220);
+            candleFlutterAt = now + 1800 + random(0, 2700);           // 1,8 .. 4,5 s
           }
           float candleDip = 0.0f;
           if (now - candleFlutterStart < candleFlutterDur) {
@@ -4655,10 +4655,10 @@ void loop() {
         pwmDrift += (pwmDriftTarget - pwmDrift) * 0.02f;
 
         if (now >= pwmFlutterAt) {
-          pwmFlutter = 0.15f + (float)random(0, 130) / 1000.0f;
+          pwmFlutter = 0.09f + (float)random(0, 90) / 1000.0f;
           pwmFlutterStart = now;
-          pwmFlutterDur = 300 + random(0, 200);
-          pwmFlutterAt = now + 3000 + random(0, 4000);
+          pwmFlutterDur = 320 + random(0, 220);
+          pwmFlutterAt = now + 1800 + random(0, 2700);
         }
         float pwmDip = 0.0f;
         if (now - pwmFlutterStart < pwmFlutterDur) {
