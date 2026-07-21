@@ -1,6 +1,6 @@
 {
-  "version": "2.3.23",
+  "version": "2.3.24",
   "hardware": "v2",
   "url": "https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/build_temp_v2/adhanbox_v2.ino.bin",
-  "changelog": "Effet bougie adouci : mouvement lent et continu, teinte ambre constante, rares coups d air."
+  "changelog": "Bougie : teinte nettement plus chaude, orangee profonde presque rouge."
 }

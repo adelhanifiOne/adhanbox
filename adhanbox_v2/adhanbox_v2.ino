@@ -2,7 +2,7 @@
 // - Starts an AP when a long-press is detected on CONFIG_BUTTON_PIN
 // - Serves a small webpage that requests navigator.geolocation and POSTs lat/lon
 // - Stores lat/lon/accuracy/timestamp in Preferences (NVS)
-//Version: 2.3.23 (AdhanBox V2 / HW v2)
+//Version: 2.3.24 (AdhanBox V2 / HW v2)
 #include <Arduino.h>
 #include <Wire.h>
 #include <WiFi.h>
@@ -1479,7 +1479,7 @@ void handleOtaUploadComplete() {
 // GET /api/firmware/version
 void handleFirmwareVersion() {
   server.send(200, "application/json",
-              "{\"version\":\"2.3.23\",\"hardware\":\"v2\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
+              "{\"version\":\"2.3.24\",\"hardware\":\"v2\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
 }
 
 // Returns true if the request carries the correct API key (or if token not yet set).
@@ -1511,11 +1511,11 @@ void handleDeviceInfo() {
   char buf[512];
   if (pairingWindow || hasValidToken) {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"2.3.23\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
+             "{\"version\":\"2.3.24\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
              OTA_HOSTNAME, _apiToken.c_str(), _otaPass.c_str());
   } else {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"2.3.23\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"paired\":true}",
+             "{\"version\":\"2.3.24\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"paired\":true}",
              OTA_HOSTNAME);
   }
   server.send(200, "application/json", buf);
@@ -4581,12 +4581,13 @@ void loop() {
             float intensity = candleBase + 0.040f * sinf(ct * 1.40f + candlePhase[i]);
             intensity = constrain(intensity, 0.35f, 1.0f);
 
-            // Teinte chaude constante (ambre), a peine plus doree quand la
-            // flamme monte. Plus de bascule vers le rouge sombre.
+            // Teinte orangee profonde, proche du rouge : le vert reste bas
+            // (moins d'un tiers du rouge) et le bleu quasi nul. Elle ne
+            // s'eclaircit que tres legerement quand la flamme monte.
             float k = (intensity - 0.35f) / 0.65f;
             uint8_t r = 255;
-            uint8_t g = (uint8_t)(112.0f + 52.0f * k);
-            uint8_t b = (uint8_t)(10.0f + 10.0f * k);
+            uint8_t g = (uint8_t)(46.0f + 34.0f * k);
+            uint8_t b = (uint8_t)(2.0f + 5.0f * k);
 
             uint8_t r_adj = (uint8_t)((r * intensity * ledBrightness) / 100);
             uint8_t g_adj = (uint8_t)((g * intensity * ledBrightness) / 100);
