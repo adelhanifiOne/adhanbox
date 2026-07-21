@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/adhanbox_provider.dart';
 import 'quran_player_screen.dart';
+import '../utils/friendly_error.dart';
 
 /// Automatisations Azkar & Coran (V2) : par automatisation -> on/off, heure,
 /// volume, jours de la semaine. Auto-save (pas de bouton Enregistrer).
@@ -85,7 +86,7 @@ class _AzkarCoranScreenState extends ConsumerState<AzkarCoranScreen> {
       fill(_kahf, 'kahf');
       fill(_mulk, 'mulk');
     } catch (e) {
-      _error = '$e';
+      _error = messageAmical(e);
     }
     if (mounted) setState(() => _loading = false);
   }
@@ -119,7 +120,8 @@ class _AzkarCoranScreenState extends ConsumerState<AzkarCoranScreen> {
       if (mounted) {
         setState(() => _saveState = '');
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Erreur enregistrement : $e')));
+            .showSnackBar(SnackBar(content: Text(messageAmical(e,
+                repli: "Impossible d'enregistrer vos réglages."))));
       }
     }
   }
@@ -222,20 +224,21 @@ class _AzkarCoranScreenState extends ConsumerState<AzkarCoranScreen> {
                   const Icon(Icons.volume_up_rounded, size: 20),
                   const SizedBox(width: 8),
                   Expanded(
+                    // Affiche un pourcentage, envoie 0-30 a la box.
                     child: Slider(
-                      value: item.volume.toDouble(),
+                      value: (item.volume * 100 / 30).clamp(0, 100).toDouble(),
                       min: 0,
-                      max: 30,
-                      divisions: 30,
-                      label: '${item.volume}',
-                      onChanged: (v) =>
-                          setState(() => item.volume = v.round()),
+                      max: 100,
+                      divisions: 20,
+                      label: '${(item.volume * 100 / 30).round()} %',
+                      onChanged: (pct) => setState(
+                          () => item.volume = (pct * 30 / 100).round()),
                       onChangeEnd: (_) => _scheduleSave(),
                     ),
                   ),
                   SizedBox(
-                      width: 28,
-                      child: Text('${item.volume}',
+                      width: 42,
+                      child: Text('${(item.volume * 100 / 30).round()} %',
                           textAlign: TextAlign.end)),
                 ],
               ),

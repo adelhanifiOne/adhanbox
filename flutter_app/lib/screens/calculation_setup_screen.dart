@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import '../models/prayer_time.dart';
 import '../providers/adhanbox_provider.dart';
 import '../theme/app_theme.dart';
+import '../utils/friendly_error.dart';
 
 class CalculationSetupScreen extends ConsumerStatefulWidget {
   const CalculationSetupScreen({Key? key}) : super(key: key);
@@ -66,7 +67,7 @@ class _CalculationSetupScreenState extends ConsumerState<CalculationSetupScreen>
       setState(() => _deviceIp = ip);
       await _loadConfiguration();
     } catch (e) {
-      setState(() { _errorMessage = 'Erreur: $e'; _isLoading = false; });
+      setState(() { _errorMessage = messageAmical(e); _isLoading = false; });
     }
   }
 
@@ -199,7 +200,7 @@ class _CalculationSetupScreenState extends ConsumerState<CalculationSetupScreen>
         );
       }
     } catch (e) {
-      setState(() { _errorMessage = e.toString(); _isSaving = false; });
+      setState(() { _errorMessage = messageAmical(e); _isSaving = false; });
     }
   }
 

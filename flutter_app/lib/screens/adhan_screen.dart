@@ -7,6 +7,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
 import '../providers/adhanbox_provider.dart';
 import '../theme/app_theme.dart';
+import '../utils/friendly_error.dart';
 
 const _trackNames = {
   2:  'Adhan 1',
@@ -178,7 +179,8 @@ class _AdhanScreenState extends ConsumerState<AdhanScreen> {
         );
       }
     } catch (e) {
-      setState(() => _errorMessage = 'Impossible de sauvegarder: $e');
+      setState(() => _errorMessage =
+          messageAmical(e, repli: 'Impossible d\'enregistrer vos réglages.'));
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
@@ -377,7 +379,7 @@ class _VolumeCard extends StatelessWidget {
                   )
                 else
                   Text(
-                    '${volume.toInt()} / 30',
+                    '${(volume * 100 / 30).round()} %',
                     style: GoogleFonts.poppins(
                       color: AppTheme.emerald,
                       fontSize: 14,
@@ -386,13 +388,21 @@ class _VolumeCard extends StatelessWidget {
                   ),
               ],
             ),
+            // L'utilisateur regle un pourcentage ; la box, elle, attend une
+            // valeur 0-30. La conversion se fait ici pour que les boitiers
+            // deja livres continuent de fonctionner sans mise a jour.
             Slider(
-              value: volume,
+              value: (volume * 100 / 30).clamp(0, 100),
               min: 0,
-              max: 30,
-              divisions: 30,
-              onChanged: onChanged,
-              onChangeEnd: onChangeEnd,
+              max: 100,
+              divisions: 20,
+              label: '${(volume * 100 / 30).round()} %',
+              onChanged: onChanged == null
+                  ? null
+                  : (pct) => onChanged!(pct * 30 / 100),
+              onChangeEnd: onChangeEnd == null
+                  ? null
+                  : (pct) => onChangeEnd!(pct * 30 / 100),
             ),
           ],
         ),

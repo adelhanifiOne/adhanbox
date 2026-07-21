@@ -29,8 +29,10 @@ class _LedControlScreenState extends ConsumerState<LedControlScreen> {
     _Scene(id: 8,  label: 'Arc-en-ciel', color: Color(0xFFEC4899), icon: Icons.auto_awesome_rounded),
     _Scene(id: 9,  label: 'Dégradé',     color: Color(0xFF6366F1), icon: Icons.gradient_rounded),
     _Scene(id: 10, label: 'Prière',      color: Color(0xFF059669), icon: Icons.mosque_rounded),
-    _Scene(id: 11, label: 'Respiration', color: Color(0xFF06B6D4), icon: Icons.air_rounded),
+    _Scene(id: 11, label: 'Ciel étoilé', color: Color(0xFF7DD3FC), icon: Icons.auto_awesome_outlined),
     _Scene(id: 12, label: 'Bougie',      color: Color(0xFFF59E0B), icon: Icons.local_fire_department_rounded),
+    _Scene(id: 13, label: 'Vague',       color: Color(0xFF22D3EE), icon: Icons.waves_rounded),
+    _Scene(id: 14, label: 'Aube',        color: Color(0xFFFB923C), icon: Icons.wb_twilight_rounded),
   ];
 
   bool get _isOn => _customColor != null || _currentScene != _kSceneOff;

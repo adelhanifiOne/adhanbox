@@ -6,6 +6,7 @@ import '../models/prayer_time.dart';
 import '../providers/adhanbox_provider.dart';
 import '../theme/app_theme.dart';
 import 'calculation_setup_screen.dart';
+import '../utils/friendly_error.dart';
 
 class PrayerTimesScreen extends ConsumerWidget {
   const PrayerTimesScreen({Key? key}) : super(key: key);
@@ -55,7 +56,7 @@ class PrayerTimesScreen extends ConsumerWidget {
               sliver: prayerTimesAsync.when(
                 data: (times) => _PrayerListSliver(times: times),
                 loading: () => const SliverToBoxAdapter(child: _LoadingState()),
-                error: (e, _) => SliverToBoxAdapter(child: _ErrorState(error: e.toString())),
+                error: (e, _) => SliverToBoxAdapter(child: _ErrorState(error: messageAmical(e))),
               ),
             ),
 

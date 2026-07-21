@@ -13,6 +13,7 @@ import '../main.dart';
 import 'privacy_policy_screen.dart';
 import 'device_setup_screen.dart';
 import 'audio_content_screen.dart';
+import '../utils/friendly_error.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({Key? key}) : super(key: key);
@@ -79,7 +80,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       }
     } catch (e) {
       if (mounted) Navigator.pop(context);
-      _showError("Impossible de synchroniser : $e");
+      _showError(messageAmical(e, repli: "Impossible de synchroniser avec la box."));
     }
   }
 
@@ -91,6 +92,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final api = ref.read(adhanboxApiProvider);
     final localVersionAsync = ref.watch(deviceFirmwareVersionProvider);
     final latestVersionAsync = ref.watch(latestFirmwareVersionProvider);
+    // Joignabilité RÉELLE de la box sélectionnée : ping (getStatus) réussi ?
+    // hasValue == true seulement si la box a répondu -> statut honnête "Actif"
+    // vs "Hors ligne" (au lieu de se fier au simple fait qu'elle soit choisie).
+    final selectedReachable = ref.watch(deviceStatusProvider).hasValue;
 
     return Scaffold(
       body: CustomScrollView(
@@ -128,7 +133,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     return _SettingsCard(children: [
                       for (int i = 0; i < devices.length; i++) ...[
                         if (i > 0) _CardDivider(),
-                        _deviceTile(devices[i], devices[i].ip == deviceIp),
+                        _deviceTile(devices[i], devices[i].ip == deviceIp,
+                            reachable: selectedReachable),
                       ],
                       if (deviceIp.isNotEmpty) ...[
                         _CardDivider(),
@@ -282,7 +288,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       iconColor: AppTheme.emerald,
                       title: 'Commander un AdhanBox',
                       subtitle: 'Découvrez nos offres',
-                      onTap: () => _launchExternal('https://adelhanifione.github.io/adhanbox/#offres'),
+                      onTap: () => _launchExternal('https://adhanbox.fr'),
                     ),
                   ],
                 ).animate().fadeIn(delay: 280.ms).slideY(begin: 0.06),
@@ -330,9 +336,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   Future<void> _leaveReview() async {
     // Ouvre la fiche du store correspondant à la plateforme.
-    // iOS : remplacer id000000000 par l'identifiant App Store une fois connu.
     final url = Platform.isIOS
-        ? 'https://apps.apple.com/app/id0000000000?action=write-review'
+        ? 'https://apps.apple.com/fr/app/adhanbox/id6775413812?action=write-review'
         : 'https://play.google.com/store/apps/details?id=com.adhanbox.app';
     await _launchExternal(url);
   }
@@ -391,7 +396,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       );
     } catch (e) {
       if (mounted) Navigator.pop(context);
-      _showError('Erreur WiFi : $e');
+      _showError(messageAmical(e, repli: 'La configuration Wi-Fi a échoué.'));
     }
   }
 
@@ -435,7 +440,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     await api.connectWiFi(ssid, pwdCtrl.text);
                     _showSuccess('Configuration WiFi envoyée avec succès');
                   } catch (e) {
-                    _showError('Erreur : $e');
+                    _showError(messageAmical(e));
                   }
                 }
               },
@@ -497,20 +502,29 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   // Une ligne d'appareil dans la liste multi-AdhanBox (basculer + retirer).
-  Widget _deviceTile(SavedDevice d, bool active) {
+  Widget _deviceTile(SavedDevice d, bool active, {bool reachable = true}) {
+    // "active" = box sélectionnée ; "reachable" = elle répond vraiment (ping).
+    // Le statut affiché doit refléter la joignabilité, pas seulement la sélection.
+    final online = active && reachable;
+    final subtitleText = active
+        ? (reachable ? '${d.ip} · Actif' : '${d.ip} · Hors ligne')
+        : d.ip;
+    final subtitleColor = active
+        ? (reachable ? AppTheme.emerald : Colors.orange)
+        : null;
     return ListTile(
       leading: Container(
         width: 44, height: 44,
         decoration: BoxDecoration(
-          color: (active ? AppTheme.emerald : AppTheme.darkTextMuted).withOpacity(0.12),
+          color: (online ? AppTheme.emerald : AppTheme.darkTextMuted).withOpacity(0.12),
           borderRadius: BorderRadius.circular(12),
         ),
-        child: Icon(Icons.router_rounded,
-            color: active ? AppTheme.emerald : AppTheme.darkTextMuted, size: 22),
+        child: Icon(online ? Icons.router_rounded : Icons.wifi_off_rounded,
+            color: online ? AppTheme.emerald : AppTheme.darkTextMuted, size: 22),
       ),
       title: Text(d.name, style: const TextStyle(fontWeight: FontWeight.w600)),
-      subtitle: Text(active ? '${d.ip} · Actif' : d.ip,
-          style: TextStyle(color: active ? AppTheme.emerald : null, fontSize: 12)),
+      subtitle: Text(subtitleText,
+          style: TextStyle(color: subtitleColor, fontSize: 12)),
       trailing: Row(mainAxisSize: MainAxisSize.min, children: [
         Icon(active ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
             color: active ? AppTheme.emerald : AppTheme.darkTextMuted, size: 20),
@@ -606,7 +620,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     } catch (e) {
       if (mounted) {
         Navigator.pop(context); // Close loading dialog
-        _showError('Échec de la mise à jour : $e');
+        _showError(messageAmical(e, repli: 'La mise à jour a échoué. Réessayez.'));
       }
     }
   }
