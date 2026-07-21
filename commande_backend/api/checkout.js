@@ -93,6 +93,10 @@ export default async function handler(req, res) {
       }],
       shipping_address_collection: { allowed_countries: ['FR', 'BE', 'CH', 'LU', 'MC'] },
       phone_number_collection: { enabled: true },
+      // Champ « code promo » sur la page de paiement. Les codes eux-memes
+      // (FAMILLE, ADHAN5...) se creent dans le dashboard Stripe : on peut
+      // les creer, suspendre ou limiter sans retoucher au code.
+      allow_promotion_codes: true,
       metadata,
       // Métadonnées aussi sur le PaymentIntent -> visibles directement sur la
       // page du paiement dans le dashboard Stripe.
