@@ -546,7 +546,7 @@ class _PrayerAdhanCard extends StatelessWidget {
                                 min: 0,
                                 max: 100,
                                 divisions: 20,
-                                label: '\${(volume * 100 / 30).round()} %',
+                                label: '${(volume * 100 / 30).round()} %',
                                 activeColor: color,
                                 inactiveColor: color.withOpacity(0.15),
                                 onChanged: (pct) =>
@@ -640,7 +640,7 @@ class _GlobalVolumeCard extends StatelessWidget {
                   min: 0,
                   max: 100,
                   divisions: 20,
-                  label: '\${(volume * 100 / 30).round()} %',
+                  label: '${(volume * 100 / 30).round()} %',
                   activeColor: AppTheme.emerald,
                   onChanged: onChanged != null
                       ? (pct) => onChanged!((pct * 30 / 100).round())
