@@ -1883,9 +1883,15 @@ bool performMawaqitSync(String &errorMsg) {
     http.begin(client, url);
     http.addHeader("User-Agent", "AdhanBox/1.0");
     http.addHeader("Accept", "application/json");
-    http.setTimeout(15000);
+    // [FIX WDT] Timeouts courts : 3 tentatives x (5s+7s) = 36s max AVANT ce fix
+    // suffisait a declencher le watchdog 30s sur un Wi-Fi faible. On plafonne
+    // desormais chaque tentative bien en dessous, et on nourrit le watchdog.
+    http.setConnectTimeout(4000);
+    http.setTimeout(6000);
+    if (_wdtArmed) esp_task_wdt_reset();
 
     int httpCode = http.GET();
+    if (_wdtArmed) esp_task_wdt_reset();
     if (httpCode == 200) {
       WiFiClient* streamPtr = http.getStreamPtr();
       if (streamPtr && parseMawaqitTimesFromStream(*streamPtr, uuid, slug, times)) {
@@ -1919,8 +1925,11 @@ bool performMawaqitSync(String &errorMsg) {
     Serial.printf("Fallback request: %s\n", fallbackUrl.c_str());
 
     http.begin(fallbackUrl);
-    http.setTimeout(15000);
+    http.setConnectTimeout(4000);
+    http.setTimeout(6000);
+    if (_wdtArmed) esp_task_wdt_reset();
     int httpCode = http.GET();
+    if (_wdtArmed) esp_task_wdt_reset();
 
     if (httpCode != 200) {
       Serial.printf("Fallback HTTP error: %d\n", httpCode);
@@ -3764,7 +3773,7 @@ int v2SyncContent() {
   WiFiClientSecure cli; cli.setInsecure();
   HTTPClient http;
   if (!http.begin(cli, V2_CONTENT_URL)) return -1;
-  http.setConnectTimeout(15000);
+  http.setConnectTimeout(5000);
   http.setTimeout(15000);
   http.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
   int mc = http.GET();
@@ -3790,7 +3799,7 @@ int v2SyncContent() {
     WiFiClientSecure c2; c2.setInsecure();
     HTTPClient h2;
     if (!h2.begin(c2, url)) { _syncMsg += " " + path + "=beginFail"; continue; }
-    h2.setConnectTimeout(15000);
+    h2.setConnectTimeout(5000);
     h2.setTimeout(60000);                    // 60s pour les gros fichiers archive.org (26Mo+)
     h2.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
     int gc = h2.GET();
@@ -4265,6 +4274,7 @@ void setup() {
     while (millis() - start < 15000) {
       if (WiFi.status() == WL_CONNECTED) break;
       delay(500);
+      if (_wdtArmed) esp_task_wdt_reset();   // [FIX WDT] delay() ne nourrit pas le WDT
       Serial.print(".");
     }
     if (WiFi.status() == WL_CONNECTED) {
