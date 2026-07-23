@@ -40,6 +40,33 @@
 #include <math.h>
 #include "esp_task_wdt.h"   // [SECU] watchdog materiel : reboot si le firmware freeze
 #include "esp_ota_ops.h"    // [SECU] rollback OTA : revient a la version precedente si le firmware boot-loop
+#include "esp_system.h"     // [DIAG] esp_reset_reason : cause du dernier reboot
+
+// ── [DIAG] Mouchard de reboot ────────────────────────────────────────────────
+// Sert a diagnostiquer les redemarrages a distance, sans ouvrir le boitier.
+// _bootCount survit aux reboots logiciels/watchdog (RTC), mais PAS a une coupure
+// de courant -> s'il retombe a 1 en meme temps qu'un reboot, c'est une coupure
+// d'alimentation (brownout/prise). Sinon la raison materielle nous dit la cause.
+RTC_DATA_ATTR uint32_t _bootCount = 0;
+static esp_reset_reason_t _lastResetReason = ESP_RST_UNKNOWN;
+static uint32_t _maxLoopMs = 0;        // plus longue iteration de loop() (etranglement)
+static uint32_t _lastLoopStamp = 0;
+
+static const char *resetReasonStr(esp_reset_reason_t r) {
+  switch (r) {
+    case ESP_RST_POWERON:   return "coupure_courant";   // prise/alim -> brownout probable
+    case ESP_RST_BROWNOUT:  return "brownout";          // tension trop basse
+    case ESP_RST_TASK_WDT:  return "watchdog_tache";    // loop() etranglee > 30s
+    case ESP_RST_INT_WDT:   return "watchdog_interrupt";
+    case ESP_RST_WDT:       return "watchdog";
+    case ESP_RST_PANIC:     return "plantage_logiciel";  // exception (null ptr, etc.)
+    case ESP_RST_SW:        return "reboot_logiciel";     // reboot volontaire (OTA...)
+    case ESP_RST_DEEPSLEEP: return "deep_sleep";
+    case ESP_RST_EXT:       return "reset_externe";
+    default:                return "inconnu";
+  }
+}
+
 static volatile bool _wdtArmed = false;  // WDT arme seulement une fois loop() lance
 // BLE provisioning (first-boot WiFi setup without leaving the app)
 #define ENABLE_BLE 1
@@ -3710,13 +3737,16 @@ void handleAudioList() {
 void handleDiag() {
   stopPlay();  // mesure au repos (pas de contention SPI avec l'audio)
   int kBs = audio.sdBenchKBs("/quran/afs/001.mp3", 256 * 1024);
-  char buf[256];
+  char buf[400];
   snprintf(buf, sizeof(buf),
     "{\"sd_clock_hz\":%lu,\"sd_read_kBs\":%d,\"need_kBs\":16,"
-    "\"free_heap\":%u,\"psram_size\":%u,\"psram_free\":%u}",
+    "\"free_heap\":%u,\"min_free_heap\":%u,\"psram_size\":%u,\"psram_free\":%u,"
+    "\"boot_count\":%lu,\"last_reset\":\"%s\",\"uptime_s\":%lu,\"max_loop_ms\":%lu}",
     (unsigned long)audio.sdClock(), kBs,
-    (unsigned)ESP.getFreeHeap(),
-    (unsigned)ESP.getPsramSize(), (unsigned)ESP.getFreePsram());
+    (unsigned)ESP.getFreeHeap(), (unsigned)ESP.getMinFreeHeap(),
+    (unsigned)ESP.getPsramSize(), (unsigned)ESP.getFreePsram(),
+    (unsigned long)_bootCount, resetReasonStr(_lastResetReason),
+    (unsigned long)(millis() / 1000), (unsigned long)_maxLoopMs);
   server.send(200, "application/json", buf);
 }
 
@@ -3867,6 +3897,11 @@ void v2Tick() {
 void setup() {
   Serial.begin(115200);
   delay(100);
+  // [DIAG] Mouchard : capture la cause du reboot precedent AVANT toute chose.
+  _lastResetReason = esp_reset_reason();
+  _bootCount++;
+  Serial.printf("[DIAG] Boot #%lu, cause du reboot precedent : %s\n",
+                (unsigned long)_bootCount, resetReasonStr(_lastResetReason));
   Serial.println("AdhanBox V2 firmware v2.3.21 starting...");
 
   // [SECU] Watchdog materiel : on REGLE juste le timeout ici (30s, reboot sur
@@ -4261,6 +4296,16 @@ void loop() {
   // la nourrit a chaque tour. Ainsi setup() ne peut pas declencher le WDT.
   if (!_wdtArmed) { esp_task_wdt_add(NULL); _wdtArmed = true; }
   esp_task_wdt_reset();
+  // [DIAG] Mesure la duree de la boucle precedente : si une iteration prend
+  // plusieurs secondes, c'est un etranglement (appel reseau/SD bloquant).
+  {
+    uint32_t nowMs = millis();
+    if (_lastLoopStamp != 0) {
+      uint32_t dt = nowMs - _lastLoopStamp;
+      if (dt > _maxLoopMs) _maxLoopMs = dt;
+    }
+    _lastLoopStamp = nowMs;
+  }
   audio.pump();
   v2Tick();          // [V2] azkar/coran + sync contenu
 
