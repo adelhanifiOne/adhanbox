@@ -2,7 +2,7 @@
 // - Starts an AP when a long-press is detected on CONFIG_BUTTON_PIN
 // - Serves a small webpage that requests navigator.geolocation and POSTs lat/lon
 // - Stores lat/lon/accuracy/timestamp in Preferences (NVS)
-//Version: 2.3.27 (AdhanBox V2 / HW v2)
+//Version: 2.3.28 (AdhanBox V2 / HW v2)
 #include <Arduino.h>
 #include <Wire.h>
 #include <WiFi.h>
@@ -1508,7 +1508,7 @@ void handleOtaUploadComplete() {
 // GET /api/firmware/version
 void handleFirmwareVersion() {
   server.send(200, "application/json",
-              "{\"version\":\"2.3.27\",\"hardware\":\"v2\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
+              "{\"version\":\"2.3.28\",\"hardware\":\"v2\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
 }
 
 // Returns true if the request carries the correct API key (or if token not yet set).
@@ -1540,11 +1540,11 @@ void handleDeviceInfo() {
   char buf[512];
   if (pairingWindow || hasValidToken) {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"2.3.27\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
+             "{\"version\":\"2.3.28\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
              OTA_HOSTNAME, _apiToken.c_str(), _otaPass.c_str());
   } else {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"2.3.27\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"paired\":true}",
+             "{\"version\":\"2.3.28\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"paired\":true}",
              OTA_HOSTNAME);
   }
   server.send(200, "application/json", buf);
