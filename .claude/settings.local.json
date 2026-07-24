@@ -3,7 +3,8 @@
     "allow": [
       "Bash(flutter analyze lib/theme/app_theme.dart lib/main.dart lib/screens/home_screen.dart lib/screens/prayer_times_screen.dart lib/screens/led_control_screen.dart lib/screens/settings_screen.dart lib/screens/about_screen.dart)",
       "Bash(flutter build apk --debug)",
-      "Bash(flutter analyze lib/screens/calculation_setup_screen.dart)"
+      "Bash(flutter analyze lib/screens/calculation_setup_screen.dart)",
+      "mcp__bf7c680d-5fdc-5ef4-b4a0-abadb619bf0a__add_repo"
     ]
   }
 }
