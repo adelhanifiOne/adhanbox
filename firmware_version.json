@@ -1,5 +1,5 @@
 {
-  "version": "1.4.7",
+  "version": "1.4.8",
   "url": "https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/build_temp/adhanbox.ino.bin",
-  "changelog": "Synchronisation des horaires plus robuste sur Wi-Fi instable (la box ne se fige plus pendant la recherche de mosquee)."
+  "changelog": "Resiste aux coupures de courant : reconnexion Wi-Fi automatique et horaires proteges."
 }
