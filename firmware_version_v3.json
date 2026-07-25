@@ -1,0 +1,6 @@
+{
+  "version": "3.0.1",
+  "hardware": "v3",
+  "url": "https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/build_temp_v3/adhanbox_v3.ino.bin",
+  "changelog": "Synchronisation des horaires robuste sur Wi-Fi instable (timeouts courts, watchdog nourri)."
+}
