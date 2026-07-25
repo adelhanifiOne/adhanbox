@@ -368,6 +368,11 @@ I2SAudio audio;
 
 // Alarm scheduling state
 volatile bool ds3231AlarmFlag = false;
+
+// ── [COUPURES] Confiance dans l'heure (voir V2 2.3.29) ──────────────────────
+static bool _timeTrusted = false;
+static bool _timeApprox  = false;
+static inline bool timeUsable() { return _timeTrusted || _timeApprox; }
 int scheduledPrayerIndex = 0;  // 1-based prayer index (1=Fajr,2=Sunrise,...6=Isha)
 DateTime scheduledPrayerTime;
 // Software fallback alarm (millis target) to trigger prayer if RTC interrupt fails
@@ -2757,6 +2762,11 @@ bool syncTimeFromNtp(unsigned long timeoutMs) {
   }
   rtc.adjust(DateTime(lt->tm_year + 1900, lt->tm_mon + 1, lt->tm_mday, lt->tm_hour, lt->tm_min, lt->tm_sec));
   Serial.printf("RTC set to local time (tz offset %d min): %04d-%02d-%02d %02d:%02d:%02d\n", tzOffset, lt->tm_year + 1900, lt->tm_mon + 1, lt->tm_mday, lt->tm_hour, lt->tm_min, lt->tm_sec);
+  // [COUPURES] heure sure -> adhans autorises + sauvegarde immediate
+  _timeTrusted = true; _timeApprox = false;
+  prefs.begin("adhancfg", false);
+  prefs.putULong("last_epoch", rtc.now().unixtime());
+  prefs.end();
   return true;
 }
 
@@ -4237,6 +4247,7 @@ void v2Tick() {
   }
   if (millis() - lastCheck < 1000) return;              // 1x / s
   lastCheck = millis();
+  if (!timeUsable()) return;   // [COUPURES] heure inconnue -> pas d'automatisations
   if (audio.isRunning()) return;
   DateTime now = rtc.now();
   int h = now.hour(), m = now.minute(), d = now.day(), dow = now.dayOfTheWeek(); // 0=Dim..6=Sam
@@ -4324,8 +4335,21 @@ void setup() {
     Serial.println("Couldn't find RTC. Check wiring (VCC/GND/SDA/SCL) and power.");
   } else {
     if (rtc.lostPower()) {
-      Serial.println("RTC lost power, setting time to compile time.");
-      rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
+      // [COUPURES] restaure la derniere heure sauvegardee ; sans sauvegarde,
+      // heure de compilation MAIS adhans suspendus jusqu'a NTP.
+      prefs.begin("adhancfg", true);
+      uint32_t lastEpoch = prefs.getULong("last_epoch", 0);
+      prefs.end();
+      if (lastEpoch > 1700000000UL) {
+        rtc.adjust(DateTime(lastEpoch));
+        _timeApprox = true;
+        Serial.printf("RTC lost power -> heure restauree (approximative): %lu\n", (unsigned long)lastEpoch);
+      } else {
+        rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
+        Serial.println("RTC lost power, AUCUNE sauvegarde -> ADHANS SUSPENDUS jusqu'a NTP.");
+      }
+    } else {
+      _timeTrusted = true;
     }
     Serial.println("RTC ready.");
     DateTime now = rtc.now();
@@ -5152,6 +5176,12 @@ void loop() {
     Serial.println("RTC reached scheduled prayer time (fallback polling)");
     shouldTrigger = true;
   }
+  if (ds3231AlarmFlag && !timeUsable()) {
+    // [COUPURES] heure inconnue : alarme ignoree et reprogrammee.
+    ds3231AlarmFlag = false;
+    Serial.println("[COUPURES] Alarme ignoree : heure non fiable (attente NTP).");
+    if (rtcPresent) scheduleNextPrayerAlarm();
+  }
   if (ds3231AlarmFlag) {
     Serial.println("DS3231 alarm triggered.");
     shouldTrigger = true;
@@ -5292,6 +5322,36 @@ void loop() {
   if (mqtt.connected() && millis() - lastMqttStatus > 30000) {
     lastMqttStatus = millis();
     mqttPublishStatus();
+  }
+
+  // [COUPURES] Retente le Wi-Fi toutes les 60 s s'il est tombe.
+  static unsigned long lastWifiRetry = 0;
+  if (wifiConnectState != WCS_CONNECTING && !apRunning &&
+      WiFi.status() != WL_CONNECTED && millis() - lastWifiRetry > 60000) {
+    lastWifiRetry = millis();
+    prefs.begin("adhancfg", true);
+    String rSsid = prefs.getString("wifi_ssid", "");
+    String rPass = prefs.getString("wifi_pass", "");
+    prefs.end();
+    if (rSsid.length() > 0) {
+      Serial.printf("[COUPURES] Wi-Fi tombe, nouvelle tentative vers '%s'...\n", rSsid.c_str());
+      WiFi.disconnect(true);
+      WiFi.mode(WIFI_STA);
+      wifiConnectSSID = rSsid;
+      wifiConnectPass = rPass;
+      WiFi.begin(rSsid.c_str(), rPass.c_str());
+      wifiConnectStart = millis();
+      wifiConnectState = WCS_CONNECTING;
+    }
+  }
+
+  // [COUPURES] Sauvegarde periodique de l'heure (15 min).
+  static unsigned long lastEpochSave = 0;
+  if (rtcPresent && timeUsable() && millis() - lastEpochSave > 15UL * 60UL * 1000UL) {
+    lastEpochSave = millis();
+    prefs.begin("adhancfg", false);
+    prefs.putULong("last_epoch", rtc.now().unixtime());
+    prefs.end();
   }
 
   // Auto-sync Mawaqit times every 20 hours when connected to WiFi
