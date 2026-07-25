@@ -1,6 +1,6 @@
 {
-  "version": "2.3.28",
+  "version": "2.3.29",
   "hardware": "v2",
   "url": "https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/build_temp_v2/adhanbox_v2.ino.bin",
-  "changelog": "Corrige des redemarrages aleatoires sur Wi-Fi instable (blocage reseau de la synchronisation des horaires)."
+  "changelog": "Resiste aux coupures de courant : reconnexion Wi-Fi automatique et horaires proteges (plus d adhan a des heures aberrantes)."
 }
