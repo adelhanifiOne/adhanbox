@@ -2,7 +2,7 @@
 // - Starts an AP when a long-press is detected on CONFIG_BUTTON_PIN
 // - Serves a small webpage that requests navigator.geolocation and POSTs lat/lon
 // - Stores lat/lon/accuracy/timestamp in Preferences (NVS)
-//Version: 1.4.6
+//Version: 1.4.7
 #include <Arduino.h>
 #include <Wire.h>
 #include <WiFi.h>
@@ -1713,7 +1713,7 @@ void handleOtaUploadComplete() {
 // GET /api/firmware/version
 void handleFirmwareVersion() {
   server.send(200, "application/json",
-              "{\"version\":\"1.4.6\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
+              "{\"version\":\"1.4.7\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
 }
 
 // Returns true if the request carries the correct API key (or if token not yet set).
@@ -1735,7 +1735,7 @@ bool requireApiKey() {
 void handleDeviceInfo() {
   char buf[512];
   snprintf(buf, sizeof(buf),
-           "{\"version\":\"1.4.6\",\"hostname\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
+           "{\"version\":\"1.4.7\",\"hostname\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
            OTA_HOSTNAME, _apiToken.c_str(), _otaPass.c_str());
   server.send(200, "application/json", buf);
 }
@@ -2072,7 +2072,10 @@ bool performMawaqitSync(String &errorMsg) {
     http.begin(client, url);
     http.addHeader("User-Agent", "AdhanBox/1.0");
     http.addHeader("Accept", "application/json");
-    http.setTimeout(15000);
+    // [FIX] Timeouts courts : evite que la box se fige ~45s (3x15s) sur un
+    // Wi-Fi instable pendant la synchronisation des horaires.
+    http.setConnectTimeout(4000);
+    http.setTimeout(6000);
 
     int httpCode = http.GET();
     if (httpCode == 200) {
@@ -2108,7 +2111,8 @@ bool performMawaqitSync(String &errorMsg) {
     Serial.printf("Fallback request: %s\n", fallbackUrl.c_str());
 
     http.begin(fallbackUrl);
-    http.setTimeout(15000);
+    http.setConnectTimeout(4000);
+    http.setTimeout(6000);
     int httpCode = http.GET();
 
     if (httpCode != 200) {
