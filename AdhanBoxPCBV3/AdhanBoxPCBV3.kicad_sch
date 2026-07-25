@@ -7187,11 +7187,11 @@
 			(at 78.74 33.72 0)
 			(effects (font (size 1.27 1.27)))
 		)
-		(property "Value" "CR2032"
+		(property "Value" "CR1225"
 			(at 78.74 57.72 0)
 			(effects (font (size 1.27 1.27)))
 		)
-		(property "Footprint" "Battery:BatteryHolder_Keystone_3034_1x20mm"
+		(property "Footprint" "Battery:BatteryHolder_Keystone_3000_1x12mm"
 			(at 78.74 45.72 0)
 			(effects (font (size 1.27 1.27)) (hide yes))
 		)
