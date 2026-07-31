@@ -24,12 +24,26 @@ final adhanboxApiProvider = Provider<AdhanBoxAPI?>((ref) {
 class SavedDevice {
   final String name;
   final String ip;
-  SavedDevice({required this.name, required this.ip});
-  
-  Map<String, dynamic> toJson() => {'name': name, 'ip': ip};
+
+  /// Identifiant materiel stable (MAC eFuse), expose par le firmware >= 1.4.9 /
+  /// 2.3.30 / 3.0.3 via /api/device/info. C'est LUI qui identifie un boitier,
+  /// pas son IP : sans ca, une box qui change d'IP (bail DHCP renouvele apres un
+  /// redemarrage) apparaissait une seconde fois dans la liste.
+  /// Null pour les entrees enregistrees avant cette version — elles sont
+  /// completees automatiquement au premier contact avec l'appareil.
+  final String? id;
+
+  SavedDevice({required this.name, required this.ip, this.id});
+
+  Map<String, dynamic> toJson() => {
+        'name': name,
+        'ip': ip,
+        if (id != null) 'id': id,
+      };
   factory SavedDevice.fromJson(Map<String, dynamic> json) => SavedDevice(
-        name: json['name'] as String, 
-        ip: json['ip'] as String
+        name: json['name'] as String,
+        ip: json['ip'] as String,
+        id: json['id'] as String?,
       );
 }
 
@@ -107,6 +121,42 @@ final autoReconnectProvider = FutureProvider<String?>((ref) async {
     } catch (_) {}
   }
 
+  // Helper: rattacher l'identifiant materiel a l'entree enregistree et purger
+  // les doublons fantomes laisses par d'anciens changements d'IP. Repare tout
+  // seul les installations existantes, sans reappairage manuel.
+  Future<void> reconcileIdentity(String ip) async {
+    final id = await _fetchDeviceId(ip);
+    if (id == null) return; // firmware anterieur : rien a faire
+
+    final raw = prefs.getString('savedDevices');
+    if (raw == null) return;
+    List<SavedDevice> devices;
+    try {
+      devices = (jsonDecode(raw) as List)
+          .map((e) => SavedDevice.fromJson(e as Map<String, dynamic>))
+          .toList();
+    } catch (_) {
+      return;
+    }
+
+    final before = jsonEncode(devices.map((e) => e.toJson()).toList());
+    final index = devices.indexWhere((d) => d.ip == ip);
+    if (index >= 0 && devices[index].id == null) {
+      devices[index] = SavedDevice(
+          name: devices[index].name, ip: ip, id: id);
+    }
+    for (final ghost in devices.where((d) => d.id == id && d.ip != ip)) {
+      await prefs.remove('api_token_${ghost.ip}');
+    }
+    devices.removeWhere((d) => d.id == id && d.ip != ip);
+
+    final after = jsonEncode(devices.map((e) => e.toJson()).toList());
+    if (after != before) {
+      await prefs.setString('savedDevices', after);
+      ref.invalidate(savedDevicesProvider);
+    }
+  }
+
   // 1. Essayer l'IP sauvegardée D'ABORD
   if (savedIp != null && savedIp.isNotEmpty) {
     try {
@@ -114,6 +164,7 @@ final autoReconnectProvider = FutureProvider<String?>((ref) async {
       await api.getStatus().timeout(const Duration(seconds: 3));
       ref.read(currentDeviceIpProvider.notifier).state = savedIp;
       await loadApiToken(savedIp);
+      await reconcileIdentity(savedIp);
       await syncRtcTime(savedIp);
       return savedIp;
     } catch (e) {
@@ -134,6 +185,7 @@ final autoReconnectProvider = FutureProvider<String?>((ref) async {
     }
     ref.read(currentDeviceIpProvider.notifier).state = 'adhanbox.local';
     await loadApiToken('adhanbox.local');
+    await reconcileIdentity('adhanbox.local');
     await syncRtcTime('adhanbox.local');
     return 'adhanbox.local';
   } catch (_) {}
@@ -152,6 +204,7 @@ final autoReconnectProvider = FutureProvider<String?>((ref) async {
       }
       ref.read(currentDeviceIpProvider.notifier).state = device.host;
       await loadApiToken(device.host);
+      await reconcileIdentity(device.host);
       await syncRtcTime(device.host);
       return device.host;
     }
@@ -162,10 +215,27 @@ final autoReconnectProvider = FutureProvider<String?>((ref) async {
   return null;
 });
 
+/// Interroge l'appareil pour recuperer son identifiant materiel.
+/// Renvoie null si l'appareil est injoignable ou tourne un firmware anterieur
+/// a l'ajout de `device_id` — dans ce cas on retombe sur l'ancien comportement.
+Future<String?> _fetchDeviceId(String ip) async {
+  try {
+    final info = await AdhanBoxAPI(
+      baseUrl: 'http://$ip',
+      timeout: const Duration(seconds: 3),
+    ).getDeviceInfo();
+    final id = info['device_id'] as String?;
+    return (id != null && id.isNotEmpty) ? id : null;
+  } catch (_) {
+    return null;
+  }
+}
+
 // Provider pour sauvegarder l'IP du device
-Future<void> saveDeviceIp(WidgetRef ref, String ip, {String name = 'AdhanBox'}) async {
+Future<void> saveDeviceIp(WidgetRef ref, String ip,
+    {String name = 'AdhanBox', String? id}) async {
   final prefs = await SharedPreferences.getInstance();
-  
+
   List<SavedDevice> devices = [];
   final listString = prefs.getString('savedDevices');
   if (listString != null) {
@@ -180,16 +250,44 @@ Future<void> saveDeviceIp(WidgetRef ref, String ip, {String name = 'AdhanBox'}) 
       devices.add(SavedDevice(name: 'AdhanBox (Ancien)', ip: oldIp));
     }
   }
-  
-  final existingIndex = devices.indexWhere((d) => d.ip == ip);
+
+  // L'identifiant materiel prime sur l'IP : c'est ce qui evite le doublon
+  // fantome quand le routeur attribue une nouvelle adresse au meme boitier.
+  id ??= await _fetchDeviceId(ip);
+  int existingIndex = -1;
+  if (id != null) existingIndex = devices.indexWhere((d) => d.id == id);
+  existingIndex = existingIndex >= 0 ? existingIndex : devices.indexWhere((d) => d.ip == ip);
+
   if (existingIndex >= 0) {
-    devices[existingIndex] = SavedDevice(name: name, ip: ip);
+    final previous = devices[existingIndex];
+    // L'appareil a change d'adresse : le jeton API est indexe par IP, il faut
+    // le deplacer sinon l'app perd l'authentification et redemande un appairage.
+    if (previous.ip != ip) {
+      final token = prefs.getString('api_token_${previous.ip}');
+      if (token != null && token.isNotEmpty) {
+        await prefs.setString('api_token_$ip', token);
+      }
+      await prefs.remove('api_token_${previous.ip}');
+    }
+    devices[existingIndex] =
+        SavedDevice(name: name, ip: ip, id: id ?? previous.id);
   } else {
-    devices.add(SavedDevice(name: name, ip: ip));
+    devices.add(SavedDevice(name: name, ip: ip, id: id));
   }
+
+  // Purge des doublons laisses par les changements d'IP anterieurs : meme
+  // identifiant materiel => une seule entree, celle qui porte l'IP courante.
+  if (id != null) {
+    final ghosts = devices.where((d) => d.id == id && d.ip != ip).toList();
+    for (final ghost in ghosts) {
+      await prefs.remove('api_token_${ghost.ip}');
+    }
+    devices.removeWhere((d) => d.id == id && d.ip != ip);
+  }
+
   await prefs.setString('savedDevices', jsonEncode(devices.map((e) => e.toJson()).toList()));
   await prefs.setString('deviceIp', ip);
-  
+
   ref.read(currentDeviceIpProvider.notifier).state = ip;
   ref.invalidate(deviceIpProvider);
   ref.invalidate(savedDevicesProvider);
@@ -393,8 +491,18 @@ final deviceFirmwareVersionProvider = FutureProvider<Map<String, dynamic>>((ref)
   try {
     return await api.getFirmwareVersion().timeout(const Duration(seconds: 4));
   } catch (e) {
-    // Si l'ancien firmware ne supporte pas cette route ou qu'il y a un timeout,
-    // on renvoie une version par défaut 1.0.0 pour permettre le flashage.
+    // La route /api/firmware/version a échoué. DEUX cas très différents :
+    //  (a) box INJOIGNABLE (débranchée / hors réseau) -> il ne faut RIEN proposer :
+    //      inventer une version ferait afficher "Ancienne version" et pousserait
+    //      un firmware du mauvais canal (ex: 1.4.6 V1 sur une V2) = brique.
+    //  (b) box legacy V1 réellement EN LIGNE mais sans cette route.
+    // On tranche via un endpoint léger présent sur TOUTES les générations.
+    try {
+      await api.getStatus().timeout(const Duration(seconds: 3)); // ping universel
+    } catch (_) {
+      throw Exception('Appareil hors ligne'); // -> UI "hors ligne", aucun update
+    }
+    // Joignable mais sans la route version -> vrai firmware V1 legacy.
     return {
       'version': '1.0.0',
       'isLegacy': true,
@@ -420,22 +528,29 @@ final isV2DeviceProvider = FutureProvider<bool>((ref) async {
 // CANAL selon le firmware du device :
 //   - firmware 1.x -> canal V1 (firmware_version.json)
 //   - firmware 2.x -> canal V2 (firmware_version_v2.json)
-// Comme chaque manifeste ne contient que sa propre lignée, un device 1.x ne se
-// voit jamais proposer un firmware 2.x (et inversement). Une seule app pour tous.
+//   - firmware 3.x -> canal V3 (firmware_version_v3.json) — PCB V3 (RTC RX8025T)
+// Comme chaque manifeste ne contient que sa propre lignée, un device 1.x ou 2.x
+// ne se voit JAMAIS proposer un firmware 3.x (et inversement) : les cartes V2
+// (DS3231) et V3 (RX8025T) ont des drivers RTC differents -> croiser les canaux
+// casserait les alarmes de priere. Une seule app pour tous.
 final latestFirmwareVersionProvider =
     FutureProvider<Map<String, dynamic>>((ref) async {
-  // 1) Choisir le canal d'après le firmware actuel du device
-  String channel = 'firmware_version.json'; // défaut = V1
-  try {
-    final device = await ref.watch(deviceFirmwareVersionProvider.future);
-    final hw = (device['hardware'] ?? '').toString();
-    final major =
-        int.tryParse((device['version'] ?? '1.0.0').toString().split('.').first) ?? 1;
-    if (hw == 'v2' || major >= 2) {
-      channel = 'firmware_version_v2.json';
-    }
-  } catch (_) {
-    // device indisponible -> on reste sur le canal V1 par sécurité
+  // 1) Choisir le canal d'après le firmware actuel du device.
+  // IMPORTANT : si le device est injoignable, deviceFirmwareVersionProvider
+  // lève désormais une erreur -> on la laisse remonter et on ne propose AUCUNE
+  // mise à jour. On ne défausse PLUS sur le canal V1 : proposer un firmware d'un
+  // autre canal (ex: 1.4.6) sur une box V2/V3 la briquerait.
+  final device = await ref.watch(deviceFirmwareVersionProvider.future);
+  final hw = (device['hardware'] ?? '').toString();
+  final major =
+      int.tryParse((device['version'] ?? '1.0.0').toString().split('.').first) ?? 1;
+  String channel;
+  if (hw == 'v3' || major >= 3) {
+    channel = 'firmware_version_v3.json';
+  } else if (hw == 'v2' || major == 2) {
+    channel = 'firmware_version_v2.json';
+  } else {
+    channel = 'firmware_version.json'; // V1 (vrai legacy en ligne uniquement)
   }
 
   // 2) Lire le manifeste du canal correspondant

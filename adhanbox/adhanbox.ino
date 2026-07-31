@@ -2,7 +2,7 @@
 // - Starts an AP when a long-press is detected on CONFIG_BUTTON_PIN
 // - Serves a small webpage that requests navigator.geolocation and POSTs lat/lon
 // - Stores lat/lon/accuracy/timestamp in Preferences (NVS)
-//Version: 1.4.8
+//Version: 1.4.9
 #include <Arduino.h>
 #include <Wire.h>
 #include <WiFi.h>
@@ -1718,7 +1718,7 @@ void handleOtaUploadComplete() {
 // GET /api/firmware/version
 void handleFirmwareVersion() {
   server.send(200, "application/json",
-              "{\"version\":\"1.4.8\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
+              "{\"version\":\"1.4.9\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
 }
 
 // Returns true if the request carries the correct API key (or if token not yet set).
@@ -1737,11 +1737,21 @@ bool requireApiKey() {
 
 // GET /api/device/info — unauthenticated bootstrap endpoint.
 // Returns the API token so the companion app can pair on first connection.
+// Identifiant materiel unique et stable, derive de la MAC gravee en eFuse.
+// Permet a l'app compagnon de reconnaitre le MEME boitier apres un changement
+// d'IP (bail DHCP renouvele, redemarrage de la box internet), au lieu d'en
+// creer un doublon fantome dans la liste des appareils.
+static String deviceIdHex() {
+  char id[13];
+  snprintf(id, sizeof(id), "%012llX", (unsigned long long)ESP.getEfuseMac());
+  return String(id);
+}
+
 void handleDeviceInfo() {
   char buf[512];
   snprintf(buf, sizeof(buf),
-           "{\"version\":\"1.4.8\",\"hostname\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
-           OTA_HOSTNAME, _apiToken.c_str(), _otaPass.c_str());
+           "{\"version\":\"1.4.9\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
+           OTA_HOSTNAME, deviceIdHex().c_str(), _apiToken.c_str(), _otaPass.c_str());
   server.send(200, "application/json", buf);
 }
 
