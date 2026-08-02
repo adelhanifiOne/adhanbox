@@ -1,5 +1,5 @@
 {
-  "version": "1.4.8",
+  "version": "1.4.9",
   "url": "https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/build_temp/adhanbox.ino.bin",
-  "changelog": "Resiste aux coupures de courant : reconnexion Wi-Fi automatique et horaires proteges."
+  "changelog": "Corrige un appareil en double dans l app apres un changement d adresse reseau."
 }
