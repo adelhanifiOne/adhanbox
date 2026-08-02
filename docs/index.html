@@ -78,9 +78,6 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=Amiri:wght@400;700&display=swap" rel="stylesheet">
-  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-  <script defer src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
-  <script defer src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/DRACOLoader.js"></script>
   <style>
     :root {
       --ivory:#FAF6EF; --ivory-deep:#F3EDE1; --paper:#FFFFFF;
@@ -157,14 +154,17 @@
     .reassure svg { width:15px; height:15px; color:var(--emerald); flex-shrink:0; }
 
     .hero-visual { position:relative; }
-    #hero3d {
+    .hero-photo {
       width:100%; aspect-ratio:1/1.05; max-height:520px;
       border-radius:calc(var(--radius) + 6px);
-      background:radial-gradient(120% 100% at 50% 15%, #FDFBF6 0%, var(--ivory-deep) 78%);
+      background:var(--ivory-deep);
       border:1px solid var(--line); box-shadow:var(--shadow-lg);
-      display:grid; place-items:center; overflow:hidden;
+      overflow:hidden;
     }
-    #hero3d canvas { display:block; }
+    .hero-photo img {
+      display:block; width:100%; height:100%;
+      object-fit:cover; object-position:center 46%;
+    }
     .hero-visual .tag {
       position:absolute; left:18px; bottom:18px;
       background:rgba(255,255,255,.86); backdrop-filter:blur(6px);
@@ -368,8 +368,12 @@
       </div>
     </div>
     <div class="hero-visual">
-      <div id="hero3d" aria-label="Aperçu 3D de l'AdhanBox"></div>
-      <span class="tag">Modèle 3D réel — personnalisable</span>
+      <div class="hero-photo">
+        <img src="adhanbox-photo.jpg" width="548" height="630"
+             alt="AdhanBox allumé sur une table en bois : les arches et le couvercle ajouré laissent passer une lumière chaude, un motif géométrique orne la façade."
+             fetchpriority="high" decoding="async">
+      </div>
+      <span class="tag">Photo réelle — chaque boîtier est fait main</span>
     </div>
   </div>
 </section>
@@ -740,127 +744,6 @@ var SHIP_DATE = "automne 2026";
       .catch(function () { /* silencieux : la section reste masquée */ });
   })();
 
-  // ── HERO 3D : la vraie box, auto-rotation ──
-  function init3D() {
-    if (typeof THREE === 'undefined' || !THREE.GLTFLoader || !THREE.DRACOLoader) { setTimeout(init3D, 150); return; }
-    var host = document.getElementById('hero3d');
-    var w = host.clientWidth, h = host.clientHeight;
-    var scene = new THREE.Scene();
-    var camera = new THREE.PerspectiveCamera(36, w / h, 0.01, 10);
-    camera.position.set(0.16, 0.11, -0.19);
-    camera.lookAt(0, 0.01, 0);
-    var renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    renderer.setSize(w, h);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    host.appendChild(renderer.domElement);
-
-    scene.add(new THREE.AmbientLight(0xffffff, 0.55));
-    scene.add(new THREE.HemisphereLight(0xfff8ec, 0x8a7a5c, 0.55));
-    var key = new THREE.DirectionalLight(0xffffff, 0.95); key.position.set(2, 4, 3); scene.add(key);
-    var fill = new THREE.DirectionalLight(0xfff2dd, 0.45); fill.position.set(-2, 2, -3); scene.add(fill);
-
-    var group = new THREE.Group();
-    group.rotation.x = -Math.PI / 2;
-    scene.add(group);
-    var boxSize = null;
-    var mat = { color: 0x161616, roughness: 0.82, metalness: 0.06 };   // noir mat (chassis + couvercle)
-
-    var loader = new THREE.GLTFLoader();
-    var draco = new THREE.DRACOLoader();
-    draco.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.6/');
-    loader.setDRACOLoader(draco);
-
-    loader.load('adhanbox.glb', function (gltf) {
-      var m = gltf.scene;
-      m.traverse(function (c) { if (c.isMesh) c.material = new THREE.MeshStandardMaterial(mat); });
-      var b = new THREE.Box3().setFromObject(m);
-      boxSize = new THREE.Vector3(); b.getSize(boxSize);
-      var c = new THREE.Vector3(); b.getCenter(c); m.position.sub(c);
-      group.add(m);
-      // ── coque lumineuse UNIFORME : même lueur derrière toutes les fenêtres ──
-      var glowColor = 0xFFEAD0; // blanc chaud, uniforme
-      var innerShell = new THREE.Mesh(
-        new THREE.BoxGeometry(boxSize.x * 0.95, boxSize.y * 0.95, boxSize.z * 1.0),
-        new THREE.MeshBasicMaterial({ color: glowColor })
-      );
-      group.add(innerShell);
-      // ── port USB-C panneau ROND (connecteur press-fit) sur la face opposée au motif ──
-      var usb = new THREE.Group();
-      // disque d'obturation noir : bouche entièrement le trou pour empêcher la lumière de fuir autour
-      var usbBack = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.0100, 0.0100, 0.0020, 36),
-        new THREE.MeshStandardMaterial({ color: 0x0c0c0c, roughness: 0.7, metalness: 0.1 })
-      );
-      usbBack.rotation.z = Math.PI / 2;
-      usbBack.position.x = -0.0016;   // légèrement rentré dans la paroi
-      usb.add(usbBack);
-      // flasque/bezel du connecteur panneau : plus large que le trou pour le recouvrir
-      var usbBezel = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.0083, 0.0083, 0.0040, 36),
-        new THREE.MeshStandardMaterial({ color: 0x141414, roughness: 0.5, metalness: 0.2 })
-      );
-      usbBezel.rotation.z = Math.PI / 2;   // axe le long de X : face ronde contre la paroi
-      usb.add(usbBezel);
-      var usbSlot = new THREE.Mesh(
-        new THREE.BoxGeometry(0.0026, 0.0082, 0.0038),
-        new THREE.MeshStandardMaterial({ color: 0x050505, roughness: 0.6, metalness: 0.2 })
-      );
-      usbSlot.position.x = 0.0014;
-      usb.add(usbSlot);
-      var usbTongue = new THREE.Mesh(
-        new THREE.BoxGeometry(0.0018, 0.0060, 0.0014),
-        new THREE.MeshStandardMaterial({ color: 0x8c8c8c, roughness: 0.4, metalness: 0.6 })
-      );
-      usbTongue.position.x = 0.0018;
-      usb.add(usbTongue);
-      usb.position.set(boxSize.x / 2 - 0.0002, 0, -0.016);
-      group.add(usb);
-      // couvercle noir
-      loader.load('lid.glb', function (g2) {
-        var lid = g2.scene;
-        lid.scale.setScalar(0.001);
-        lid.updateMatrixWorld(true);
-        var lb = new THREE.Box3().setFromObject(lid);
-        var lc = new THREE.Vector3(); lb.getCenter(lc);
-        var ls = new THREE.Vector3(); lb.getSize(ls);
-        lid.position.sub(lc);
-        lid.position.z += boxSize.z / 2 + ls.z / 2 - 0.001;
-        lid.traverse(function (c2) { if (c2.isMesh) c2.material = new THREE.MeshStandardMaterial(mat); });
-        group.add(lid);
-      });
-      // motif 3 en blanc sur la façade
-      loader.load('mandala3.glb', function (g3) {
-        var mo = g3.scene;
-        mo.traverse(function (c3) { if (c3.isMesh) c3.material = new THREE.MeshStandardMaterial({ color: 0xf4f4f4, roughness: 0.5, metalness: 0.0, side: THREE.DoubleSide }); });
-        var mb = new THREE.Box3().setFromObject(mo);
-        var ms = new THREE.Vector3(); mb.getSize(ms);
-        var mc = new THREE.Vector3(); mb.getCenter(mc); mo.position.sub(mc);
-        var wrap = new THREE.Group();
-        wrap.add(mo);
-        var sc = (boxSize.x * 0.55) / Math.max(ms.x, ms.y, ms.z);
-        wrap.scale.setScalar(sc);
-        wrap.position.set(-boxSize.x / 2 - 0.0015, 0, -0.008);
-        wrap.rotation.set(0, -Math.PI / 2, 0);
-        group.add(wrap);
-      });
-    });
-
-    function tick() {
-      group.rotation.z += 0.0045;
-      renderer.render(scene, camera);
-      requestAnimationFrame(tick);
-    }
-    tick();
-
-    window.addEventListener('resize', function () {
-      var w2 = host.clientWidth, h2 = host.clientHeight;
-      camera.aspect = w2 / h2; camera.updateProjectionMatrix();
-      renderer.setSize(w2, h2);
-    });
-  }
-  if (document.readyState === 'complete') init3D();
-  else window.addEventListener('load', init3D);
 })();
 </script>
 </body>
