@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
 import '../models/prayer_time.dart';
 import '../providers/adhanbox_provider.dart';
+import '../services/local_prayer_times.dart';
 import '../theme/app_theme.dart';
 import '../utils/friendly_error.dart';
 
@@ -85,6 +86,13 @@ class _CalculationSetupScreenState extends ConsumerState<CalculationSetupScreen>
             _method = _methods.containsKey(m) ? m : 'mwl';
             _school = d['school'] ?? 0;
           });
+          // On recopie la config de la box en local : c'est ce qui garantit que
+          // les horaires calculés par l'app (quand la box est absente ou hors
+          // ligne) restent identiques à ceux qu'elle annonce.
+          await memoriserMethode(_method, _school);
+          final lat = (d['lat'] as num?)?.toDouble();
+          final lon = (d['lon'] as num?)?.toDouble();
+          if (lat != null && lon != null) await memoriserPosition(lat, lon);
         }
       } catch (_) {}
 
@@ -124,6 +132,9 @@ class _CalculationSetupScreenState extends ConsumerState<CalculationSetupScreen>
   }
 
   Future<void> _refreshPreview() async {
+    // Même sans box jointe, on garde le choix de l'utilisateur : il pilote le
+    // calcul local.
+    await memoriserMethode(_method, _school);
     if (_deviceIp == null) return;
     try {
       await http.post(

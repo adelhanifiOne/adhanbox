@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import '../services/adhanbox_api.dart';
 import '../services/esp32_discovery_service.dart';
+import '../services/local_prayer_times.dart';
 import '../models/prayer_time.dart';
 
 /// Stocke le token API récupéré depuis le device après la première connexion.
@@ -360,8 +361,23 @@ final deviceTimeProvider = FutureProvider<Map<String, dynamic>>((ref) async {
 // Provider pour les horaires de prière
 final prayerTimesProvider = FutureProvider<PrayerTimes>((ref) async {
   final api = ref.watch(adhanboxApiProvider);
-  if (api == null) throw Exception('Aucun appareil configuré');
-  return api.getPrayerTimes();
+
+  // La box est la source de vérité quand elle répond : c'est elle qui déclenche
+  // l'adhan, les heures affichées doivent être exactement celles qu'elle jouera.
+  if (api != null) {
+    try {
+      return await api.getPrayerTimes();
+    } catch (e) {
+      // Box appairée mais injoignable (hors ligne, coupure de courant) : on
+      // bascule sur le calcul local plutôt que de laisser l'écran vide.
+      if (kDebugMode) debugPrint('prayerTimes: box injoignable, calcul local — $e');
+    }
+  }
+
+  // Aucun appareil, ou appareil hors ligne : l'app calcule elle-même. Sans ça
+  // l'application est entièrement inutilisable tant qu'aucune box n'est
+  // appairée — cas de tout client entre la précommande et la livraison.
+  return calculerHorairesLocaux();
 });
 
 // Provider pour les offsets de fine-tuning
