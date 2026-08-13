@@ -4,6 +4,7 @@
 // - Stores lat/lon/accuracy/timestamp in Preferences (NVS)
 //Version: 2.3.30 (AdhanBox V2 / HW v2)
 #include <Arduino.h>
+#include <esp_mac.h>   // esp_read_mac() : MAC eFuse, lisible sans Wi-Fi
 #include <Wire.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
@@ -2434,10 +2435,19 @@ void startBLEProvisioning() {
   // Initialize Wi-Fi STA mode so WiFi.macAddress() can read the actual hardware MAC
   WiFi.mode(WIFI_STA);
 
-  // Build unique name from last 3 bytes of MAC
-  String mac = WiFi.macAddress();    // "AA:BB:CC:DD:EE:FF"
-  String suffix = mac.substring(9);  // "DD:EE:FF"
-  suffix.replace(":", "");           // "DDEEFF"
+  // Build unique name from last 3 bytes of MAC.
+  // [FIX] WiFi.macAddress() renvoie 00:00:00:00:00:00 tant que le pilote Wi-Fi
+  // n'a pas fini de demarrer : toutes les box s'annoncaient alors sous le meme
+  // nom 'AdhanBox-000000' et devenaient indiscernables en Bluetooth (deux
+  // boitiers cote a cote, ou un client qui en possede deux). esp_read_mac() lit
+  // la MAC directement dans l'eFuse, sans dependre du Wi-Fi — c'est deja la
+  // source utilisee pour le SSID du point d'acces.
+  uint8_t macBytes[6] = {0};
+  esp_read_mac(macBytes, ESP_MAC_WIFI_STA);
+  char sufBuf[7];
+  snprintf(sufBuf, sizeof(sufBuf), "%02X%02X%02X",
+           macBytes[3], macBytes[4], macBytes[5]);
+  String suffix(sufBuf);
   String bleName = "AdhanBox-" + suffix;
 
   static bool bleInitialized = false;

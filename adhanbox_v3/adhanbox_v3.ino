@@ -4,6 +4,7 @@
 // - Stores lat/lon/accuracy/timestamp in Preferences (NVS)
 //Version: 3.0.3 (AdhanBox V3 / HW v3)
 #include <Arduino.h>
+#include <esp_mac.h>   // esp_read_mac() : MAC eFuse, lisible sans Wi-Fi
 #include <Wire.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
@@ -261,6 +262,8 @@ class I2SAudio {
   float gain = 0.5f;
   bool  _sdOk = false;
   uint32_t _sdClock = 0;
+  bool _paused = false;          // [PLAYER] pause logicielle : pump() suspend le decodage
+  char _curPath[64] = {0};       // [PLAYER] fichier en cours (pour /api/audio/status)
  public:
   uint32_t sdClock() const { return _sdClock; }
   // Bench debit SD : lit `bytes` octets d'un fichier existant et renvoie ko/s.
@@ -320,10 +323,27 @@ class I2SAudio {
     if (wav) { wav->stop(); delete wav; wav = nullptr; }
     if (buf) { delete buf; buf = nullptr; }
     if (src) { delete src; src = nullptr; }
+    _paused = false;
+    _curPath[0] = 0;
   }
+  // [PLAYER] Pause/reprise : on suspend le DECODAGE (position conservee) mais
+  // pump() continue d'alimenter le DMA I2S en SILENCE (voir pump). Sans ce
+  // silence, le peripherique I2S rebouclait le dernier tampon -> son de "disque
+  // raye". Le flux de silence garde aussi l'ampli synchronise (BCLK continue),
+  // donc la reprise est immediate et propre, sans warm-up ni clic.
+  void pause()  { if (isRunning()) _paused = true; }
+  void resume() { _paused = false; }
+  bool isPaused() const { return _paused; }
+  const char* currentPath() const { return _curPath; }
+  // Position/taille en octets du fichier source (progression approximative,
+  // suffisante pour une barre de lecture ; MP3 CBR -> quasi lineaire).
+  uint32_t posBytes()  { return src ? (uint32_t)src->getPos()  : 0; }
+  uint32_t sizeBytes() { return src ? (uint32_t)src->getSize() : 0; }
   bool playPath(const char *path) {
     stop();
     if (!_sdOk || !SD.exists(path)) return false;
+    strncpy(_curPath, path, sizeof(_curPath) - 1);   // [PLAYER] memorise le fichier
+    _curPath[sizeof(_curPath) - 1] = 0;
     src = new AudioFileSourceSD(path);
     // Buffer fichier 32 Ko (~2s). Le vrai levier n'est pas la taille mais le DEBIT
     // SD (voir SD.begin plus haut) : un buffer plus gros ne fait que retarder si le
@@ -354,6 +374,14 @@ class I2SAudio {
   }
   bool isRunning() { return (mp3 && mp3->isRunning()) || (wav && wav->isRunning()); }
   void pump() {
+    if (_paused) {
+      // [PLAYER] En pause : on ne decode plus (position conservee), mais on
+      // REMPLIT le DMA I2S de silence pour eviter que le peripherique reboucle
+      // le dernier tampon (son de "disque raye"). ConsumeSample renvoie false
+      // quand le tampon est plein -> boucle bornee, non bloquante.
+      if (out) { int16_t s[2] = {0, 0}; while (out->ConsumeSample(s)) {} }
+      return;
+    }
     if (mp3 && mp3->isRunning()) { if (!mp3->loop()) stop(); }
     if (wav && wav->isRunning()) { if (!wav->loop()) stop(); }
   }
@@ -427,6 +455,9 @@ void handleContentSync();
 void handleContentStatus();
 void handleAudioDelete();
 void handleAudioList();
+void handleAudioStatus();   // [PLAYER] etat de lecture
+void handleAudioPause();    // [PLAYER] pause
+void handleAudioResume();   // [PLAYER] reprise
 void handleDiag();
 void handlePlayFile();
 void handleStopPlay();
@@ -1897,6 +1928,35 @@ bool requireApiKey() {
   return false;
 }
 
+// [PLAYER] GET /api/audio/status — etat de lecture pour la barre "en cours"
+// de l'app. Absent de la V3 jusqu'ici (classe audio heritee d'une V2 anterieure
+// aux fonctions de lecteur) : l'app n'affichait donc rien pendant la lecture.
+void handleAudioStatus() {
+  prefs.begin("adhancfg", true);
+  int vol = prefs.getInt("volume", 20);
+  prefs.end();
+  char buf[256];
+  snprintf(buf, sizeof(buf),
+           "{\"playing\":%s,\"paused\":%s,\"file\":\"%s\",\"pos\":%lu,\"size\":%lu,\"volume\":%d}",
+           (isPlaying && audio.isRunning()) ? "true" : "false",
+           audio.isPaused() ? "true" : "false",
+           audio.currentPath(),
+           (unsigned long)audio.posBytes(),
+           (unsigned long)audio.sizeBytes(),
+           vol);
+  server.send(200, "application/json", String(buf));
+}
+
+void handleAudioPause() {
+  audio.pause();
+  server.send(200, "application/json", "{\"ok\":true,\"paused\":true}");
+}
+
+void handleAudioResume() {
+  audio.resume();
+  server.send(200, "application/json", "{\"ok\":true,\"paused\":false}");
+}
+
 // GET /api/device/info — unauthenticated bootstrap endpoint.
 // Returns the API token so the companion app can pair on first connection.
 // Identifiant materiel unique et stable, derive de la MAC gravee en eFuse.
@@ -2791,10 +2851,19 @@ void startBLEProvisioning() {
   // Initialize Wi-Fi STA mode so WiFi.macAddress() can read the actual hardware MAC
   WiFi.mode(WIFI_STA);
 
-  // Build unique name from last 3 bytes of MAC
-  String mac = WiFi.macAddress();    // "AA:BB:CC:DD:EE:FF"
-  String suffix = mac.substring(9);  // "DD:EE:FF"
-  suffix.replace(":", "");           // "DDEEFF"
+  // Build unique name from last 3 bytes of MAC.
+  // [FIX] WiFi.macAddress() renvoie 00:00:00:00:00:00 tant que le pilote Wi-Fi
+  // n'a pas fini de demarrer : toutes les box s'annoncaient alors sous le meme
+  // nom 'AdhanBox-000000' et devenaient indiscernables en Bluetooth (deux
+  // boitiers cote a cote, ou un client qui en possede deux). esp_read_mac() lit
+  // la MAC directement dans l'eFuse, sans dependre du Wi-Fi — c'est deja la
+  // source utilisee pour le SSID du point d'acces.
+  uint8_t macBytes[6] = {0};
+  esp_read_mac(macBytes, ESP_MAC_WIFI_STA);
+  char sufBuf[7];
+  snprintf(sufBuf, sizeof(sufBuf), "%02X%02X%02X",
+           macBytes[3], macBytes[4], macBytes[5]);
+  String suffix(sufBuf);
   String bleName = "AdhanBox-" + suffix;
 
   static bool bleInitialized = false;
@@ -3072,6 +3141,9 @@ void setupServerRoutes() {
   server.on("/api/content/sync", HTTP_POST, handleContentSync);
   server.on("/api/content/status", HTTP_GET, handleContentStatus);
   server.on("/api/audio/list", HTTP_GET, handleAudioList);
+  server.on("/api/audio/status", HTTP_GET, handleAudioStatus);   // [PLAYER] etat de lecture
+  server.on("/api/audio/pause", HTTP_GET, handleAudioPause);     // [PLAYER] pause
+  server.on("/api/audio/resume", HTTP_GET, handleAudioResume);   // [PLAYER] reprise
   server.on("/api/diag", HTTP_GET, handleDiag);
 #if ENABLE_BLE
   // Depuis la page web de la box : demande l'appairage BLE. Demarrer le BLE A CHAUD
@@ -4271,7 +4343,7 @@ void v2Tick() {
 void setup() {
   Serial.begin(115200);
   delay(100);
-  Serial.println("AdhanBox V3 firmware v3.0.0 starting...");
+  Serial.println("AdhanBox V3 firmware v3.0.4 starting...");
 
   // [SECU] Watchdog materiel : on REGLE juste le timeout ici (30s, reboot sur
   // panic) et on DESABONNE les taches idle. L'abonnement de la tache loop() se
@@ -4368,7 +4440,7 @@ void setup() {
     Serial.print("Current RTC time: ");
     Serial.println(buf);
     // Configure DS3231 INT pin and attach ISR (requires hardware INT from DS3231)
-    Serial.printf("Attaching DS3231 INT on pin %d (SQW)\n", DS3231_INT_PIN);
+    Serial.printf("Attaching RX8025T /INT on pin %d\n", DS3231_INT_PIN);
     pinMode(DS3231_INT_PIN, INPUT_PULLUP);
     attachInterrupt(digitalPinToInterrupt(DS3231_INT_PIN), ds3231_isr, FALLING);
   }
