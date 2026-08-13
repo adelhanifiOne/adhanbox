@@ -1,5 +1,5 @@
 {
-  "version": "1.4.9",
+  "version": "1.4.10",
   "url": "https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/build_temp/adhanbox.ino.bin",
-  "changelog": "Corrige un appareil en double dans l app apres un changement d adresse reseau."
+  "changelog": "Nom Bluetooth unique par boitier : deux AdhanBox cote a cote ne se confondent plus a l appairage."
 }
