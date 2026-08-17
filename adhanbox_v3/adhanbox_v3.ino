@@ -455,7 +455,8 @@ void handleContentSync();
 void handleContentStatus();
 void handleAudioDelete();
 void handleAudioList();
-void handleAudioStatus();   // [PLAYER] etat de lecture
+void handleAudioStatus();
+void handleLedStatus();     // [ETAT REEL] etat LED complet pour l'app   // [PLAYER] etat de lecture
 void handleAudioPause();    // [PLAYER] pause
 void handleAudioResume();   // [PLAYER] reprise
 void handleDiag();
@@ -1928,6 +1929,22 @@ bool requireApiKey() {
   return false;
 }
 
+// [ETAT REEL] GET /api/led/status — etat LED complet lu par l'app.
+// Absent de la V3 jusqu'ici : l'appel echouait, l'ecran Lumiere retombait sur
+// son etat par defaut et affichait les LED ETEINTES quoi qu'elles fassent
+// reellement. Toute commande partait alors d'un etat faux. Present en V2
+// depuis 2.3.19.
+void handleLedStatus() {
+  char buf[160];
+  bool on = ledCustomActive || (ledScenario != 0);
+  snprintf(buf, sizeof(buf),
+           "{\"on\":%s,\"scenario\":%d,\"brightness\":%d,\"custom\":%s,\"r\":%d,\"g\":%d,\"b\":%d}",
+           on ? "true" : "false", ledScenario, ledBrightness,
+           ledCustomActive ? "true" : "false",
+           (int)ledCustomR, (int)ledCustomG, (int)ledCustomB);
+  server.send(200, "application/json", String(buf));
+}
+
 // [PLAYER] GET /api/audio/status — etat de lecture pour la barre "en cours"
 // de l'app. Absent de la V3 jusqu'ici (classe audio heritee d'une V2 anterieure
 // aux fonctions de lecteur) : l'app n'affichait donc rien pendant la lecture.
@@ -3159,6 +3176,7 @@ void setupServerRoutes() {
 #endif
   server.on("/api/audio/delete", HTTP_GET, handleAudioDelete);
   server.on("/api/audio/play", HTTP_GET, handlePlayFile);
+  server.on("/api/led/status", HTTP_GET, handleLedStatus);       // [ETAT REEL] etat LED complet
   server.on("/api/device/info", HTTP_GET, handleDeviceInfo);
   server.on("/ota/upload", HTTP_POST, handleOtaUploadComplete, handleOtaUpload);
   server.on("/update", HTTP_GET, handleUpdatePage);
