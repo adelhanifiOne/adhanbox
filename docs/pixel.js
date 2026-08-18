@@ -50,28 +50,47 @@
     }
   }
 
+  /* Bandeau de consentement.
+     Règle CNIL : refuser doit être aussi simple qu'accepter — les deux boutons
+     ont donc la même taille, la même typo et le même niveau de lisibilité.
+     Seule la couleur distingue l'action principale, ce qui reste autorisé. */
   function showConsentBanner() {
     var style = document.createElement('style');
     style.textContent =
-      '#ab-cookies{position:fixed;left:16px;right:16px;bottom:16px;z-index:9999;max-width:440px;margin:0 auto;' +
-      'background:#FFFDF8;border:1px solid rgba(12,91,69,.18);border-radius:14px;padding:16px 18px;' +
-      'box-shadow:0 12px 40px rgba(0,0,0,.16);font-size:.86rem;line-height:1.5;color:#333;font-family:"Inter",system-ui,sans-serif;}' +
-      '#ab-cookies p{margin:0 0 10px;}' +
-      '#ab-cookies a{color:#0C5B45;text-decoration:underline;}' +
-      '#ab-cookies .cb-row{display:flex;gap:10px;justify-content:flex-end;}' +
-      '#ab-cookies button{cursor:pointer;border-radius:999px;padding:8px 18px;font-size:.86rem;font-weight:600;border:1px solid rgba(12,91,69,.35);}' +
+      '#ab-cookies{position:fixed;left:18px;right:18px;bottom:18px;z-index:9999;max-width:520px;margin:0 auto;' +
+      'background:#FFFDF8;border:1px solid rgba(12,91,69,.16);border-radius:18px;padding:20px 22px;' +
+      'box-shadow:0 18px 50px rgba(21,37,31,.20);font-size:.9rem;line-height:1.55;color:#15251F;' +
+      'font-family:"Inter",system-ui,sans-serif;animation:ab-cb-up .45s cubic-bezier(.2,.7,.3,1) both;}' +
+      '@keyframes ab-cb-up{from{opacity:0;transform:translateY(14px);}to{opacity:1;transform:none;}}' +
+      '@media (prefers-reduced-motion:reduce){#ab-cookies{animation:none;}}' +
+      '#ab-cookies .cb-head{display:flex;align-items:center;gap:.6rem;font-family:"Fraunces",Georgia,serif;' +
+      'font-weight:600;font-size:1.02rem;color:#0C5B45;margin-bottom:.5rem;}' +
+      '#ab-cookies .cb-head img{width:26px;height:26px;border-radius:7px;flex-shrink:0;}' +
+      '#ab-cookies p{margin:0 0 .9rem;color:#3E4C45;}' +
+      '#ab-cookies a{color:#0C5B45;text-decoration:underline;text-underline-offset:2px;}' +
+      '#ab-cookies .cb-row{display:flex;gap:10px;}' +
+      '#ab-cookies button{flex:1;cursor:pointer;border-radius:999px;padding:.72rem 1rem;' +
+      'font-family:inherit;font-size:.9rem;font-weight:600;line-height:1.2;' +
+      'border:1.5px solid #0C5B45;transition:background .15s,transform .15s;}' +
+      '#ab-cookies button:hover{transform:translateY(-1px);}' +
       '#ab-cookies .cb-no{background:transparent;color:#0C5B45;}' +
-      '#ab-cookies .cb-yes{background:#C9A227;border-color:#C9A227;color:#fff;}';
+      '#ab-cookies .cb-no:hover{background:#E5F0EB;}' +
+      '#ab-cookies .cb-yes{background:#0C5B45;border-color:#0C5B45;color:#fff;}' +
+      '#ab-cookies .cb-yes:hover{background:#08402F;}' +
+      '@media (max-width:420px){#ab-cookies .cb-row{flex-direction:column-reverse;}}';
     document.head.appendChild(style);
     var b = document.createElement('div');
     b.id = 'ab-cookies';
     b.setAttribute('role', 'dialog');
-    b.setAttribute('aria-label', 'Consentement cookies');
+    b.setAttribute('aria-label', 'Votre choix sur la mesure d\'audience');
     b.innerHTML =
-      '<p>🍪 Avec votre accord, nous utilisons un traceur publicitaire (Meta) pour mesurer nos campagnes. ' +
-      '<a href="privacy.html">En savoir plus</a></p>' +
-      '<div class="cb-row"><button class="cb-no" id="ab-cb-no">Refuser</button>' +
-      '<button class="cb-yes" id="ab-cb-yes">Accepter</button></div>';
+      '<div class="cb-head"><img src="logo-app.png" alt="">Un coup de main ?</div>' +
+      '<p>AdhanBox est un projet artisanal, lancé sans budget marketing. ' +
+      'Accepter la mesure d\'audience nous permet simplement de savoir quelles annonces ' +
+      'font découvrir le boîtier — et de ne pas dépenser dans le vide. ' +
+      'Aucune donnée n\'est vendue. <a href="privacy.html">En savoir plus</a></p>' +
+      '<div class="cb-row"><button class="cb-no" id="ab-cb-no">Continuer sans</button>' +
+      '<button class="cb-yes" id="ab-cb-yes">J\'accepte, avec plaisir</button></div>';
     document.body.appendChild(b);
     document.getElementById('ab-cb-yes').addEventListener('click', function () {
       try { localStorage.setItem(CONSENT_KEY, 'yes'); } catch (e) {}
