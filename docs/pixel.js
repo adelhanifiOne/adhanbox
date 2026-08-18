@@ -6,7 +6,9 @@
    charge pas site.js).
    ════════════════════════════════════════════════════════════ */
 (function () {
-  var PIXEL_ID = '1510675917787927';
+  // Doit rester identique au pixel utilisé côté serveur (commande_backend/
+  // api/stripe-webhook.js) : sinon Meta ne déduplique plus les Purchase.
+  var PIXEL_ID = '1309955603100014';
   var CONSENT_KEY = 'ab_consent_ads';
   var BACKEND = 'https://adhanbox-commande.vercel.app';
   var page = document.body.getAttribute('data-page') || '';

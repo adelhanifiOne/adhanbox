@@ -32,7 +32,9 @@ const norm = (s) => (s || '').trim().toLowerCase();
 async function sendMetaPurchase(session) {
   const token = process.env.META_CAPI_TOKEN;
   if (!token) return; // pas de token -> on saute silencieusement
-  const pixelId = process.env.META_PIXEL_ID || '1510675917787927';
+  // Doit rester identique au pixel du navigateur (docs/pixel.js) : sinon Meta
+  // ne déduplique plus les Purchase et les achats sont comptés deux fois.
+  const pixelId = process.env.META_PIXEL_ID || '1309955603100014';
   const d = session.customer_details || {};
   const ship = session.shipping_details || session.collected_information?.shipping_details;
   const addr = (ship && ship.address) || d.address || {};
