@@ -15,7 +15,7 @@ la RED, applicables depuis le 1er août 2025.
 | **01** | Certificats des modules | Certificat d'examen UE de type ESP32-S3-WROOM-1 (Eurofins, ON n° 0980, 26/01/2022) | ✅ présent |
 | **02** | Description du produit | Identification, usage prévu, caractéristiques, architecture, **pile de sauvegarde** | ✅ à jour V2 + V3 |
 | **03** | Schémas et nomenclature | Schémas KiCad V2 et V3 (PDF) + BOM V2 et V3 | ✅ présent |
-| **04** | Datasheets | Fiches des composants + attestations RoHS | ⬜ **à télécharger** (liste dans le dossier) |
+| **04** | Datasheets | **13 fiches** classées (composants, support de pile, FDS piles CR, RoHS/REACH Keystone) | ✅ présent — ⬜ 3 pièces restantes, voir le README du dossier |
 | **05** | Analyse de risque | **14 dangers** analysés, révision 2 incluant la pile bouton | ✅ rédigée — ⬜ **à signer** |
 | **06** | Notice utilisateur | Guide de démarrage français, avertissements, déclaration RED art. 10.8 | ✅ présent |
 | **07** | Étiquetage | Planches 55 × 32 mm, **une par modèle** (V2 et V3) | ✅ prêtes à imprimer |
@@ -24,8 +24,11 @@ la RED, applicables depuis le 1er août 2025.
 
 ## Ce qu'il reste à faire
 
-1. **Télécharger 5 datasheets** (pièce 04, liste et liens dans le dossier)
-   et l'attestation RoHS de JLCPCB → environ 20 minutes.
+1. **Pièce 04 : trois documents restants**, qui dépendent de ton compte ou
+   de tes achats (détail et liens dans `04_datasheets/README.md`) :
+   l'**attestation RoHS de JLCPCB** (page de ta commande ou support), la
+   fiche du **filament PETG**, et la datasheet de la **cellule CR1225
+   réellement achetée**. Tout le reste est classé.
 2. **Imprimer, dater et signer**, en prenant bien la version V3 pour les
    25 cartes en cours :
    - `05_analyse_de_risque/analyse-de-risque.md`
