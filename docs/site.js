@@ -60,6 +60,7 @@
               '<li><a href="privacy.html">Politique de confidentialité</a></li>' +
               '<li><a href="cgv.html">Conditions générales de vente</a></li>' +
               '<li><a href="mentions-legales.html">Mentions légales</a></li>' +
+              '<li><a href="conformite.html">Déclaration UE de conformité</a></li>' +
               '<li><a href="mailto:contact@adhanbox.fr">contact@adhanbox.fr</a></li>' +
             '</ul>' +
           '</div>' +

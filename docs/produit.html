@@ -24,6 +24,18 @@
   <link rel="stylesheet" href="styles.css">
   <script defer src="site.js"></script>
   <script defer src="pixel.js"></script>
+  <style>
+    .conformite-produit {
+      margin-top: 2.5rem;
+      padding: 1.5rem 1.6rem 0.8rem;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-sm);
+      background: var(--ivory-deep);
+    }
+    .conformite-produit h3 { margin: 0 0 0.9rem; font-size: 1rem; color: var(--ink); }
+    .conformite-produit p { font-size: 0.86rem; line-height: 1.6; color: var(--muted); margin-bottom: 0.7rem; }
+    .conformite-produit strong { color: var(--ink); }
+  </style>
 </head>
 <body data-page="produit">
   <main>
@@ -522,6 +534,18 @@
         <div class="spec-row"><dt>Alimentation</dt><dd>USB-C 5 V — un chargeur de téléphone standard suffit</dd></div>
         <div class="spec-row"><dt>Mises à jour</dt><dd>OTA depuis l'application, sécurisées par jeton unique</dd></div>
       </dl>
+
+      <div class="conformite-produit reveal">
+        <h3>Informations réglementaires</h3>
+        <p><strong>Fabricant</strong> — Adel Hanifi, sous l'enseigne AdhanBox, 14 rue du Corps Franc Pommiès, 65500 Vic-en-Bigorre, France. Contact&nbsp;: <a href="mailto:contact@adhanbox.fr">contact@adhanbox.fr</a>.</p>
+        <p><strong>Sécurité</strong> — Usage en intérieur sec uniquement. Ne pas couvrir l'appareil en fonctionnement, ne pas l'exposer aux liquides, débrancher avant nettoyage. Utiliser un adaptateur USB portant le marquage CE. Tenir hors de portée des jeunes enfants&nbsp;: l'appareil contient une pile bouton au lithium, non accessible sans outil — son ingestion constitue une urgence médicale.</p>
+        <p><strong>Conformité</strong> — Équipement radioélectrique conforme à la directive 2014/53/UE. <a href="conformite.html">Consulter la déclaration UE de conformité</a>.</p>
+        <p><strong>Garantie</strong> — Garantie légale de conformité de 2 ans et garantie des vices cachés. Mises à jour logicielles assurées pendant 5 ans à compter de la livraison. <a href="cgv.html">Détail dans les CGV</a>.</p>
+        <p><strong>Réparabilité</strong> — Boîtier démontable au tournevis cruciforme. Pièces détachées disponibles pendant 5 ans après la fin de commercialisation du modèle, sur demande à <a href="mailto:contact@adhanbox.fr">contact@adhanbox.fr</a>.</p>
+        <p><strong>Fin de vie</strong> — Équipement soumis à la collecte séparée (symbole de la poubelle barrée sous l'appareil). Ne pas jeter avec les ordures ménagères.</p>
+        <!-- TODO conformite : ajouter le montant de l'eco-participation et les IDU ADEME
+             des que les adhesions ecosystem / Corepile / Citeo sont faites. -->
+      </div>
     </div>
   </section>
   </main>
