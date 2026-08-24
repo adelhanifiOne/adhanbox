@@ -397,10 +397,6 @@
       cta.dataset.busy = '1';
       const prevText = cta.textContent;
       cta.textContent = 'Ouverture du paiement sécurisé…';
-      // Pixel Meta : départ vers le paiement (si consentement donné)
-      if (window.fbq) {
-        window.fbq('track', 'InitiateCheckout', { value: 95, currency: 'EUR' });
-      }
       fetch(CHECKOUT_BACKEND + '/api/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

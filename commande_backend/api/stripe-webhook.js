@@ -10,7 +10,6 @@
 // le corps BRUT du flux — indispensable pour vérifier la signature Stripe.
 import Stripe from 'stripe';
 import { Resend } from 'resend';
-import { createHash } from 'node:crypto';
 
 const SITE = process.env.SITE_URL || 'https://adhanbox.fr';
 const SHIP_DATE = process.env.SHIP_DATE || 'automne 2026';
@@ -21,60 +20,6 @@ const FROM_EMAIL = process.env.FROM_EMAIL || 'AdhanBox <commande@adhanbox.fr>';
 
 const euros = (cents) =>
   (cents / 100).toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' });
-
-// ── API Conversions Meta : envoi du Purchase côté serveur ──
-// Insensible aux bloqueurs de pub. Dédupliqué avec le pixel navigateur via
-// event_id = id de session Stripe (le pixel utilise le même, cf. pixel.js).
-// Données personnelles hachées en SHA-256 comme l'exige Meta.
-const sha256 = (v) => createHash('sha256').update(v).digest('hex');
-const norm = (s) => (s || '').trim().toLowerCase();
-
-async function sendMetaPurchase(session) {
-  const token = process.env.META_CAPI_TOKEN;
-  if (!token) return; // pas de token -> on saute silencieusement
-  // Doit rester identique au pixel du navigateur (docs/pixel.js) : sinon Meta
-  // ne déduplique plus les Purchase et les achats sont comptés deux fois.
-  const pixelId = process.env.META_PIXEL_ID || '1510675917787927';
-  const d = session.customer_details || {};
-  const ship = session.shipping_details || session.collected_information?.shipping_details;
-  const addr = (ship && ship.address) || d.address || {};
-  const nameParts = (d.name || '').trim().split(/\s+/).filter(Boolean);
-
-  const userData = {};
-  if (d.email) userData.em = [sha256(norm(d.email))];
-  if (d.phone) userData.ph = [sha256(d.phone.replace(/\D/g, ''))];
-  if (nameParts[0]) userData.fn = [sha256(norm(nameParts[0]))];
-  if (nameParts.length > 1) userData.ln = [sha256(norm(nameParts[nameParts.length - 1]))];
-  if (addr.city) userData.ct = [sha256(norm(addr.city).replace(/\s/g, ''))];
-  if (addr.postal_code) userData.zp = [sha256(norm(addr.postal_code))];
-  if (addr.country) userData.country = [sha256(norm(addr.country))];
-
-  const payload = {
-    data: [{
-      event_name: 'Purchase',
-      event_time: Math.floor(Date.now() / 1000),
-      event_id: session.id, // même id que le pixel navigateur -> déduplication
-      action_source: 'website',
-      event_source_url: `${SITE}/merci.html`,
-      user_data: userData,
-      custom_data: {
-        currency: (session.currency || 'eur').toUpperCase(),
-        value: (session.amount_total ?? 0) / 100,
-        content_name: session.metadata?.config || 'AdhanBox — Précommande',
-      },
-    }],
-  };
-  if (process.env.META_TEST_EVENT_CODE) payload.test_event_code = process.env.META_TEST_EVENT_CODE;
-
-  const r = await fetch(`https://graph.facebook.com/v21.0/${pixelId}/events?access_token=${encodeURIComponent(token)}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
-  const j = await r.json().catch(() => ({}));
-  if (!r.ok) console.error('CAPI Meta erreur:', JSON.stringify(j.error || j));
-  else console.log('CAPI Meta: Purchase envoyé, events_received =', j.events_received);
-}
 
 async function readRawBody(req) {
   const chunks = [];
@@ -233,11 +178,6 @@ export default async function handler(req, res) {
   const firstName = (details.name || '').trim().split(/\s+/)[0] || '';
   const shipToLines = shipping ? addressLines(shipping.name || details.name, shipping.address) : [];
   const shipTo = shipToLines.join('<br>');
-
-  // API Conversions Meta (non bloquant : un échec n'affecte ni le paiement ni les emails)
-  try { await sendMetaPurchase(session); } catch (err) {
-    console.error('CAPI Meta échec:', err && err.message);
-  }
 
   if (!process.env.RESEND_API_KEY) {
     console.log('RESEND_API_KEY absente — emails non envoyés. Commande:', ref, config);
