@@ -1,7 +1,32 @@
 # Dossier conformité AdhanBox — CE (RED) + DEEE
 
-État au 2026-07-13. Objectif : pouvoir vendre légalement en France/UE.
+État au 2026-08-24 (révision 2). Objectif : pouvoir vendre légalement en France/UE.
 La V3 (module ESP32-S3-WROOM-1 pré-certifié) est la base retenue pour la prod.
+
+## Ce qui a changé depuis la première rédaction
+
+Trois évolutions rendent la version de juillet incomplète :
+
+1. **La V3 embarque une pile bouton lithium CR1225** (sauvegarde de
+   l'horloge). Elle n'apparaissait dans aucune pièce du dossier — l'analyse
+   de risque affirmait même l'absence de lithium. Corrigé : dangers 13 et 14
+   ajoutés, description produit complétée, avertissements portés sur la
+   notice, l'emballage et l'étiquette. **Nouvelle filière REP à rejoindre :
+   piles et accumulateurs portables** (Corepile ou Screlec).
+2. **Les exigences de cybersécurité de la RED** (art. 3.3(d) et (e),
+   règlement délégué 2022/30) sont obligatoires **depuis le 1er août 2025**.
+   Le certificat Eurofins du module date de janvier 2022 et ne les couvre
+   pas. Traité dans la déclaration V3 (normes EN 18031-1 et -2) et en
+   pièce 09.
+3. **Le Cyber Resilience Act** (règlement 2024/2847) impose le signalement
+   des vulnérabilités activement exploitées à partir du **11 septembre
+   2026** : alerte sous 24 h, notification sous 72 h, rapport final sous
+   14 jours, via la plateforme de l'ENISA. Procédure en pièce 09.
+
+Corrigé également : la description produit annonçait des haut-parleurs de
+**4 Ω**. Sur la V3, J2 et J6 sont en parallèle sur un amplificateur mono ;
+il faut **8 Ω chacun**, sinon la charge tombe à 2 Ω, sous le minimum du
+MAX98357A.
 
 ## 1. Marquage CE — directive RED 2014/53/UE
 
@@ -48,7 +73,11 @@ Vendre un produit électronique en France = obligations « metteur sur le march�
 
 - [ ] **Adhérer à un éco-organisme** agréé DEEE ménager : **Ecosystem**
       (ecosystem.eco) ou Ecologic. Adhésion en ligne, éco-participation
-      de l'ordre de quelques dizaines de centimes par appareil de cette taille.
+      de l'ordre de 0,25 € par appareil de cette taille.
+- [ ] **Filière piles et accumulateurs portables** (nouvelle avec la V3) :
+      **Corepile** ou **Screlec/Batribox**. Demander d'abord à ecosystem
+      s'ils peuvent couvrir EEE et piles au même contrat, cela éviterait un
+      troisième interlocuteur.
 - [ ] Obtenir l'**IDU** (identifiant unique) au registre SYDEREP de l'ADEME —
       fourni via l'éco-organisme. L'IDU doit figurer dans les CGV et documents
       commerciaux.
