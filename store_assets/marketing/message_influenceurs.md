@@ -45,7 +45,7 @@ un DM ignoré.
 > et assemblée chez moi, à la commande — châssis, motif de façade et teintes
 > au choix de chacun.
 >
-> Je viens d'ouvrir les précommandes (expédition automne 2026, avant
+> Je viens d'ouvrir les précommandes (expédition sous 1 à 2 semaines, avant
 > Ramadan) et j'aimerais t'en offrir une, **personnalisée à tes goûts**,
 > en toute simplicité :
 >

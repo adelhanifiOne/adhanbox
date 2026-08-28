@@ -31,7 +31,7 @@ Modération = un simple clic dans l'email de notification.
 | `RESEND_API_KEY` | pour les emails | Clé API Resend. Absente → emails sautés, paiement OK quand même |
 | `FROM_EMAIL` | non | Expéditeur, défaut `AdhanBox <commande@adhanbox.fr>` (domaine à vérifier chez Resend). Avant vérification : `AdhanBox <onboarding@resend.dev>` |
 | `NOTIF_EMAIL` | non | Destinataire notif vendeur, défaut `contact@adhanbox.fr` |
-| `SHIP_DATE` | non | Défaut `automne 2026` |
+| `SHIP_DATE` | non | Défaut `sous 1 à 2 semaines` |
 | `AMOUNT_CENTS` | non | Prix en centimes, défaut `9500` (offre de lancement 95 €) |
 | `SITE_URL` | non | Défaut `https://adhanbox.fr` |
 | `BLOB_READ_WRITE_TOKEN` | ✅ (avis) | Injecté auto quand un store Vercel Blob est connecté au projet. Sans lui, `/api/review` et `/api/reviews` échouent. |

@@ -12,7 +12,7 @@ import Stripe from 'stripe';
 import { Resend } from 'resend';
 
 const SITE = process.env.SITE_URL || 'https://adhanbox.fr';
-const SHIP_DATE = process.env.SHIP_DATE || 'automne 2026';
+const SHIP_DATE = process.env.SHIP_DATE || 'sous 1 à 2 semaines';
 const NOTIF_EMAIL = process.env.NOTIF_EMAIL || 'contact@adhanbox.fr';
 // Tant que le domaine n'est pas vérifié chez Resend, utiliser
 // 'AdhanBox <onboarding@resend.dev>' (n'envoie qu'à ta propre adresse).
