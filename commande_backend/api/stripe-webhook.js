@@ -14,6 +14,7 @@ import { Resend } from 'resend';
 const SITE = process.env.SITE_URL || 'https://adhanbox.fr';
 const SHIP_DATE = process.env.SHIP_DATE || 'sous 1 à 2 semaines';
 const NOTIF_EMAIL = process.env.NOTIF_EMAIL || 'contact@adhanbox.fr';
+const BACKEND = process.env.BACKEND_URL || 'https://adhanbox-commande.vercel.app';
 // Tant que le domaine n'est pas vérifié chez Resend, utiliser
 // 'AdhanBox <onboarding@resend.dev>' (n'envoie qu'à ta propre adresse).
 const FROM_EMAIL = process.env.FROM_EMAIL || 'AdhanBox <commande@adhanbox.fr>';
@@ -123,7 +124,7 @@ function clientEmailHtml({ firstName, ref, config, amount, shipTo }) {
 }
 
 // ── Email vendeur : notification nouvelle commande ──
-function sellerEmailHtml({ ref, config, amount, name, email, phone, shipTo, piId }) {
+function sellerEmailHtml({ ref, config, amount, name, email, phone, shipTo, piId, sessionId }) {
   const li = (k, v) => v ? `<li><b>${k} :</b> ${v}</li>` : '';
   return `
 <div style="font-family:Arial,sans-serif;font-size:15px;color:#232323;line-height:1.7;">
@@ -138,7 +139,31 @@ function sellerEmailHtml({ ref, config, amount, name, email, phone, shipTo, piId
   </ul>
   ${shipTo ? `<p><b>Livraison :</b><br>${shipTo}</p>` : ''}
   <p><a href="https://dashboard.stripe.com/payments/${piId}">Voir le paiement dans Stripe →</a></p>
+  ${stepButtons(sessionId)}
 </div>`;
+}
+
+// ── Boutons d'étape : un clic = un email au client (voir api/order-step.js) ──
+// N'apparaissent que si ORDER_ADMIN_TOKEN (ou REVIEW_ADMIN_TOKEN) est defini :
+// sans jeton les liens seraient inutilisables.
+function stepButtons(sessionId) {
+  const token = process.env.ORDER_ADMIN_TOKEN || process.env.REVIEW_ADMIN_TOKEN || '';
+  if (!token || !sessionId) return '';
+  const btn = (step, label, bg) =>
+    `<a href="${BACKEND}/api/order-step?session=${encodeURIComponent(sessionId)}` +
+    `&step=${step}&token=${encodeURIComponent(token)}"` +
+    ` style="display:inline-block;background:${bg};color:#fff;text-decoration:none;font-weight:600;` +
+    `font-size:14px;padding:10px 18px;border-radius:999px;margin:4px 6px 4px 0;">${label}</a>`;
+  return `
+  <div style="margin-top:22px;padding-top:18px;border-top:1px solid #E6DECF;">
+    <p style="margin:0 0 10px;color:#6B6B6B;font-size:13px;">Prévenir le client :</p>
+    ${btn('preparation', '1 · En préparation', '#0C5B45')}
+    ${btn('montage', '2 · Assemblée', '#0C5B45')}
+    ${btn('expedition', '3 · Expédiée', '#B4791A')}
+    <p style="margin:10px 0 0;color:#9A9A9A;font-size:12px;">
+      Un seul envoi par étape. « Expédiée » demandera le numéro de suivi.
+    </p>
+  </div>`;
 }
 
 export default async function handler(req, res) {
@@ -211,7 +236,7 @@ export default async function handler(req, res) {
       html: sellerEmailHtml({
         ref, config, amount,
         name: details.name, email: details.email, phone: details.phone,
-        shipTo, piId,
+        shipTo, piId, sessionId: session.id,
       }),
       text: [
         `Nouvelle précommande AdhanBox`,
