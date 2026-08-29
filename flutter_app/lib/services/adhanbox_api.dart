@@ -213,6 +213,23 @@ class AdhanBoxAPI {
     if (r.statusCode != 200) throw Exception('HTTP ${r.statusCode}');
   }
 
+  /// Remet la box en mode appairage Bluetooth, comme au premier demarrage.
+  ///
+  /// Le firmware (startBLEProvisioning) rallume l'annonce BLE ET bascule la LED
+  /// en clignotement, ce qui donne le repere visuel attendu par l'utilisateur.
+  /// C'est la seule voie fiable pour changer de reseau : scanner le Wi-Fi depuis
+  /// le telephone ne fonctionne pas sur iOS, et la box n'est de toute facon plus
+  /// joignable en HTTP une fois qu'elle a quitte l'ancien reseau.
+  Future<void> startBlePairing() async {
+    final headers = <String, String>{
+      if (apiKey != null && apiKey!.isNotEmpty) 'X-API-Key': apiKey!,
+    };
+    final r = await http
+        .get(Uri.parse('$baseUrl/api/start_ble'), headers: headers)
+        .timeout(timeout);
+    if (r.statusCode != 200) throw Exception('HTTP ${r.statusCode}');
+  }
+
   // ===== MAWAQIT =====
   Future<Map<String, dynamic>> getMawaqitTimes() async {
     try {

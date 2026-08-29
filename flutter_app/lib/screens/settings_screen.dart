@@ -7,7 +7,6 @@ import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 import '../providers/adhanbox_provider.dart';
 import '../services/location_service.dart';
-import '../services/wifi_service.dart';
 import '../theme/app_theme.dart';
 import '../main.dart';
 import 'privacy_policy_screen.dart';
@@ -202,8 +201,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       icon: Icons.wifi_rounded,
                       iconColor: Colors.blue,
                       title: 'Changer le réseau WiFi',
-                      subtitle: "Connecter l'appareil à une autre box internet",
-                      onTap: _showWiFiPicker,
+                      subtitle: "Remettre l'appareil en mode appairage",
+                      onTap: _relancerAppairage,
                     ),
                     _CardDivider(),
                     _ActionTile(
@@ -342,115 +341,57 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     await _launchExternal(url);
   }
 
-  Future<void> _showWiFiPicker() async {
-    _showLoading('Recherche des réseaux WiFi…');
-    try {
-      final service = ref.read(wifiServiceProvider);
-      final networks = await service.scanNetworks();
-      if (!mounted) return;
-      Navigator.pop(context);
-      if (networks.isEmpty) { _showError('Aucun réseau trouvé.'); return; }
-
-      showModalBottomSheet(
-        context: context,
-        isScrollControlled: true,
-        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-        builder: (ctx) => DraggableScrollableSheet(
-          initialChildSize: 0.6,
-          minChildSize: 0.4,
-          maxChildSize: 0.85,
-          expand: false,
-          builder: (_, controller) => Column(
-            children: [
-              const SizedBox(height: 8),
-              Container(width: 36, height: 4, decoration: BoxDecoration(color: AppTheme.darkBorder, borderRadius: BorderRadius.circular(2))),
-              const SizedBox(height: 16),
-              Text('Sélectionnez votre réseau', style: Theme.of(context).textTheme.titleLarge),
-              const SizedBox(height: 8),
-              Expanded(
-                child: ListView.builder(
-                  controller: controller,
-                  itemCount: networks.length,
-                  itemBuilder: (_, i) {
-                    final n = networks[i];
-                    final strength = service.signalStrengthPercent(n.level);
-                    final signalColor = strength >= 75 ? AppTheme.emerald : (strength >= 40 ? AppTheme.gold : Colors.red);
-                    return ListTile(
-                      leading: Icon(Icons.wifi_rounded, color: signalColor),
-                      title: Text(n.ssid, style: const TextStyle(fontWeight: FontWeight.w600)),
-                      subtitle: Text('Signal de connexion : $strength%'),
-                      trailing: n.capabilities.contains('WPA')
-                          ? const Icon(Icons.lock_rounded, size: 16, color: AppTheme.darkTextMuted)
-                          : null,
-                      onTap: () {
-                        Navigator.pop(ctx);
-                        _showPasswordDialog(n.ssid);
-                      },
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    } catch (e) {
-      if (mounted) Navigator.pop(context);
-      _showError(messageAmical(e, repli: 'La configuration Wi-Fi a échoué.'));
+  /// Remet la box en appairage Bluetooth, puis ouvre l'ecran de configuration.
+  ///
+  /// L'ancien parcours scannait les reseaux Wi-Fi depuis le telephone puis
+  /// poussait les identifiants par HTTP. Il ne pouvait pas marcher : iOS
+  /// interdit le scan Wi-Fi aux applications, et une fois la box partie sur le
+  /// nouveau reseau son ancienne adresse IP ne repond plus. On repasse donc par
+  /// le meme chemin que le premier appairage, qui lui est eprouve.
+  Future<void> _relancerAppairage() async {
+    final api = ref.read(adhanboxApiProvider);
+    if (api == null) {
+      _showError('Aucun appareil connecté.');
+      return;
     }
-  }
 
-  void _showPasswordDialog(String ssid) {
-    final pwdCtrl = TextEditingController();
-    bool obscurePwd = true;
-
-    showDialog(
+    final ok = await showDialog<bool>(
       context: context,
-      builder: (dialogCtx) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: Text(
-            'Rejoindre $ssid',
-            style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 18),
-          ),
-          content: TextField(
-            controller: pwdCtrl,
-            obscureText: obscurePwd,
-            autofocus: true,
-            decoration: InputDecoration(
-              labelText: 'Mot de passe WiFi',
-              prefixIcon: const Icon(Icons.key_rounded),
-              suffixIcon: IconButton(
-                icon: Icon(obscurePwd ? Icons.visibility_rounded : Icons.visibility_off_rounded),
-                onPressed: () => setDialogState(() => obscurePwd = !obscurePwd),
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogCtx),
-              child: const Text('Annuler'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                Navigator.pop(dialogCtx);
-                final api = ref.read(adhanboxApiProvider);
-                if (api != null) {
-                  try {
-                    await api.connectWiFi(ssid, pwdCtrl.text);
-                    _showSuccess('Configuration WiFi envoyée avec succès');
-                  } catch (e) {
-                    _showError(messageAmical(e));
-                  }
-                }
-              },
-              style: ElevatedButton.styleFrom(backgroundColor: AppTheme.emerald),
-              child: const Text('Connecter'),
-            ),
-          ],
+      builder: (ctx) => AlertDialog(
+        title: const Text('Changer de réseau WiFi'),
+        content: const Text(
+          "Votre AdhanBox va repasser en mode appairage : sa lumière se met à "
+          "clignoter et elle quitte le réseau actuel.\n\n"
+          "Vous allez ensuite la reconnecter en Bluetooth, comme lors de la "
+          "première installation. Gardez votre téléphone à proximité.",
         ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Annuler')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Continuer')),
+        ],
       ),
     );
+    if (ok != true || !mounted) return;
+
+    _showLoading('Passage en mode appairage…');
+    try {
+      await api.startBlePairing();
+      if (!mounted) return;
+      Navigator.pop(context); // ferme le chargement
+      await Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const DeviceSetupScreen()),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.pop(context);
+      _showError(messageAmical(e,
+          repli: "Impossible de passer en mode appairage. Vérifiez que "
+              "l'appareil est allumé et sur le même réseau que votre téléphone."));
+    }
   }
 
   void _showLoading(String message) {

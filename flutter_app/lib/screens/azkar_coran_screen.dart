@@ -26,6 +26,8 @@ class _Item {
 
 class _AzkarCoranScreenState extends ConsumerState<AzkarCoranScreen> {
   bool _loading = true;
+  /// Chemin en cours de lancement, pour n'animer que le bouton clique.
+  String? _launching;
   String? _error;
   String _saveState = ''; // '', 'saving', 'saved'
   Timer? _saveTimer;
@@ -92,6 +94,34 @@ class _AzkarCoranScreenState extends ConsumerState<AzkarCoranScreen> {
   }
 
   /// Auto-save débouncé : tout changement programme un envoi 600 ms plus tard.
+  /// Lance la recitation tout de suite, sans toucher a la programmation.
+  ///
+  /// /api/audio/play ne fait que demarrer un fichier : l'heure, les jours et
+  /// l'activation restent tels qu'ils sont enregistres dans la box. On ne
+  /// declenche donc AUCUNE sauvegarde ici.
+  Future<void> _playNow(_Item item, String path, String title) async {
+    final api = ref.read(adhanboxApiProvider);
+    if (api == null) {
+      _snack('Aucun appareil connecte');
+      return;
+    }
+    setState(() => _launching = path);
+    try {
+      await api.playFile(path, volume: item.volume);
+      if (mounted) _snack('Lecture de $title sur votre AdhanBox');
+    } catch (e) {
+      if (mounted) _snack(messageAmical(e, repli: 'La lecture n\'a pas demarre.'));
+    } finally {
+      if (mounted) setState(() => _launching = null);
+    }
+  }
+
+  void _snack(String m) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(m)));
+  }
+
   void _scheduleSave() {
     setState(() => _saveState = 'saving');
     _saveTimer?.cancel();
@@ -171,6 +201,7 @@ class _AzkarCoranScreenState extends ConsumerState<AzkarCoranScreen> {
     required String title,
     required String subtitle,
     required _Item item,
+    required String path,
   }) {
     final theme = Theme.of(context);
     return Card(
@@ -192,6 +223,21 @@ class _AzkarCoranScreenState extends ConsumerState<AzkarCoranScreen> {
                       Text(subtitle, style: theme.textTheme.bodySmall),
                     ],
                   ),
+                ),
+                // Lecture immediate. Volontairement hors du bloc
+                // `if (item.enabled)` : on doit pouvoir ecouter une recitation
+                // meme quand l'automatisme est desactive.
+                IconButton(
+                  tooltip: 'Ecouter maintenant',
+                  onPressed:
+                      _launching != null ? null : () => _playNow(item, path, title),
+                  icon: _launching == path
+                      ? const SizedBox(
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(strokeWidth: 2.4),
+                        )
+                      : const Icon(Icons.play_circle_fill_rounded, size: 30),
                 ),
                 Switch(
                   value: item.enabled,
@@ -352,12 +398,14 @@ class _AzkarCoranScreenState extends ConsumerState<AzkarCoranScreen> {
                         icon: Icons.wb_sunny_rounded,
                         title: 'Azkar du matin (Sabah)',
                         subtitle: 'Invocations du matin',
-                        item: _sabah),
+                        item: _sabah,
+                        path: '/azkar/sabah.mp3'),
                     _card(
                         icon: Icons.nights_stay_rounded,
                         title: 'Azkar du soir (Masaa)',
                         subtitle: 'Invocations du soir',
-                        item: _masaa),
+                        item: _masaa,
+                        path: '/azkar/masaa.mp3'),
                     const SizedBox(height: 16),
                     Text('Coran',
                         style: Theme.of(context).textTheme.headlineSmall),
@@ -365,12 +413,14 @@ class _AzkarCoranScreenState extends ConsumerState<AzkarCoranScreen> {
                         icon: Icons.menu_book_rounded,
                         title: 'Sourate Al-Kahf',
                         subtitle: 'Traditionnellement le vendredi',
-                        item: _kahf),
+                        item: _kahf,
+                        path: '/quran/al-kahf.mp3'),
                     _card(
                         icon: Icons.bedtime_rounded,
                         title: 'Sourate Al-Mulk',
                         subtitle: 'Traditionnellement avant de dormir',
-                        item: _mulk),
+                        item: _mulk,
+                        path: '/quran/al-mulk.mp3'),
                     const SizedBox(height: 24),
                     Text(
                       'Les modifications sont enregistrées automatiquement.',
