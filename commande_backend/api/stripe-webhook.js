@@ -188,10 +188,23 @@ export default async function handler(req, res) {
     res.end(JSON.stringify(obj));
   };
 
+  // Journaliser CHAQUE evenement recu. Sans cette ligne, un webhook qui repond
+  // 200 sans envoyer d'email est indiscernable d'un webhook qui a tout envoye :
+  // les deux ne laissent aucune trace. C'est exactement ce qui s'est produit sur
+  // la commande PayPal du 29/08.
+  const obj = event.data?.object || {};
+  console.log(
+    `webhook recu: ${event.type} | session=${obj.id || '-'} | ` +
+    `payment_status=${obj.payment_status || '-'} | status=${obj.status || '-'}`
+  );
+
   const isPaid =
     (event.type === 'checkout.session.completed' && event.data.object.payment_status === 'paid') ||
     event.type === 'checkout.session.async_payment_succeeded';
-  if (!isPaid) return done({ received: true });
+  if (!isPaid) {
+    console.log(`  -> ignore (pas encore paye). Aucun email envoye.`);
+    return done({ received: true });
+  }
 
   const session = event.data.object;
   const details = session.customer_details || {};
@@ -214,7 +227,7 @@ export default async function handler(req, res) {
   // 1) Email client
   try {
     if (details.email) {
-      await resend.emails.send({
+      const envoi = await resend.emails.send({
         from: FROM_EMAIL,
         to: details.email,
         replyTo: 'contact@adhanbox.fr',
@@ -222,6 +235,9 @@ export default async function handler(req, res) {
         html: clientEmailHtml({ firstName, ref, config, amount, shipTo }),
         text: clientEmailText({ firstName, ref, config, amount, shipToLines }),
       });
+      console.log(`  -> email client accepte par Resend: ${envoi?.data?.id || '?'} (${details.email})`);
+    } else {
+      console.log('  -> pas d\'adresse client dans la session : aucun email client');
     }
   } catch (err) {
     console.error('email client échoué:', err && err.message);
@@ -229,7 +245,7 @@ export default async function handler(req, res) {
 
   // 2) Notification vendeur
   try {
-    await resend.emails.send({
+    const envoiVendeur = await resend.emails.send({
       from: FROM_EMAIL,
       to: NOTIF_EMAIL,
       subject: `🎉 Nouvelle précommande — ${config} — ${amount}`,
@@ -248,6 +264,7 @@ export default async function handler(req, res) {
         `https://dashboard.stripe.com/payments/${piId}`,
       ].join('\n'),
     });
+    console.log(`  -> email vendeur accepte par Resend: ${envoiVendeur?.data?.id || '?'} (${NOTIF_EMAIL})`);
   } catch (err) {
     console.error('email vendeur échoué:', err && err.message);
   }
