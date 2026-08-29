@@ -149,6 +149,17 @@ function sellerEmailHtml({ ref, config, amount, name, email, phone, shipTo, piId
 function stepButtons(sessionId) {
   const token = process.env.ORDER_ADMIN_TOKEN || process.env.REVIEW_ADMIN_TOKEN || '';
   if (!token || !sessionId) return '';
+  // Les liens doivent porter le MEME domaine que l'expediteur. Un message signe
+  // @adhanbox.fr dont les boutons pointent vers *.vercel.app, avec un token dans
+  // l'URL, a la forme exacte d'un hameconnage. Le 29/08 la notification vendeur
+  // a ete supprimee en silence — pas meme mise en indesirables — alors que la
+  // meme notification sans ces boutons passait deux jours plus tot.
+  // Des que BACKEND_URL sera un sous-domaine d'adhanbox.fr, ils reviendront
+  // d'eux-memes : aucune autre modification a faire.
+  if (/\.vercel\.app/i.test(BACKEND)) {
+    console.log('  -> boutons d\'etape masques : BACKEND_URL est encore sur vercel.app');
+    return '';
+  }
   const btn = (step, label, bg) =>
     `<a href="${BACKEND}/api/order-step?session=${encodeURIComponent(sessionId)}` +
     `&step=${step}&token=${encodeURIComponent(token)}"` +
