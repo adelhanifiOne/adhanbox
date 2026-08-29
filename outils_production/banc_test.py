@@ -331,6 +331,53 @@ def t_contenu(ctx):
             else 'manque : ' + ', '.join(manquants))
 
 
+def _jumeau_fantome(chemin):
+    """/azkar/masaa.mp3 -> /azkar/._masaa.mp3"""
+    dossier, _, nom = chemin.rpartition('/')
+    return '%s/._%s' % (dossier, nom)
+
+
+def t_fantomes(ctx):
+    """Les ._X.mp3 que macOS depose a chaque copie sur la carte SD.
+
+    v2ListDir ne filtre que les DOSSIERS caches, pas les fichiers : ces jumeaux
+    portent l'extension .mp3, l'app les affiche donc dans sa liste, et un client
+    peut en choisir un — qui ne jouera rien.
+    """
+    trouves = []
+    for chemin in ctx.box.get('/api/audio/list'):
+        if chemin.rpartition('/')[2].startswith('._'):
+            trouves.append(chemin)
+
+    # /quran est absent de cette liste (v2ListDir l'exclut). On interroge donc
+    # les jumeaux des deux sourates automatisees, les seuls chemins qu'on
+    # connaisse la-dedans. 404 = propre, 200 = le fantome est bien la.
+    quran_vu = True
+    for chemin in CONTENU_ATTENDU:
+        if not chemin.startswith('/quran'):
+            continue
+        jumeau = _jumeau_fantome(chemin)
+        try:
+            ctx.box.get('/api/audio/play', {'f': jumeau})
+            trouves.append(jumeau)
+        except urllib.error.HTTPError as e:
+            if e.code != 404:
+                raise
+        except RuntimeError:
+            quran_vu = False        # jeton absent : on ne peut pas regarder
+            break
+        finally:
+            ctx.stop_lecture()
+
+    reserve = '' if quran_vu else ' (/quran non verifie : jeton absent)'
+    if not trouves:
+        return True, 'aucun' + reserve
+    apercu = ', '.join(trouves[:3])
+    reste = len(trouves) - 3
+    return False, '%d trouves : %s%s%s' % (
+        len(trouves), apercu, ' … +%d autres' % reste if reste > 0 else '', reserve)
+
+
 def t_rtc(ctx):
     t = ctx.box.get('/rtc_time', brut=True)
     return bool(re.search(r'20\d\d', t)), t.strip()[:60]
@@ -449,6 +496,9 @@ TESTS = [
          'Une marge trop courte fait redémarrer la carte au bout de quelques jours.'),
     Test('contenu', 'Contenu audio', 'auto', t_contenu,
          'Les 4 fichiers des automatismes s\'ouvrent et démarrent vraiment.'),
+    Test('fantomes', 'Fichiers fantômes macOS', 'auto', t_fantomes,
+         "macOS depose un ._X.mp3 par fichier copie : l'app les affiche, "
+         "et ils ne jouent rien."),
     Test('rtc', 'Horloge temps réel', 'auto', t_rtc,
          "Sans elle, pas d'adhan à l'heure après une coupure de courant."),
     Test('wifi', 'Wi-Fi', 'auto', t_wifi,

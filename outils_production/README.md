@@ -9,7 +9,7 @@ python3 outils_production/banc_gui.py
 
 Ça ouvre une fenêtre dans le navigateur. **Chaque contrôle a son propre bouton
 ▶** : tu lances celui que tu veux, quand tu veux, autant de fois que tu veux.
-« Tout tester » enchaîne simplement les treize.
+« Tout tester » enchaîne simplement les quatorze.
 
 Rien à installer — un petit serveur local, et une page qui l'interroge.
 
@@ -49,6 +49,7 @@ forcer la compilation, `--hote <ip>` si la carte n'est pas trouvée toute seule,
 | Débit carte SD | ≥ 16 ko/s, le seuil sous lequel l'audio se coupe |
 | Mémoire libre | > 60 ko de tas |
 | Contenu audio | les 4 automatismes s'ouvrent et démarrent (voir plus bas) |
+| Fichiers fantômes | aucun `._X.mp3` laissé par macOS (voir plus bas) |
 | Horloge temps réel | date plausible |
 | Wi-Fi | connectée, avec son SSID et son IP |
 
@@ -70,7 +71,7 @@ Trois verdicts, et la nuance compte :
 
 | verdict | quand |
 |---|---|
-| `CONFORME` | les 13 contrôles joués, les 13 passés |
+| `CONFORME` | les 14 contrôles joués, les 14 passés |
 | `NON CONFORME` | au moins un échec — **ne pas expédier** |
 | `PARTIEL` | tout est passé, mais tout n'a pas été joué |
 
@@ -115,9 +116,10 @@ carte sans jeton :
 redémarre bien la carte, mais en mode appairage BLE — qui **saute la
 reconnexion Wi-Fi**. La carte sortirait du réseau, et le banc la perdrait.
 
-Six des sept contrôles automatiques ne lisent que des routes ouvertes : ils
-passent dans tous les cas. Le septième — le contenu audio — ouvre les fichiers,
-et demande donc le jeton.
+Six des huit contrôles automatiques ne lisent que des routes ouvertes : ils
+passent dans tous les cas. Le contenu audio ouvre les fichiers et exige donc le
+jeton ; le contrôle des fichiers fantômes fonctionne sans lui, mais le signale
+en clair : « /quran non vérifié : jeton absent ».
 
 ## Pourquoi le contenu ne se vérifie pas par la liste
 
@@ -135,3 +137,26 @@ sons pendant le contrôle, c'est normal.
 
 `0` conforme · `1` carte introuvable ou flash échoué · `2` non conforme.
 De quoi enchaîner dans un script si tu automatises davantage.
+
+## Les fichiers fantômes de macOS
+
+Copier des MP3 depuis le Finder dépose un `._X.mp3` à côté de chaque fichier —
+la moitié « ressource » du format AppleDouble. `v2ListDir` ne filtre que les
+**dossiers** cachés, pas les fichiers : ces jumeaux portent l'extension `.mp3`,
+l'app les affiche donc dans sa liste, et un client peut en choisir un. Il ne
+jouera rien.
+
+Le contrôle les repère dans `/api/audio/list`, et interroge en plus les jumeaux
+des deux sourates automatisées — `/quran` étant invisible dans cette liste.
+
+Pour nettoyer une carte, avant de la monter :
+
+```bash
+find /Volumes/NOM_DE_LA_CARTE -name '._*' -delete
+```
+
+Et pour éviter qu'ils reviennent, copie plutôt en ligne de commande :
+
+```bash
+COPYFILE_DISABLE=1 cp -R source/ /Volumes/NOM_DE_LA_CARTE/
+```
