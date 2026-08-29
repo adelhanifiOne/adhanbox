@@ -78,7 +78,7 @@ export function stepEmail(step, { firstName, ref, config, tracking, carrier }) {
         ${salut(firstName)}
         ${par(`Votre AdhanBox vient d'entrer en préparation. Vous faites partie des toutes premières commandes, et je tenais à vous l'annoncer moi-même.`)}
         ${conf}
-        ${par(`Votre boîtier sera imprimé et assemblé à la main, à l'unité, puis testé un par un avant de partir. C'est ce qui prend du temps, et c'est aussi ce qui fait la différence.`)}
+        ${par(`Votre boîtier sera imprimé et assemblé à la main, à l'unité, puis testé un par un avant de partir. Vous serez informé dès que votre commande sera assemblée et testée.`)}
         ${etapes(2)}
         ${num}`),
     };
