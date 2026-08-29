@@ -56,6 +56,7 @@ class Session:
         self.travail = None
         self.journal = []
         self.flash_actif = False
+        self.copie = None            # avancement de la preparation de carte SD
         self.dernier_rapport = None
 
     # — journal —
@@ -116,6 +117,7 @@ class Session:
                 'question': self.question,
                 'occupe': self.occupe(),
                 'flash': self.flash_actif,
+                'copie': dict(self.copie) if self.copie else None,
                 'journal': self.journal[-120:],
                 'rapport': self.dernier_rapport,
             }
@@ -200,6 +202,45 @@ class Session:
         self.travail = threading.Thread(target=travail, daemon=True)
         self.travail.start()
         return True, 'Televersement lance — suis le journal.'
+
+    # — carte SD —
+    def preparer(self, volume):
+        if self.occupe():
+            return False, 'Une autre operation est en cours.'
+        connues = {c['chemin'] for c in bt.cartes_sd()}
+        if volume not in connues:
+            # On ne copie JAMAIS vers un chemin fourni tel quel : il doit
+            # figurer dans la liste des volumes amovibles detectes.
+            return False, 'Carte introuvable ou non amovible — reclique sur « Chercher une carte ».'
+
+        def travail():
+            with self.verrou:
+                self.copie = {'actif': True, 'volume': volume, 'fait': 0, 'total': 0,
+                              'octets': 0, 'total_octets': 0, 'fichier': '',
+                              'message': '', 'succes': None}
+            message, succes = 'interrompu', False
+            try:
+                def avancement(i, n, o, tot, rel):
+                    with self.verrou:
+                        if self.copie:
+                            self.copie.update(fait=i, total=n, octets=o,
+                                              total_octets=tot, fichier=rel)
+                succes, message = bt.preparer_carte(
+                    volume, sortie=self.noter, avancement=avancement, arret=self.arret)
+                self.noter(('OK  ' if succes else 'ECHEC ') + message)
+            except Exception as e:
+                message = str(e)
+                self.noter('ECHEC preparation : ' + message)
+            finally:
+                with self.verrou:
+                    if self.copie:
+                        self.copie.update(actif=False, message=message, succes=succes)
+                self.arret.clear()
+
+        self.arret.clear()
+        self.travail = threading.Thread(target=travail, daemon=True)
+        self.travail.start()
+        return True, 'Copie lancee — suis la progression ci-dessous.'
 
     # — rapport —
     def rapport(self, serie):
@@ -299,6 +340,8 @@ class Poignee(BaseHTTPRequestHandler):
             })
         if self.path == '/api/etat':
             return self._envoyer(SESSION.etat())
+        if self.path == '/api/cartes':
+            return self._envoyer({'cartes': bt.cartes_sd()})
         if self.path == '/api/ports':
             return self._envoyer({'ports': bt.ports_serie()})
         return self._envoyer({'erreur': 'inconnu'}, code=404)
@@ -325,6 +368,9 @@ class Poignee(BaseHTTPRequestHandler):
         if self.path == '/api/flash':
             lance, message = SESSION.flasher(c.get('port', '').strip(),
                                              bool(c.get('recompiler')))
+            return self._envoyer({'ok': lance, 'message': message})
+        if self.path == '/api/preparer':
+            lance, message = SESSION.preparer(c.get('volume', ''))
             return self._envoyer({'ok': lance, 'message': message})
         if self.path == '/api/rapport':
             rap, message = SESSION.rapport(c.get('serie', ''))
@@ -398,6 +444,12 @@ h2 + .aparte{margin:0 0 10px}
   background:var(--carte);border:2px solid var(--accent);box-shadow:var(--ombre)}
 .appel.consigne{border-color:var(--ambre)}
 .alerte{border-color:var(--ambre);border-left-width:4px}
+.sd{display:flex;align-items:center;gap:12px;padding:10px 14px;border:1px solid var(--trait);
+  border-radius:10px;margin-top:8px}
+.sd .ident{flex:1;min-width:0}
+.sd .ident b{font-size:14px} .sd .ident span{color:var(--doux);font-size:12.5px}
+.jauge{height:8px;border-radius:999px;background:var(--fond);overflow:hidden;margin-top:10px}
+.jauge i{display:block;height:100%;background:var(--accent);width:0;transition:width .3s}
 .alerte b{color:var(--ambre)}
 .appel p{margin:0 0 12px;font-size:17px;font-weight:600}
 .appel .rangee button{padding:9px 22px}
@@ -436,6 +488,17 @@ pre{background:var(--carte);border:1px solid var(--trait);border-radius:10px;pad
 </div>
 
 <div id="alerte" class="bloc alerte cache"></div>
+
+<div class="bloc">
+  <div class="rangee">
+    <b style="font-size:15px">Carte SD</b>
+    <span class="aparte" style="margin:0">Copie le contenu de référence, sans doublon invisible.</span>
+    <span style="flex:1"></span>
+    <button id="b-cartes">Chercher une carte</button>
+  </div>
+  <div id="cartes"></div>
+  <div id="copie" class="cache"></div>
+</div>
 
 <div id="appel" class="appel cache"></div>
 
@@ -530,6 +593,19 @@ function peindre(e){
       + 'Ou colle le jeton dans le champ ci-dessus, si tu l\'as.</p>';
   } else al.className = 'bloc alerte cache';
 
+  const cp = e.copie, zc = $('#copie');
+  if (cp){
+    const pct = cp.total ? Math.round(100 * cp.fait / cp.total) : 0;
+    zc.className = '';
+    zc.innerHTML = '<p class="aparte" style="margin:14px 0 0"></p>'
+      + '<div class="jauge"><i style="width:' + pct + '%"></i></div>';
+    zc.querySelector('p').textContent = cp.actif
+      ? (cp.fait + '/' + cp.total + ' fichiers · ' + go(cp.octets) + ' sur ' + go(cp.total_octets)
+         + ' · ' + cp.fichier)
+      : (cp.succes ? '✓ ' : '✗ ') + cp.message;
+    if (!cp.actif) zc.querySelector('.jauge').style.display = 'none';
+  } else zc.className = 'cache';
+
   const appel = $('#appel');
   if (e.question){
     appel.className = 'appel';
@@ -546,6 +622,8 @@ function peindre(e){
   } else { appel.className = 'appel cache'; }
 
   const pris = e.occupe || e.flash;
+  $('#b-cartes').disabled = e.occupe || e.flash;
+  for (const el of document.querySelectorAll('#cartes button')) el.disabled = e.occupe || e.flash;
   for (const id of ['#b-tout','#b-auto','#b-flash','#b-chercher'])
     $(id).disabled = pris || (id !== '#b-chercher' && id !== '#b-flash' && !e.carte);
   $('#b-stop').className = e.occupe && !e.flash ? 'danger' : 'danger cache';
@@ -569,6 +647,39 @@ function peindre(e){
     'Dernier rapport : ' + e.rapport.chemin + ' — ' + e.rapport.verdict
     + (e.rapport.non_executes ? ' (' + e.rapport.non_executes + ' contrôles non exécutés)' : '');
 }
+
+const go = o => o >= 1e9 ? (o/1e9).toFixed(1) + ' Go'
+                         : Math.round(o/1e6) + ' Mo';
+
+function chercherCartes(){
+  $('#cartes').innerHTML = '<p class="aparte">Recherche…</p>';
+  fetch('/api/cartes').then(r=>r.json()).then(d => {
+    const h = $('#cartes'); h.innerHTML = '';
+    if (!d.cartes.length){
+      h.innerHTML = '<p class="aparte">Aucune carte détectée. Branche-la, puis reclique. '
+        + 'Les volumes internes sont volontairement ignorés.</p>';
+      return;
+    }
+    for (const c of d.cartes){
+      const el = document.createElement('div');
+      el.className = 'sd';
+      el.innerHTML = '<div class="ident"><b></b><br><span></span></div>'
+        + '<button class="fort">Préparer cette carte</button>';
+      el.querySelector('b').textContent = c.nom;
+      el.querySelector('span').textContent =
+        c.systeme + ' · ' + go(c.libre) + ' libres sur ' + go(c.total) + ' · ' + c.chemin;
+      el.querySelector('button').onclick = () => {
+        if (!confirm('Copier le contenu de référence sur « ' + c.nom + ' » ?\n\n'
+          + 'Les fichiers déjà identiques seront ignorés. Rien n\'est effacé, '
+          + 'sauf les résidus macOS.')) return;
+        poste('/api/preparer', {volume: c.chemin})
+          .then(r => { $('#message').textContent = r.message; rafraichir(); });
+      };
+      h.append(el);
+    }
+  });
+}
+$('#b-cartes').onclick = chercherCartes;
 
 const rafraichir = () => fetch('/api/etat').then(r=>r.json()).then(peindre).catch(()=>{});
 

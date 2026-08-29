@@ -219,6 +219,193 @@ def cmd_flash(args):
     return 0 if succes else 1
 
 
+# ───────────────────── preparation de la carte SD ───────────────────
+
+# Contenu de reference a copier sur chaque carte. ADHANBOX_SD_SOURCE permet
+# de le deplacer (disque externe, autre machine) sans toucher au code.
+SD_SOURCE = os.environ.get('ADHANBOX_SD_SOURCE') or os.path.join(RACINE, 'sd_preload')
+
+# Residus que macOS seme sur toute carte qu'il monte.
+DOSSIERS_INDESIRABLES = ('.Spotlight-V100', '.fseventsd', '.Trashes',
+                         '.TemporaryItems', '.DocumentRevisions-V100')
+
+
+def _diskutil(chemin):
+    """Infos diskutil d'un volume, en dictionnaire."""
+    try:
+        r = subprocess.run(['diskutil', 'info', chemin],
+                           capture_output=True, text=True, timeout=8)
+    except Exception:
+        return {}
+    d = {}
+    for ligne in r.stdout.splitlines():
+        if ':' in ligne:
+            cle, _, val = ligne.partition(':')
+            d[cle.strip()] = val.strip()
+    return d
+
+
+def est_amovible(chemin):
+    """Ce volume est-il une carte, et non le disque de demarrage ?
+
+    Garde-fou central : on va ecrire 4,7 Go. Se tromper de cible n'est pas
+    une option, donc on exige que diskutil confirme « External » ou
+    « Removable » — sans quoi on refuse.
+    """
+    d = _diskutil(chemin)
+    if not d:
+        return False, 'volume inconnu de diskutil'
+    if d.get('Read-Only Volume') == 'Yes':
+        return False, 'volume en lecture seule'
+    if d.get('Device Location') == 'External' or d.get('Removable Media') == 'Removable':
+        return True, d.get('File System Personality', '?')
+    return False, 'volume interne (%s) — refuse' % d.get('Device Location', '?')
+
+
+def cartes_sd():
+    """Cartes montees, prêtes a recevoir le contenu."""
+    trouvees = []
+    try:
+        noms = sorted(os.listdir('/Volumes'))
+    except OSError:
+        return trouvees
+    for nom in noms:
+        chemin = os.path.join('/Volumes', nom)
+        if not os.path.isdir(chemin):
+            continue
+        amovible, detail = est_amovible(chemin)
+        if not amovible:
+            continue
+        try:
+            st = os.statvfs(chemin)
+        except OSError:
+            continue
+        trouvees.append({
+            'chemin': chemin,
+            'nom': nom,
+            'systeme': detail,
+            'libre': st.f_bavail * st.f_frsize,
+            'total': st.f_blocks * st.f_frsize,
+        })
+    return trouvees
+
+
+def contenu_source(source=None):
+    """Fichiers de reference a copier : (chemin relatif, absolu, taille)."""
+    source = source or SD_SOURCE
+    fichiers = []
+    for dossier, sous, noms in os.walk(source):
+        sous[:] = [d for d in sous if not d.startswith('.')]
+        for n in noms:
+            if n.startswith('.'):
+                continue
+            absolu = os.path.join(dossier, n)
+            try:
+                taille = os.path.getsize(absolu)
+            except OSError:
+                continue
+            fichiers.append((os.path.relpath(absolu, source), absolu, taille))
+    return sorted(fichiers)
+
+
+def nettoyer_volume(volume):
+    """Supprime les residus macOS. Retourne le nombre d'entrees enlevees."""
+    import shutil
+    n = 0
+    for dossier, sous, noms in os.walk(volume, topdown=True):
+        for d in list(sous):
+            if d in DOSSIERS_INDESIRABLES:
+                shutil.rmtree(os.path.join(dossier, d), ignore_errors=True)
+                sous.remove(d)
+                n += 1
+        for f in noms:
+            if f.startswith('._') or f == '.DS_Store':
+                try:
+                    os.remove(os.path.join(dossier, f))
+                    n += 1
+                except OSError:
+                    pass
+    return n
+
+
+def preparer_carte(volume, source=None, sortie=info, avancement=None, arret=None):
+    """Copie le contenu de reference sur la carte. Retourne (succes, message).
+
+    shutil.copyfile ne copie QUE les octets : ni attributs etendus, ni fork de
+    ressource. macOS n'a donc rien a deporter dans un jumeau « ._ » — les
+    doublons invisibles sont ecartes PAR CONSTRUCTION, pas nettoyes apres coup.
+    C'est la difference avec un glisser-deposer dans le Finder.
+    """
+    import shutil
+    source = source or SD_SOURCE
+
+    if not os.path.isdir(source):
+        return False, 'Contenu de reference introuvable : %s' % source
+    fichiers = contenu_source(source)
+    if not fichiers:
+        return False, 'Aucun fichier dans %s' % source
+
+    amovible, detail = est_amovible(volume)
+    if not amovible:
+        return False, 'Cible refusee : %s' % detail
+
+    total_octets = sum(t for _, _, t in fichiers)
+    try:
+        st = os.statvfs(volume)
+        libre = st.f_bavail * st.f_frsize
+    except OSError as e:
+        return False, 'Volume illisible (%s)' % e
+
+    deja = 0
+    for rel, _, taille in fichiers:
+        cible = os.path.join(volume, rel)
+        if os.path.exists(cible) and os.path.getsize(cible) == taille:
+            deja += taille
+    besoin = total_octets - deja
+    if besoin > libre:
+        return False, ('Place insuffisante : %.1f Go a ecrire, %.1f Go libres.'
+                       % (besoin / 1e9, libre / 1e9))
+
+    sortie('%d fichiers · %.1f Go · destination %s (%s)'
+           % (len(fichiers), total_octets / 1e9, volume, detail))
+
+    copies = ignores = 0
+    ecrits = 0
+    for i, (rel, absolu, taille) in enumerate(fichiers, 1):
+        if arret and arret.is_set():
+            return False, 'Interrompu apres %d fichiers.' % copies
+        cible = os.path.join(volume, rel)
+        try:
+            if os.path.exists(cible) and os.path.getsize(cible) == taille:
+                ignores += 1
+            else:
+                os.makedirs(os.path.dirname(cible), exist_ok=True)
+                shutil.copyfile(absolu, cible)   # octets seuls : aucun jumeau ._
+                copies += 1
+            ecrits += taille
+        except Exception as e:
+            return False, 'Echec sur %s : %s' % (rel, e)
+        if avancement:
+            avancement(i, len(fichiers), ecrits, total_octets, rel)
+        if i % 25 == 0 or i == len(fichiers):
+            sortie('  %d/%d fichiers — %.1f Go' % (i, len(fichiers), ecrits / 1e9))
+
+    sortie('Nettoyage des residus macOS…')
+    enleves = nettoyer_volume(volume)
+
+    # Verification : ce qui est sur la carte correspond-il a la reference ?
+    manquants = [rel for rel, _, taille in fichiers
+                 if not os.path.exists(os.path.join(volume, rel))
+                 or os.path.getsize(os.path.join(volume, rel)) != taille]
+    fantomes = sum(1 for d, _, ns in os.walk(volume) for n in ns if n.startswith('._'))
+    if manquants:
+        return False, '%d fichiers manquants ou incomplets apres copie.' % len(manquants)
+
+    return True, ('Carte prête : %d fichiers copies, %d deja a jour, '
+                  '%d residus enleves, %d fantomes.'
+                  % (copies, ignores, enleves, fantomes))
+
+
 # ─────────────────────── le monde autour d'un test ──────────────────
 
 class Contexte:

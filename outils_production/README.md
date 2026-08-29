@@ -30,6 +30,7 @@ le savoir.
 
 ## Le déroulé d'un boîtier
 
+0. **Préparer la carte SD** — branche-la, « Chercher une carte », « Préparer ».
 1. **Flasher le firmware** — compile si besoin, téléverse par USB, attend.
 2. **Chercher la carte** — mDNS, point d'accès, ou l'adresse que tu saisis.
 3. **Tout tester** — l'outil s'arrête aux questions et aux appuis.
@@ -174,4 +175,36 @@ Et pour éviter qu'ils reviennent, copie plutôt en ligne de commande :
 
 ```bash
 COPYFILE_DISABLE=1 cp -R source/ /Volumes/NOM_DE_LA_CARTE/
+```
+
+## Préparer une carte SD
+
+Le bloc « Carte SD » de l'interface copie `sd_preload/` — 466 fichiers, 5 Go :
+les 2 azkar, les 6 adhans, les 2 sourates automatisées et les 456 récitations
+des 4 récitateurs.
+
+**Aucun doublon invisible n'est créé, par construction.** La copie passe par
+`shutil.copyfile`, qui n'écrit que les octets : ni attributs étendus, ni fork de
+ressource. macOS n'a donc rien à déporter dans un jumeau `._`. C'est toute la
+différence avec un glisser-déposer dans le Finder, qui en sème un par fichier.
+Les résidus déjà présents (`._*`, `.DS_Store`, `.Spotlight-V100`, `.fseventsd`,
+`.Trashes`) sont balayés à la fin.
+
+Trois garde-fous, parce qu'on écrit 5 Go :
+
+- la cible doit être **amovible ou externe** selon `diskutil` — un volume interne
+  est refusé, et le disque de démarrage ne peut donc jamais être visé ;
+- le chemin doit figurer dans la liste des cartes détectées : un chemin envoyé
+  à la main à l'API est rejeté ;
+- la place libre est vérifiée avant d'écrire le premier octet.
+
+Relancer sur une carte déjà préparée ne recopie rien : les fichiers de taille
+identique sont ignorés. C'est donc aussi la façon de **reprendre une copie
+interrompue**, ou de rattraper une carte incomplète.
+
+Le contenu de référence peut vivre ailleurs que dans le dépôt (disque externe,
+autre machine) :
+
+```bash
+ADHANBOX_SD_SOURCE=/Volumes/DISQUE/sd_preload python3 outils_production/banc_gui.py
 ```
