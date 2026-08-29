@@ -1,0 +1,3 @@
+# Les rapports de test sont des donnees de production, pas du code.
+# Ils restent en local ; garde-les avec ton dossier technique.
+*.json
