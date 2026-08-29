@@ -15,8 +15,10 @@ qui l'interroge. Les tests eux-memes vivent dans banc_test.py — cette interfac
 ne fait que les declencher et montrer ce qu'ils repondent.
 """
 
+import errno
 import json
 import os
+import subprocess
 import sys
 import threading
 import time
@@ -596,11 +598,51 @@ fetch('/api/catalogue').then(r=>r.json()).then(c => {
 """
 
 
+def occupant(port):
+    """Qui tient deja ce port ? Retourne (pid, est-ce un banc de production)."""
+    pid = None
+    try:
+        r = subprocess.run(['lsof', '-nP', '-tiTCP:%d' % port, '-sTCP:LISTEN'],
+                           capture_output=True, text=True, timeout=4)
+        pid = (r.stdout.strip().split('\n') or [''])[0] or None
+    except Exception:
+        pass
+    banc = False
+    try:
+        import urllib.request
+        with urllib.request.urlopen('http://127.0.0.1:%d/api/catalogue' % port,
+                                    timeout=2) as f:
+            banc = b'groupes' in f.read(400)
+    except Exception:
+        pass
+    return pid, banc
+
+
 def main():
     port = PORT_WEB
     if '--port' in sys.argv:
         port = int(sys.argv[sys.argv.index('--port') + 1])
-    serveur = ThreadingHTTPServer(('127.0.0.1', port), Poignee)
+    moi = os.path.relpath(os.path.abspath(__file__))
+    try:
+        serveur = ThreadingHTTPServer(('127.0.0.1', port), Poignee)
+    except OSError as e:
+        # « Address already in use » sans plus d'explication laisse l'operateur
+        # devant une trace Python. On dit qui occupe le port et quoi taper.
+        if e.errno != errno.EADDRINUSE:
+            raise
+        pid, banc = occupant(port)
+        print('Le port %d est deja pris.\n' % port)
+        if banc:
+            print("  Un banc de production y tourne deja — probablement une")
+            print("  version anterieure, qui n'a donc pas les derniers correctifs.")
+        elif pid:
+            print('  Un autre programme y tourne (PID %s).' % pid)
+        if pid:
+            print('\n  Ferme-le :   kill %s' % pid)
+            print('  puis :       python3 %s' % moi)
+        print('\n  Ou lance celui-ci a cote :')
+        print('               python3 %s --port %d' % (moi, port + 1))
+        sys.exit(1)
     url = 'http://127.0.0.1:%d/' % port
     print('Banc de production AdhanBox V3')
     print('  %s' % url)
