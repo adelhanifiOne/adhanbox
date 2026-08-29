@@ -1,6 +1,6 @@
 {
-  "version": "3.0.5",
+  "version": "3.0.6",
   "hardware": "v3",
   "url": "https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/build_temp_v3/adhanbox_v3.ino.bin",
-  "changelog": "Corrige les LED incontrolables depuis l app apres un redemarrage : l application lit desormais leur etat reel."
+  "changelog": "Nouvelle page de depannage integree : appairage Bluetooth, reseau Wi-Fi et test du haut-parleur, plus lisibles."
 }
