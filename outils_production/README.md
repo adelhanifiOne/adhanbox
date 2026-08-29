@@ -4,10 +4,29 @@ Flashe une carte et la teste de A à Z, puis archive un rapport par numéro de
 série.
 
 ```bash
-python3 outils_production/banc_test.py serie      # flash + test enchaînés
+python3 outils_production/banc_gui.py
 ```
 
-## Les trois commandes
+Ça ouvre une fenêtre dans le navigateur. **Chaque contrôle a son propre bouton
+▶** : tu lances celui que tu veux, quand tu veux, autant de fois que tu veux.
+« Tout tester » enchaîne simplement les treize.
+
+Rien à installer — un petit serveur local, et une page qui l'interroge.
+
+## Le déroulé d'un boîtier
+
+1. **Flasher le firmware** — compile si besoin, téléverse par USB, attend.
+2. **Chercher la carte** — mDNS, point d'accès, ou l'adresse que tu saisis.
+3. **Tout tester** — l'outil s'arrête aux questions et aux appuis.
+4. **N° de série** puis **Enregistrer le rapport**.
+5. **Carte suivante** — remet les compteurs à zéro.
+
+Un contrôle en échec ? Corrige, et relance **ce seul contrôle** avec son ▶.
+
+## En ligne de commande
+
+L'interface n'est qu'une façade : les contrôles vivent dans `banc_test.py`, qui
+s'utilise aussi seul.
 
 | commande | ce qu'elle fait |
 |---|---|
@@ -15,9 +34,9 @@ python3 outils_production/banc_test.py serie      # flash + test enchaînés
 | `test` | teste une carte déjà flashée, par le réseau |
 | `serie` | enchaîne les deux, avec l'attente de redémarrage |
 
-Options utiles : `--port` si plusieurs cartes sont branchées, `--recompiler`
-pour forcer la compilation, `--hote <ip>` si la carte n'est pas trouvée toute
-seule, `--sans-operateur` pour ne lancer que les contrôles automatiques.
+Options : `--port` si plusieurs cartes sont branchées, `--recompiler` pour
+forcer la compilation, `--hote <ip>` si la carte n'est pas trouvée toute seule,
+`--sans-operateur` pour ne lancer que les contrôles automatiques.
 
 ## Ce qui est testé
 
@@ -46,6 +65,20 @@ une vraie mesure.
 
 Chaque passage écrit `rapports/<serie>_<date>.json` : verdict, identifiant de
 l'appareil, version du firmware, et le détail de chaque contrôle.
+
+Trois verdicts, et la nuance compte :
+
+| verdict | quand |
+|---|---|
+| `CONFORME` | les 13 contrôles joués, les 13 passés |
+| `NON CONFORME` | au moins un échec — **ne pas expédier** |
+| `PARTIEL` | tout est passé, mais tout n'a pas été joué |
+
+`PARTIEL` liste nommément ce qui n'a pas été fait. Un rapport ne prétend jamais
+plus que ce qui a vraiment été mesuré — c'est toute la différence entre une
+preuve et une impression. Pour la même raison, l'outil efface les résultats dès
+qu'il voit une autre carte ou qu'un flash a réussi, et un contrôle interrompu
+n'est pas compté en échec : il reste simplement à refaire.
 
 Ce n'est pas de la décoration. Ton email client annonce que chaque boîtier est
 testé — « audio, lumière, connexion et déclenchement de l'adhan à l'heure » —

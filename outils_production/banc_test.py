@@ -6,11 +6,16 @@ Banc de production AdhanBox V3
 Flashe une carte et la teste de bout en bout, puis archive un rapport signé
 par numéro de série.
 
-    python3 outils_production/banc_test.py flash          # televerse par USB
-    python3 outils_production/banc_test.py test           # teste la carte
-    python3 outils_production/banc_test.py serie          # flash + test enchaines
+    python3 outils_production/banc_gui.py                  # interface graphique
+    python3 outils_production/banc_test.py flash           # televerse par USB
+    python3 outils_production/banc_test.py test            # teste la carte
+    python3 outils_production/banc_test.py serie           # flash + test enchaines
 
-Pourquoi ce rapport compte : ton email client annonce que chaque boitier est
+Ce fichier tient le catalogue des controles ; l'interface graphique s'en sert
+telle quelle. Un test ne sait pas s'il tourne dans un terminal ou dans une
+fenetre : il parle a son `Contexte`, qui se charge du reste.
+
+Pourquoi le rapport compte : ton email client annonce que chaque boitier est
 "teste : audio, lumiere, connexion et declenchement de l'adhan a l'heure", et
 ta piece 05 du dossier CE decrit un controle unitaire. Ce fichier en est la
 preuve, datee et par numero de serie.
@@ -114,6 +119,10 @@ def trouver_box(hote_force=None):
         try:
             b = Box(h, timeout=4)
             d = b.get('/api/device/info')
+            # Le token n'est lisible que pendant la fenetre d'appairage (mode AP,
+            # ou 10 min apres le boot). Sur un banc de production on est dedans.
+            if d.get('token'):
+                b.token = d['token']
             return b, d
         except Exception:
             continue
@@ -129,62 +138,311 @@ def ports_serie():
                   glob.glob('/dev/cu.wchusbserial*'))
 
 
-def cmd_flash(args):
-    titre('Televersement du firmware V3')
-
-    cli = None
+def trouver_cli():
     for p in ['/opt/homebrew/bin/arduino-cli', '/usr/local/bin/arduino-cli', 'arduino-cli']:
         try:
             subprocess.run([p, 'version'], stdout=subprocess.DEVNULL,
                            stderr=subprocess.DEVNULL, check=True)
-            cli = p
-            break
+            return p
         except Exception:
             continue
-    if not cli:
-        ko('arduino-cli introuvable (brew install arduino-cli).')
-        return 1
+    return None
 
-    port = args.port
+
+def _courir(cmd, sortie):
+    """Lance une commande en renvoyant sa sortie ligne a ligne, au fil de l'eau."""
+    p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                         text=True, bufsize=1)
+    for ligne in p.stdout:
+        ligne = ligne.rstrip()
+        if ligne:
+            sortie(ligne)
+    return p.wait()
+
+
+def flasher(port=None, recompiler=False, sortie=info):
+    """Compile si besoin, puis televerse. Retourne (succes, message)."""
+    cli = trouver_cli()
+    if not cli:
+        return False, 'arduino-cli introuvable (brew install arduino-cli).'
+
     if not port:
         dispo = ports_serie()
         if not dispo:
-            ko('Aucune carte detectee. Branche-la en USB et reessaie.')
-            return 1
+            return False, 'Aucune carte detectee. Branche-la en USB et reessaie.'
         if len(dispo) > 1:
-            info('Plusieurs ports : %s' % ', '.join(dispo))
-            info('Precise-le avec --port')
-            return 1
+            return False, ('Plusieurs cartes branchees (%s) — choisis le port.'
+                           % ', '.join(dispo))
         port = dispo[0]
-    ok('Carte sur %s' % port)
+    sortie('Carte sur %s' % port)
 
     build = os.path.join(RACINE, 'build_temp_v3')
     binaire = os.path.join(build, 'adhanbox_v3.ino.bin')
-    if args.recompiler or not os.path.exists(binaire):
-        info('Compilation…')
+    if recompiler or not os.path.exists(binaire):
+        sortie('Compilation du firmware…')
         lib = os.path.expanduser('~/Documents/Arduino/libraries')
-        r = subprocess.run([cli, 'compile', '--fqbn', FQBN, '--libraries', lib,
-                            '--output-dir', build, SKETCH])
-        if r.returncode != 0:
-            ko('Compilation echouee.')
-            return 1
-        ok('Compile.')
+        if _courir([cli, 'compile', '--fqbn', FQBN, '--libraries', lib,
+                    '--output-dir', build, SKETCH], sortie) != 0:
+            return False, 'Compilation echouee.'
     else:
-        info('Binaire existant reutilise (--recompiler pour forcer)')
-        info('  %s' % binaire)
+        sortie('Binaire deja compile, reutilise : %s' % os.path.relpath(binaire, RACINE))
 
-    info('Televersement…')
-    r = subprocess.run([cli, 'upload', '--fqbn', FQBN, '--port', port,
-                        '--input-dir', build, SKETCH])
-    if r.returncode != 0:
-        ko('Televersement echoue.')
-        return 1
-    ok('Firmware televerse.')
-    info("La carte redemarre. Laisse-lui ~20 s, puis lance le test.")
-    return 0
+    sortie('Televersement…')
+    if _courir([cli, 'upload', '--fqbn', FQBN, '--port', port,
+                '--input-dir', build, SKETCH], sortie) != 0:
+        return False, 'Televersement echoue.'
+    return True, 'Firmware televerse sur %s. La carte redemarre (~20 s).' % port
 
 
-# ─────────────────────────── les tests ──────────────────────────────
+def cmd_flash(args):
+    titre('Televersement du firmware V3')
+    succes, message = flasher(args.port, args.recompiler, sortie=info)
+    (ok if succes else ko)(message)
+    return 0 if succes else 1
+
+
+# ─────────────────────── le monde autour d'un test ──────────────────
+
+class Contexte:
+    """Ce qui relie un test au reste : la carte, et un canal vers l'operateur.
+
+    La console et l'interface graphique fournissent chacune leur `dire`,
+    `consigne` et `demander`. Les tests, eux, ne changent pas d'une ligne.
+    """
+
+    def __init__(self, box, infos):
+        self.box = box
+        self.infos = infos or {}
+        self._diag = None
+        self.arret = None          # threading.Event, pose par l'interface
+
+    def diag(self):
+        """/api/diag n'est interroge qu'une fois par serie de tests."""
+        if self._diag is None:
+            self._diag = self.box.get('/api/diag')
+        return self._diag
+
+    def oublier_diag(self):
+        self._diag = None
+
+    def dire(self, m):
+        info(m)
+
+    def consigne(self, m):
+        print('  %s?%s %s' % (J, N, m))
+
+    def demander(self, q):
+        return demande(q)
+
+    def interrompu(self):
+        return bool(self.arret and self.arret.is_set())
+
+    def patiente(self, secondes):
+        """Attend — mais se reveille aussitot si l'operateur arrete la serie."""
+        fin = time.time() + secondes
+        while time.time() < fin:
+            if self.interrompu():
+                return False
+            time.sleep(min(0.2, max(0.0, fin - time.time())))
+        return True
+
+
+# ─────────────────────────── catalogue de tests ─────────────────────
+# Chaque test recoit un Contexte et renvoie (reussi, detail).
+
+def t_identite(ctx):
+    i = ctx.infos
+    return (i.get('hardware') == 'v3',
+            'firmware %s · materiel %s · id %s' % (
+                i.get('version', '?'), i.get('hardware', '?'),
+                i.get('device_id', '?')))
+
+
+def t_psram(ctx):
+    p = ctx.diag().get('psram_size', 0)
+    return p > 0, ('%.1f Mo' % (p / 1048576.0)) if p else 'ABSENTE'
+
+
+def t_sd(ctx):
+    d = ctx.diag()
+    lu, besoin = d.get('sd_read_kBs', 0), d.get('need_kBs', 16)
+    return lu >= besoin, '%d ko/s lus, %d requis%s' % (
+        lu, besoin, '' if lu >= besoin else ' → coupures audio garanties')
+
+
+def t_heap(ctx):
+    h = ctx.diag().get('free_heap', 0)
+    return h > 60000, '%d octets' % h
+
+
+def t_contenu(ctx):
+    liste = ctx.box.get('/api/audio/list', brut=True)
+    manquants = [c for c in CONTENU_ATTENDU if c.split('/')[-1] not in liste]
+    return (not manquants,
+            'complet' if not manquants
+            else 'manque : ' + ', '.join(CONTENU_ATTENDU[m] for m in manquants))
+
+
+def t_rtc(ctx):
+    t = ctx.box.get('/rtc_time', brut=True)
+    return bool(re.search(r'20\d\d', t)), t.strip()[:60]
+
+
+def t_wifi(ctx):
+    w = ctx.box.get('/api/wifi/status')
+    connecte = str(w.get('status', '')).lower() in ('connected', 'ok', '3', 'true')
+    return (connecte or bool(w.get('ip')),
+            '%s · %s' % (w.get('ssid', '?'), w.get('ip', 'sans IP')))
+
+
+def t_led_couleurs(ctx):
+    ctx.box.post('/api/led/brightness', {'brightness': 100})
+    for nom, r, g, b in [('Rouge', 255, 0, 0), ('Vert', 0, 255, 0), ('Bleu', 0, 0, 255)]:
+        ctx.box.post('/api/led/rgb', {'r': r, 'g': g, 'b': b})
+        ctx.dire('LED en %s' % nom.lower())
+        ctx.patiente(1.2)
+    return (ctx.demander('As-tu vu rouge, puis vert, puis bleu ?'),
+            'rouge/vert/bleu envoyes')
+
+
+def t_led_luminosite(ctx):
+    ctx.box.post('/api/led/rgb', {'r': 255, 'g': 255, 'b': 255})
+    ctx.box.post('/api/led/brightness', {'brightness': 10})
+    ctx.patiente(1.0)
+    faible = ctx.demander('La lumière est-elle devenue faible ?')
+    ctx.box.post('/api/led/brightness', {'brightness': 100})
+    ctx.patiente(1.0)
+    forte = ctx.demander('Et de nouveau vive ?')
+    return faible and forte, '10 % puis 100 %'
+
+
+def t_hp(ctx):
+    ctx.box.post('/api/audio/volume', {'volume': 12})
+    ctx.box.get('/play', {'track': 2})
+    ctx.patiente(3)
+    entendu = ctx.demander("Entends-tu l'adhan ?")
+    try:
+        ctx.box.get('/stopplay')
+    except Exception:
+        pass
+    return entendu, 'piste 2, volume 12/30'
+
+
+def t_volume(ctx):
+    ctx.box.post('/api/audio/volume', {'volume': 10})
+    ctx.box.get('/play', {'track': 2})
+    ctx.patiente(2.5)
+    ctx.dire('Volume porté à 28/30')
+    ctx.box.post('/api/audio/volume', {'volume': 28})
+    ctx.patiente(2.5)
+    monte = ctx.demander('Le son est-il monté ?')
+    try:
+        ctx.box.get('/stopplay')
+    except Exception:
+        pass
+    return monte, '10 → 28'
+
+
+def t_bouton_scenario(ctx):
+    """Le bouton fait defiler les scenarios LED : l'outil constate le changement."""
+    def scenario():
+        return ctx.box.get('/api/led/status').get('scenario')
+
+    ctx.box.get('/stopplay')
+    ctx.patiente(0.6)
+    avant = scenario()
+    ctx.dire('Scénario LED avant appui : %s' % avant)
+    ctx.consigne('Appuie une fois sur le bouton tactile…')
+    t0 = time.time()
+    while time.time() - t0 < 25:
+        if not ctx.patiente(0.7):
+            return False, 'interrompu'
+        maintenant = scenario()
+        if maintenant != avant:
+            return True, 'scénario %s → %s' % (avant, maintenant)
+    return False, 'aucun changement en 25 s'
+
+
+def t_bouton_stop(ctx):
+    ctx.box.get('/play', {'track': 2})
+    ctx.patiente(2)
+    if not ctx.box.get('/api/audio/status').get('playing'):
+        return False, "la lecture n'a pas démarré"
+    ctx.consigne("Appuie de nouveau sur le bouton pour arrêter l'adhan…")
+    t0 = time.time()
+    try:
+        while time.time() - t0 < 25:
+            if not ctx.patiente(0.7):
+                return False, 'interrompu'
+            if not ctx.box.get('/api/audio/status').get('playing'):
+                return True, 'lecture stoppée par le bouton'
+        return False, 'toujours en lecture après 25 s'
+    finally:
+        try:
+            ctx.box.get('/stopplay')
+        except Exception:
+            pass
+
+
+class Test:
+    def __init__(self, clef, nom, groupe, fn, pourquoi=''):
+        self.clef, self.nom, self.groupe = clef, nom, groupe
+        self.fn, self.pourquoi = fn, pourquoi
+
+
+GROUPES = [
+    ('auto', 'Contrôles automatiques',
+     "L'outil interroge la carte et juge seul."),
+    ('sensoriel', 'Contrôles visuels et sonores',
+     'Tu regardes, tu écoutes, tu réponds.'),
+    ('physique', 'Bouton tactile',
+     "Tu appuies, l'outil mesure l'effet. Pas de déclaration : une constatation."),
+]
+
+TESTS = [
+    Test('identite', 'Identité de la carte', 'auto', t_identite,
+         'Le bon firmware sur le bon matériel, et un identifiant unique.'),
+    Test('psram', 'PSRAM présente', 'auto', t_psram,
+         'Son absence était la loterie des modules V2.'),
+    Test('sd', 'Débit de la carte SD', 'auto', t_sd,
+         "Sous 16 ko/s, l'audio se coupe en pleine lecture."),
+    Test('heap', 'Mémoire libre', 'auto', t_heap,
+         'Une marge trop courte fait redémarrer la carte au bout de quelques jours.'),
+    Test('contenu', 'Contenu audio', 'auto', t_contenu,
+         'Les 4 fichiers des automatismes sont bien sur la carte SD.'),
+    Test('rtc', 'Horloge temps réel', 'auto', t_rtc,
+         "Sans elle, pas d'adhan à l'heure après une coupure de courant."),
+    Test('wifi', 'Wi-Fi', 'auto', t_wifi,
+         'La carte est connectée et joignable.'),
+
+    Test('led_couleurs', 'LED — les 3 couleurs', 'sensoriel', t_led_couleurs,
+         'Rouge, vert, bleu : les trois canaux du bandeau répondent.'),
+    Test('led_luminosite', 'LED — luminosité', 'sensoriel', t_led_luminosite,
+         'Le réglage descend à 10 % puis remonte à 100 %.'),
+    Test('hp', 'Haut-parleur', 'sensoriel', t_hp,
+         "L'adhan sort vraiment du haut-parleur."),
+    Test('volume', 'Réglage du volume', 'sensoriel', t_volume,
+         'Le volume monte de 10 à 28 sur 30.'),
+
+    Test('bouton_scenario', 'Bouton — changement de scénario', 'physique', t_bouton_scenario,
+         "L'appui change le scénario LED, et l'outil lit le changement."),
+    Test('bouton_stop', "Bouton — arrêt de la lecture", 'physique', t_bouton_stop,
+         "Un second appui coupe l'adhan en cours."),
+]
+
+PAR_CLEF = {t.clef: t for t in TESTS}
+
+
+def executer(test, ctx):
+    """Lance un test sans jamais laisser une exception remonter."""
+    try:
+        reussi, detail = test.fn(ctx)
+    except Exception as e:
+        return False, str(e)
+    return bool(reussi), detail or ''
+
+
+# ─────────────────────────── rapport ────────────────────────────────
 
 class Bilan:
     def __init__(self):
@@ -200,198 +458,69 @@ class Bilan:
         return [l for l in self.lignes if not l['ok']]
 
 
-def tests_automatiques(box, infos, bilan):
-    titre('Controles automatiques')
+def ecrire_rapport(serie, infos, lignes, hote, non_executes=()):
+    """Archive le resultat. `lignes` : [{test, ok, detail}, …]
 
-    bilan.add('Identite',
-              infos.get('hardware') == 'v3',
-              'firmware %s · materiel %s · id %s' % (
-                  infos.get('version', '?'), infos.get('hardware', '?'),
-                  infos.get('device_id', '?')))
-
-    try:
-        d = box.get('/api/diag')
-    except Exception as e:
-        bilan.add('Diagnostic materiel', False, 'injoignable (%s)' % e)
-        return
-
-    psram = d.get('psram_size', 0)
-    bilan.add('PSRAM presente', psram > 0, '%.1f Mo' % (psram / 1048576.0) if psram else 'ABSENTE')
-
-    lu, besoin = d.get('sd_read_kBs', 0), d.get('need_kBs', 16)
-    bilan.add('Debit carte SD', lu >= besoin,
-              '%d ko/s lus, %d requis%s' % (lu, besoin,
-                  '' if lu >= besoin else ' → coupures audio garanties'))
-
-    heap = d.get('free_heap', 0)
-    bilan.add('Memoire libre', heap > 60000, '%d octets' % heap)
-
-    try:
-        liste = box.get('/api/audio/list', brut=True)
-        manquants = [c for c in CONTENU_ATTENDU if c.split('/')[-1] not in liste]
-        bilan.add('Contenu audio', not manquants,
-                  'complet' if not manquants
-                  else 'manque : ' + ', '.join(CONTENU_ATTENDU[m] for m in manquants))
-    except Exception as e:
-        bilan.add('Contenu audio', False, str(e))
-
-    try:
-        t = box.get('/rtc_time', brut=True)
-        annee = re.search(r'20\d\d', t)
-        bilan.add('Horloge temps reel', bool(annee), t.strip()[:60])
-    except Exception as e:
-        bilan.add('Horloge temps reel', False, str(e))
-
-    try:
-        w = box.get('/api/wifi/status')
-        connecte = str(w.get('status', '')).lower() in ('connected', 'ok', '3', 'true')
-        bilan.add('Wi-Fi', connecte or bool(w.get('ip')),
-                  '%s · %s' % (w.get('ssid', '?'), w.get('ip', 'sans IP')))
-    except Exception as e:
-        bilan.add('Wi-Fi', False, str(e))
-
-
-def tests_sensoriels(box, bilan):
-    """Ce que seul un humain peut constater : lumiere et son."""
-    titre('Controles visuels et sonores')
-    info('Regarde et ecoute la carte, puis reponds.')
-
-    couleurs = [('Rouge', 255, 0, 0), ('Vert', 0, 255, 0), ('Bleu', 0, 0, 255)]
-    vus = []
-    try:
-        box.post('/api/led/brightness', {'brightness': 100})
-        for nom, r, g, b in couleurs:
-            box.post('/api/led/rgb', {'r': r, 'g': g, 'b': b})
-            time.sleep(1.2)
-            vus.append(nom)
-        bilan.add('LED — les 3 couleurs',
-                  demande('As-tu vu rouge, puis vert, puis bleu ?'),
-                  'rouge/vert/bleu envoyes')
-    except Exception as e:
-        bilan.add('LED — les 3 couleurs', False, str(e))
-
-    try:
-        box.post('/api/led/brightness', {'brightness': 10})
-        time.sleep(1.0)
-        faible = demande('La lumiere est-elle devenue faible ?')
-        box.post('/api/led/brightness', {'brightness': 100})
-        time.sleep(1.0)
-        forte = demande('Et de nouveau vive ?')
-        bilan.add('LED — reglage de luminosite', faible and forte, '10 % puis 100 %')
-    except Exception as e:
-        bilan.add('LED — reglage de luminosite', False, str(e))
-
-    try:
-        box.post('/api/audio/volume', {'volume': 12})
-        box.get('/play', {'track': 2})
-        time.sleep(3)
-        entendu = demande("Entends-tu l'adhan ?")
-        bilan.add('Haut-parleur', entendu, 'piste 2, volume 12/30')
-        if entendu:
-            box.post('/api/audio/volume', {'volume': 28})
-            time.sleep(2.5)
-            bilan.add('Reglage du volume',
-                      demande('Le son est-il monte ?'), '12 → 28')
-    except Exception as e:
-        bilan.add('Haut-parleur', False, str(e))
-
-
-def tests_bouton(box, bilan):
-    """Le bouton tactile se verifie tout seul : il change le scenario LED."""
-    titre('Bouton tactile')
-
-    def scenario():
-        return box.get('/api/led/status').get('scenario')
-
-    try:
-        box.get('/stopplay')
-        time.sleep(0.6)
-        avant = scenario()
-        info('Scenario LED avant appui : %s' % avant)
-        print('  %s?%s Appuie une fois sur le bouton tactile…' % (J, N))
-        change, t0 = False, time.time()
-        while time.time() - t0 < 20:
-            time.sleep(0.7)
-            if scenario() != avant:
-                change = True
-                break
-        bilan.add('Bouton — changement de scenario', change,
-                  'scenario %s → %s' % (avant, scenario()) if change
-                  else 'aucun changement en 20 s')
-    except Exception as e:
-        bilan.add('Bouton — changement de scenario', False, str(e))
-
-    try:
-        box.get('/play', {'track': 2})
-        time.sleep(2)
-        if not box.get('/api/audio/status').get('playing'):
-            bilan.add("Bouton — arret de la lecture", False, "la lecture n'a pas demarre")
-            return
-        print("  %s?%s Appuie de nouveau pour arreter l'adhan…" % (J, N))
-        arrete, t0 = False, time.time()
-        while time.time() - t0 < 20:
-            time.sleep(0.7)
-            if not box.get('/api/audio/status').get('playing'):
-                arrete = True
-                break
-        bilan.add("Bouton — arret de la lecture", arrete,
-                  'lecture stoppee' if arrete else 'toujours en lecture apres 20 s')
-    except Exception as e:
-        bilan.add("Bouton — arret de la lecture", False, str(e))
-    finally:
-        try:
-            box.get('/stopplay')
-        except Exception:
-            pass
-
-
-# ─────────────────────────── rapport ────────────────────────────────
-
-def ecrire_rapport(serie, infos, bilan, hote):
+    Un rapport ou tout n'a pas ete joue n'est pas CONFORME : il est PARTIEL.
+    C'est la difference entre une preuve et une impression.
+    """
     os.makedirs(RAPPORTS, exist_ok=True)
     horo = datetime.now(timezone.utc).astimezone()
+    echecs = [l for l in lignes if not l['ok']]
+    if echecs:
+        verdict = 'NON CONFORME'
+    elif non_executes:
+        verdict = 'PARTIEL'
+    else:
+        verdict = 'CONFORME'
     rap = {
         'numero_serie': serie,
         'date': horo.isoformat(timespec='seconds'),
-        'device_id': infos.get('device_id'),
-        'firmware': infos.get('version'),
-        'materiel': infos.get('hardware'),
+        'device_id': (infos or {}).get('device_id'),
+        'firmware': (infos or {}).get('version'),
+        'materiel': (infos or {}).get('hardware'),
         'adresse': hote,
-        'verdict': 'CONFORME' if not bilan.echecs else 'NON CONFORME',
-        'tests': bilan.lignes,
+        'verdict': verdict,
+        'tests': lignes,
     }
-    nom = '%s_%s.json' % (serie or infos.get('device_id', 'inconnu'),
+    if non_executes:
+        rap['non_executes'] = list(non_executes)
+    nom = '%s_%s.json' % (serie or (infos or {}).get('device_id', 'inconnu'),
                           horo.strftime('%Y-%m-%d_%H%M'))
     chemin = os.path.join(RAPPORTS, nom)
     with open(chemin, 'w', encoding='utf-8') as f:
         json.dump(rap, f, indent=2, ensure_ascii=False)
         f.write('\n')
-    return chemin
+    return chemin, verdict
 
+
+# ─────────────────────────── commandes CLI ──────────────────────────
 
 def cmd_test(args):
     titre('Banc de test AdhanBox V3')
     box, infos = trouver_box(args.hote)
     if not box:
         ko('Carte introuvable sur %s.' % (args.hote or ' / '.join(HOTES)))
-        info('Verifie qu\'elle est allumee et sur le meme reseau, ou passe --hote <ip>.')
+        info("Verifie qu'elle est allumee et sur le meme reseau, ou passe --hote <ip>.")
         return 1
     ok('Carte trouvee sur %s' % box.hote)
-
-    # Le token n'est lisible que pendant la fenetre d'appairage (mode AP, ou
-    # 10 min apres le boot). Sur un banc de production on est toujours dedans.
-    if infos.get('token'):
-        box.token = infos['token']
+    if box.token:
         info('Jeton recupere automatiquement')
     else:
         info('Jeton non expose (carte demarree depuis plus de 10 min) — '
              'les routes protegees peuvent refuser. Redemarre-la si un test echoue.')
 
+    ctx = Contexte(box, infos)
     bilan = Bilan()
-    tests_automatiques(box, infos, bilan)
-    if not args.sans_operateur:
-        tests_sensoriels(box, bilan)
-        tests_bouton(box, bilan)
+    voulus = ['auto'] if args.sans_operateur else ['auto', 'sensoriel', 'physique']
+    for groupe, nom_groupe, sous_titre in GROUPES:
+        if groupe not in voulus:
+            continue
+        titre(nom_groupe)
+        info(sous_titre)
+        for t in TESTS:
+            if t.groupe == groupe:
+                bilan.add(t.nom, *executer(t, ctx))
 
     titre('Bilan')
     reussis = len(bilan.lignes) - len(bilan.echecs)
@@ -406,7 +535,9 @@ def cmd_test(args):
     serie = args.serie
     if not serie and not args.sans_operateur:
         serie = input('  Numero de serie (ex. AB3-0001, vide pour ignorer) : ').strip()
-    chemin = ecrire_rapport(serie, infos, bilan, box.hote)
+    joues = {l['test'] for l in bilan.lignes}
+    non_faits = [t.nom for t in TESTS if t.nom not in joues]
+    chemin, _ = ecrire_rapport(serie, infos, bilan.lignes, box.hote, non_faits)
     info('Rapport : %s' % os.path.relpath(chemin, RACINE))
     return 0 if not bilan.echecs else 2
 
