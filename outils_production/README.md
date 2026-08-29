@@ -89,12 +89,34 @@ technique.
 ## Trouver la carte sur le réseau
 
 L'outil essaie `adhanbox.local` (mDNS), puis `192.168.4.1` (le point d'accès
-que la box ouvre quand elle n'a pas de Wi-Fi). Sinon, passe `--hote`.
+que la box ouvre quand elle n'a pas de Wi-Fi). Sinon, saisis l'adresse.
 
-**Le jeton d'API est récupéré automatiquement**, mais le firmware ne l'expose
-que pendant la fenêtre d'appairage : en mode point d'accès, ou dans les
-10 minutes qui suivent le démarrage. Sur un banc de production on est toujours
-dedans. Si un test échoue en disant que le jeton manque, redémarre la carte.
+## Le jeton, et sa fenêtre de 10 minutes
+
+Le jeton d'API est récupéré tout seul — mais le firmware ne le publie que
+pendant la **fenêtre d'appairage** : en mode point d'accès, ou dans les
+10 minutes qui suivent le démarrage (`handleDeviceInfo`, `adhanbox_v3.ino`).
+Passé ce délai, `/api/device/info` répond `paired: true` sans le jeton, et
+toute route qui **modifie** quelque chose renvoie 401.
+
+En production, on flashe puis on teste : la carte vient de redémarrer, on est
+toujours dans la fenêtre. Le problème n'apparaît que sur un boîtier allumé
+depuis un moment — un exemplaire d'atelier, typiquement.
+
+Deux remèdes, et l'interface les affiche d'elle-même dès qu'elle voit une
+carte sans jeton :
+
+- **débrancher puis rebrancher la carte**, et recliquer sur « Chercher la
+  carte » — la fenêtre se rouvre pour 10 minutes ;
+- **coller le jeton** dans le champ prévu (ou `--jeton` en ligne de commande),
+  si tu l'as.
+
+À ne pas faire : appeler `/api/pair` pour forcer un redémarrage. Cette route
+redémarre bien la carte, mais en mode appairage BLE — qui **saute la
+reconnexion Wi-Fi**. La carte sortirait du réseau, et le banc la perdrait.
+
+Les 7 contrôles automatiques, eux, ne lisent que des routes ouvertes : ils
+passent dans tous les cas.
 
 ## Codes de sortie
 

@@ -82,6 +82,13 @@ def demande(question):
 
 # ─────────────────────────── couche HTTP ────────────────────────────
 
+SANS_JETON = (
+    "jeton refuse — la carte ne le publie plus (demarree depuis plus de "
+    "10 min). Debranche-la et rebranche-la, puis reclique sur « Chercher la "
+    "carte » ; ou colle le jeton a la main."
+)
+
+
 class Box:
     def __init__(self, hote, token=None, timeout=8):
         self.hote = hote
@@ -98,7 +105,7 @@ class Box:
         req = urllib.request.Request(self._url(chemin, params))
         if self.token:
             req.add_header('X-API-Key', self.token)
-        with urllib.request.urlopen(req, timeout=self.timeout) as r:
+        with self._ouvrir(req) as r:
             corps = r.read().decode('utf-8', 'replace')
         return corps if brut else json.loads(corps)
 
@@ -108,21 +115,32 @@ class Box:
                                      headers={'Content-Type': 'application/json'})
         if self.token:
             req.add_header('X-API-Key', self.token)
-        with urllib.request.urlopen(req, timeout=self.timeout) as r:
+        with self._ouvrir(req) as r:
             return r.read().decode('utf-8', 'replace')
 
+    def _ouvrir(self, req):
+        try:
+            return urllib.request.urlopen(req, timeout=self.timeout)
+        except urllib.error.HTTPError as e:
+            if e.code == 401:
+                raise RuntimeError(SANS_JETON)
+            raise
 
-def trouver_box(hote_force=None):
-    """Cherche la carte : hote impose, puis mDNS, puis le point d'acces."""
+
+def trouver_box(hote_force=None, token=None):
+    """Cherche la carte : hote impose, puis mDNS, puis le point d'acces.
+
+    Le jeton n'est publie par /api/device/info que pendant la fenetre
+    d'appairage (mode AP, ou 10 min apres le boot). Sur un banc on flashe puis
+    on teste : on est dedans. Sur une carte allumee depuis un moment, non — d'ou
+    la possibilite de le fournir soi-meme.
+    """
     candidats = [hote_force] if hote_force else HOTES
     for h in candidats:
         try:
             b = Box(h, timeout=4)
             d = b.get('/api/device/info')
-            # Le token n'est lisible que pendant la fenetre d'appairage (mode AP,
-            # ou 10 min apres le boot). Sur un banc de production on est dedans.
-            if d.get('token'):
-                b.token = d['token']
+            b.token = token or d.get('token') or None
             return b, d
         except Exception:
             continue
@@ -498,17 +516,17 @@ def ecrire_rapport(serie, infos, lignes, hote, non_executes=()):
 
 def cmd_test(args):
     titre('Banc de test AdhanBox V3')
-    box, infos = trouver_box(args.hote)
+    box, infos = trouver_box(args.hote, getattr(args, 'jeton', None))
     if not box:
         ko('Carte introuvable sur %s.' % (args.hote or ' / '.join(HOTES)))
         info("Verifie qu'elle est allumee et sur le meme reseau, ou passe --hote <ip>.")
         return 1
     ok('Carte trouvee sur %s' % box.hote)
     if box.token:
-        info('Jeton recupere automatiquement')
+        info('Jeton en main')
     else:
-        info('Jeton non expose (carte demarree depuis plus de 10 min) — '
-             'les routes protegees peuvent refuser. Redemarre-la si un test echoue.')
+        ko('Jeton non publie : les controles LED et audio seront refuses.')
+        info('Debranche/rebranche la carte et relance, ou passe --jeton <valeur>.')
 
     ctx = Contexte(box, infos)
     bilan = Bilan()
@@ -563,6 +581,7 @@ def main():
     t = sp.add_parser('test', help='teste une carte deja flashee')
     t.add_argument('--hote', help='adresse de la carte (defaut : adhanbox.local puis 192.168.4.1)')
     t.add_argument('--serie', help='numero de serie a inscrire au rapport')
+    t.add_argument('--jeton', help="jeton d'API, si la carte ne le publie plus")
     t.add_argument('--sans-operateur', action='store_true',
                    help='ne lance que les controles automatiques')
     t.set_defaults(fn=cmd_test)
@@ -571,6 +590,7 @@ def main():
     s.add_argument('--port')
     s.add_argument('--hote')
     s.add_argument('--serie')
+    s.add_argument('--jeton')
     s.add_argument('--recompiler', action='store_true')
     s.add_argument('--sans-operateur', action='store_true')
     s.set_defaults(fn=cmd_serie)

@@ -76,9 +76,9 @@ class Session:
             self.dernier_rapport = None
 
     # — connexion —
-    def connecter(self, hote=None):
+    def connecter(self, hote=None, jeton=None):
         ancien = (self.infos or {}).get('device_id')
-        box, infos = bt.trouver_box(hote or None)
+        box, infos = bt.trouver_box(hote or None, jeton or None)
         with self.verrou:
             self.box, self.infos = box, infos or {}
         if box and self.infos.get('device_id') != ancien:
@@ -91,7 +91,7 @@ class Session:
         self.noter('Carte trouvee sur %s (firmware %s)'
                    % (box.hote, self.infos.get('version', '?')))
         if not box.token:
-            self.noter('Jeton non expose — redemarre la carte si un controle refuse.')
+            self.noter('Jeton non publie : les controles LED et audio seront refuses.')
         return True, 'Carte trouvee sur %s' % box.hote
 
     # — etat pour la page —
@@ -304,7 +304,8 @@ class Poignee(BaseHTTPRequestHandler):
     def do_POST(self):
         c = self._corps()
         if self.path == '/api/connecter':
-            trouve, message = SESSION.connecter(c.get('hote', '').strip())
+            trouve, message = SESSION.connecter(c.get('hote', '').strip(),
+                                                c.get('jeton', '').strip())
             return self._envoyer({'ok': trouve, 'message': message})
         if self.path == '/api/lancer':
             lance, message = SESSION.lancer(c.get('clefs') or [])
@@ -394,6 +395,8 @@ h2 + .aparte{margin:0 0 10px}
 .appel{position:sticky;top:12px;z-index:5;margin-top:16px;padding:16px 18px;border-radius:12px;
   background:var(--carte);border:2px solid var(--accent);box-shadow:var(--ombre)}
 .appel.consigne{border-color:var(--ambre)}
+.alerte{border-color:var(--ambre);border-left-width:4px}
+.alerte b{color:var(--ambre)}
 .appel p{margin:0 0 12px;font-size:17px;font-weight:600}
 .appel .rangee button{padding:9px 22px}
 .verdict{font-size:17px;font-weight:700;margin:0}
@@ -417,6 +420,8 @@ pre{background:var(--carte);border:1px solid var(--trait);border-radius:10px;pad
   <div class="rangee">
     <label for="hote">Adresse</label>
     <input type="text" id="hote" placeholder="auto : adhanbox.local, 192.168.4.1">
+    <label for="jeton">Jeton</label>
+    <input type="text" id="jeton" placeholder="seulement si la carte le refuse">
     <button id="b-chercher" class="fort">Chercher la carte</button>
     <button id="b-vider" title="Efface les résultats pour passer au boîtier suivant">Carte suivante</button>
     <button id="b-flash">Flasher le firmware</button>
@@ -427,6 +432,8 @@ pre{background:var(--carte);border:1px solid var(--trait);border-radius:10px;pad
   </div>
   <p class="aparte" id="message"></p>
 </div>
+
+<div id="alerte" class="bloc alerte cache"></div>
 
 <div id="appel" class="appel cache"></div>
 
@@ -509,6 +516,17 @@ function peindre(e){
     a.querySelector('.jouer').disabled = e.occupe || e.flash || !e.carte;
   }
 
+  const al = $('#alerte');
+  if (e.carte && !e.carte.jeton){
+    al.className = 'bloc alerte';
+    al.innerHTML = '<p style="margin:0 0 6px"><b>La carte ne publie plus son jeton.</b></p>'
+      + '<p class="aparte" style="margin:0">Le firmware ne le donne que pendant les 10 minutes '
+      + 'qui suivent le démarrage. Sans lui, les contrôles LED et audio seront refusés '
+      + '(erreur 401) — les contrôles automatiques, eux, passent.<br>'
+      + '<b>Débranche puis rebranche la carte</b>, et reclique sur « Chercher la carte ». '
+      + 'Ou colle le jeton dans le champ ci-dessus, si tu l\'as.</p>';
+  } else al.className = 'bloc alerte cache';
+
   const appel = $('#appel');
   if (e.question){
     appel.className = 'appel';
@@ -553,7 +571,7 @@ const rafraichir = () => fetch('/api/etat').then(r=>r.json()).then(peindre).catc
 
 $('#b-chercher').onclick = () => {
   $('#message').textContent = 'Recherche…';
-  poste('/api/connecter', {hote: $('#hote').value})
+  poste('/api/connecter', {hote: $('#hote').value, jeton: $('#jeton').value})
     .then(r => { $('#message').textContent = r.message; rafraichir(); });
 };
 $('#b-flash').onclick = () => {
