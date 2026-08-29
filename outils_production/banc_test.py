@@ -252,6 +252,13 @@ class Contexte:
     def demander(self, q):
         return demande(q)
 
+    def stop_lecture(self):
+        """/stopplay repond en text/plain : ne jamais le lire comme du JSON."""
+        try:
+            self.box.get('/stopplay', brut=True)
+        except Exception:
+            pass
+
     def interrompu(self):
         return bool(self.arret and self.arret.is_set())
 
@@ -294,11 +301,34 @@ def t_heap(ctx):
 
 
 def t_contenu(ctx):
-    liste = ctx.box.get('/api/audio/list', brut=True)
-    manquants = [c for c in CONTENU_ATTENDU if c.split('/')[-1] not in liste]
+    """Les 4 automatismes doivent pouvoir demarrer.
+
+    Surtout PAS via /api/audio/list : v2ListDir exclut volontairement /quran de
+    cette liste (les 456 recitations feraient expirer l'app). Al-Kahf et Al-Mulk
+    n'y figurent donc jamais, meme presentes. On les ouvre une par une, comme le
+    fait v2Fire() a l'heure dite — ce qui prouve davantage qu'une existence :
+    que le decodeur demarre vraiment.
+    """
+    presents, manquants = [], []
+    for chemin, nom in CONTENU_ATTENDU.items():
+        try:
+            r = ctx.box.get('/api/audio/play', {'f': chemin})
+            if r.get('started'):
+                presents.append('%s %.1f Mo' % (nom, r.get('size', 0) / 1048576.0))
+            else:
+                manquants.append('%s (presente mais ne demarre pas)' % nom)
+        except urllib.error.HTTPError as e:
+            manquants.append('%s (%s)' % (nom, 'absente' if e.code == 404 else e))
+        except Exception as e:
+            manquants.append('%s (%s)' % (nom, e))
+        finally:
+            try:
+                ctx.box.get('/stopplay', brut=True)
+            except Exception:
+                pass
     return (not manquants,
-            'complet' if not manquants
-            else 'manque : ' + ', '.join(CONTENU_ATTENDU[m] for m in manquants))
+            'les 4 demarrent — ' + ', '.join(presents) if not manquants
+            else 'manque : ' + ', '.join(manquants))
 
 
 def t_rtc(ctx):
@@ -314,7 +344,7 @@ def t_wifi(ctx):
 
 
 def t_led_couleurs(ctx):
-    ctx.box.post('/api/led/brightness', {'brightness': 100})
+    ctx.box.post('/api/led/brightness', {'bright': 100})
     for nom, r, g, b in [('Rouge', 255, 0, 0), ('Vert', 0, 255, 0), ('Bleu', 0, 0, 255)]:
         ctx.box.post('/api/led/rgb', {'r': r, 'g': g, 'b': b})
         ctx.dire('LED en %s' % nom.lower())
@@ -325,39 +355,33 @@ def t_led_couleurs(ctx):
 
 def t_led_luminosite(ctx):
     ctx.box.post('/api/led/rgb', {'r': 255, 'g': 255, 'b': 255})
-    ctx.box.post('/api/led/brightness', {'brightness': 10})
+    ctx.box.post('/api/led/brightness', {'bright': 10})
     ctx.patiente(1.0)
     faible = ctx.demander('La lumière est-elle devenue faible ?')
-    ctx.box.post('/api/led/brightness', {'brightness': 100})
+    ctx.box.post('/api/led/brightness', {'bright': 100})
     ctx.patiente(1.0)
     forte = ctx.demander('Et de nouveau vive ?')
     return faible and forte, '10 % puis 100 %'
 
 
 def t_hp(ctx):
-    ctx.box.post('/api/audio/volume', {'volume': 12})
-    ctx.box.get('/play', {'track': 2})
+    ctx.box.post('/api/audio/volume', {'vol': 12})
+    ctx.box.get('/play', {'track': 2}, brut=True)
     ctx.patiente(3)
     entendu = ctx.demander("Entends-tu l'adhan ?")
-    try:
-        ctx.box.get('/stopplay')
-    except Exception:
-        pass
+    ctx.stop_lecture()
     return entendu, 'piste 2, volume 12/30'
 
 
 def t_volume(ctx):
-    ctx.box.post('/api/audio/volume', {'volume': 10})
-    ctx.box.get('/play', {'track': 2})
+    ctx.box.post('/api/audio/volume', {'vol': 10})
+    ctx.box.get('/play', {'track': 2}, brut=True)
     ctx.patiente(2.5)
     ctx.dire('Volume porté à 28/30')
-    ctx.box.post('/api/audio/volume', {'volume': 28})
+    ctx.box.post('/api/audio/volume', {'vol': 28})
     ctx.patiente(2.5)
     monte = ctx.demander('Le son est-il monté ?')
-    try:
-        ctx.box.get('/stopplay')
-    except Exception:
-        pass
+    ctx.stop_lecture()
     return monte, '10 → 28'
 
 
@@ -366,7 +390,7 @@ def t_bouton_scenario(ctx):
     def scenario():
         return ctx.box.get('/api/led/status').get('scenario')
 
-    ctx.box.get('/stopplay')
+    ctx.stop_lecture()
     ctx.patiente(0.6)
     avant = scenario()
     ctx.dire('Scénario LED avant appui : %s' % avant)
@@ -382,7 +406,7 @@ def t_bouton_scenario(ctx):
 
 
 def t_bouton_stop(ctx):
-    ctx.box.get('/play', {'track': 2})
+    ctx.box.get('/play', {'track': 2}, brut=True)
     ctx.patiente(2)
     if not ctx.box.get('/api/audio/status').get('playing'):
         return False, "la lecture n'a pas démarré"
@@ -396,10 +420,7 @@ def t_bouton_stop(ctx):
                 return True, 'lecture stoppée par le bouton'
         return False, 'toujours en lecture après 25 s'
     finally:
-        try:
-            ctx.box.get('/stopplay')
-        except Exception:
-            pass
+        ctx.stop_lecture()
 
 
 class Test:
@@ -427,7 +448,7 @@ TESTS = [
     Test('heap', 'Mémoire libre', 'auto', t_heap,
          'Une marge trop courte fait redémarrer la carte au bout de quelques jours.'),
     Test('contenu', 'Contenu audio', 'auto', t_contenu,
-         'Les 4 fichiers des automatismes sont bien sur la carte SD.'),
+         'Les 4 fichiers des automatismes s\'ouvrent et démarrent vraiment.'),
     Test('rtc', 'Horloge temps réel', 'auto', t_rtc,
          "Sans elle, pas d'adhan à l'heure après une coupure de courant."),
     Test('wifi', 'Wi-Fi', 'auto', t_wifi,

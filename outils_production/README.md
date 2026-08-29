@@ -48,7 +48,7 @@ forcer la compilation, `--hote <ip>` si la carte n'est pas trouvée toute seule,
 | PSRAM | présente — son absence était la loterie des modules V2 |
 | Débit carte SD | ≥ 16 ko/s, le seuil sous lequel l'audio se coupe |
 | Mémoire libre | > 60 ko de tas |
-| Contenu audio | les 4 fichiers d'automatisme sont sur la carte |
+| Contenu audio | les 4 automatismes s'ouvrent et démarrent (voir plus bas) |
 | Horloge temps réel | date plausible |
 | Wi-Fi | connectée, avec son SSID et son IP |
 
@@ -115,8 +115,21 @@ carte sans jeton :
 redémarre bien la carte, mais en mode appairage BLE — qui **saute la
 reconnexion Wi-Fi**. La carte sortirait du réseau, et le banc la perdrait.
 
-Les 7 contrôles automatiques, eux, ne lisent que des routes ouvertes : ils
-passent dans tous les cas.
+Six des sept contrôles automatiques ne lisent que des routes ouvertes : ils
+passent dans tous les cas. Le septième — le contenu audio — ouvre les fichiers,
+et demande donc le jeton.
+
+## Pourquoi le contenu ne se vérifie pas par la liste
+
+`/api/audio/list` **exclut volontairement `/quran`** (`v2ListDir`) : les 456
+récitations feraient expirer l'app et fragmenteraient la RAM. Al-Kahf et
+Al-Mulk n'y figurent donc jamais, même bien présentes sur la carte.
+
+Le banc les ouvre une par une via `/api/audio/play?f=…`, exactement comme
+`v2Fire()` le fait à l'heure dite. C'est une preuve plus forte qu'une présence
+dans une liste : le décodeur démarre vraiment, et on relève la taille du
+fichier au passage. Chaque ouverture est stoppée aussitôt — quatre brefs
+sons pendant le contrôle, c'est normal.
 
 ## Codes de sortie
 

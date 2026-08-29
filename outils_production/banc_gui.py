@@ -522,7 +522,8 @@ function peindre(e){
     al.innerHTML = '<p style="margin:0 0 6px"><b>La carte ne publie plus son jeton.</b></p>'
       + '<p class="aparte" style="margin:0">Le firmware ne le donne que pendant les 10 minutes '
       + 'qui suivent le démarrage. Sans lui, les contrôles LED et audio seront refusés '
-      + '(erreur 401) — les contrôles automatiques, eux, passent.<br>'
+      + '(erreur 401), ainsi que le contrôle du contenu audio qui ouvre les fichiers. '
+      + 'Les six autres contrôles automatiques passent.<br>'
       + '<b>Débranche puis rebranche la carte</b>, et reclique sur « Chercher la carte ». '
       + 'Ou colle le jeton dans le champ ci-dessus, si tu l\'as.</p>';
   } else al.className = 'bloc alerte cache';
