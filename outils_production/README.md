@@ -13,6 +13,21 @@ python3 outils_production/banc_gui.py
 
 Rien à installer — un petit serveur local, et une page qui l'interroge.
 
+## Le raccourci de bureau
+
+`bureau/Banc AdhanBox.command` est une copie du raccourci posé sur le bureau
+du Mac d'atelier : un double-clic ouvre le banc, sans ligne de commande. Pour
+le réinstaller après un changement de machine, copie-le sur le bureau et rends-le
+exécutable :
+
+```bash
+cp "outils_production/bureau/Banc AdhanBox.command" ~/Desktop/ && chmod +x ~/Desktop/"Banc AdhanBox.command"
+```
+
+Il gère le cas du deuxième double-clic : si un banc tourne déjà, il propose de
+le fermer et de relancer — sinon on garderait l'ancienne version de l'outil sans
+le savoir.
+
 ## Le déroulé d'un boîtier
 
 1. **Flasher le firmware** — compile si besoin, téléverse par USB, attend.
