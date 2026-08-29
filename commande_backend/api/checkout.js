@@ -11,7 +11,7 @@ import Stripe from 'stripe';
 
 // Palette alignée sur docs/configurator.js (10 couleurs).
 const PALETTE = {
-  bois: 'Bois', marbre: 'Marbre', blanc: 'Blanc', gris: 'Gris', noir: 'Noir',
+  marbre: 'Marbre', blanc: 'Blanc', gris: 'Gris', noir: 'Noir',
   dore: 'Doré', rouge: 'Rouge', vert: 'Vert', bleu: 'Bleu', violet: 'Violet',
 };
 

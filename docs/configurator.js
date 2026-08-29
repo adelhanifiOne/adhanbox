@@ -5,7 +5,6 @@
     // Matériaux volontairement mats (rugosité élevée, metalness quasi nul) :
     // les reflets brillants écrasaient le relief des motifs.
     const PALETTE = {
-      'bois':   { label: 'Bois',    hex: '#8B5A2B', color: 0x8B5A2B, roughness: 0.85, metalness: 0.0 },
       'marbre': { label: 'Marbre',  hex: '#E4E2DC', color: 0xE4E2DC, roughness: 0.8,  metalness: 0.0 },
       'blanc':  { label: 'Blanc',   hex: '#F2F0EB', color: 0xF2F0EB, roughness: 0.85, metalness: 0.0 },
       'gris':   { label: 'Gris',    hex: '#8A8A8A', color: 0x8A8A8A, roughness: 0.85, metalness: 0.0 },
@@ -15,7 +14,7 @@
       'vert':   { label: 'Vert',    hex: '#4A7A52', color: 0x4A7A52, roughness: 0.85, metalness: 0.0 },
       'bleu':   { label: 'Bleu',    hex: '#3D5A8C', color: 0x3D5A8C, roughness: 0.85, metalness: 0.0 },
       'violet': { label: 'Violet',  hex: '#6B4E8C', color: 0x6B4E8C, roughness: 0.85, metalness: 0.0 }
-      // Palette alignée sur les 10 options du paiement Stripe (max 10 par menu déroulant).
+      // 9 finitions. « Bois » retirée le 28/08/2026 (voir api/checkout.js, même liste).
     };
     const FINISHES = PALETTE;
     const MANDALA_COLORS = PALETTE;
