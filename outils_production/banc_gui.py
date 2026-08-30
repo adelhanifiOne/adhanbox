@@ -79,6 +79,34 @@ class Session:
             self.dernier_rapport = None
 
     # — connexion —
+    def connecter_usb(self, port):
+        """Se relie a la carte par le cable, sans reseau.
+
+        C'est la voie normale pour une carte neuve : elle n'a pas
+        d'identifiants Wi-Fi et reste injoignable par HTTP.
+        """
+        if self.occupe():
+            return False, 'Une autre operation est en cours.'
+        ports = {c['port'] for c in bt.cartes_usb()}
+        if port not in ports:
+            return False, 'Carte introuvable — reclique sur « Chercher une carte ».'
+        ancien = (self.infos or {}).get('device_id')
+        if isinstance(self.box, bt.BoxSerie):
+            self.box.fermer()
+        self.noter('Ouverture du cable %s…' % port)
+        box, infos = bt.trouver_box_serie(port)
+        if not box:
+            self.noter('Pas de reponse sur %s' % port)
+            return False, ("Pas de reponse sur ce port. La carte porte-t-elle bien "
+                           "le firmware ? Le televersement est peut-etre a refaire.")
+        with self.verrou:
+            self.box, self.infos = box, infos or {}
+        if self.infos.get('device_id') != ancien:
+            self.vider()
+        self.noter('Carte reliee par le cable %s (firmware %s)'
+                   % (port, self.infos.get('version', '?')))
+        return True, 'Carte reliee par le cable — aucun reseau necessaire.'
+
     def connecter(self, hote=None, jeton=None):
         ancien = (self.infos or {}).get('device_id')
         box, infos = bt.trouver_box(hote or None, jeton or None)
@@ -108,6 +136,7 @@ class Session:
                     'materiel': self.infos.get('hardware'),
                     'device_id': self.infos.get('device_id'),
                     'jeton': bool(self.box.token),
+                    'usb': isinstance(self.box, bt.BoxSerie),
                 }
             return {
                 'carte': carte,
@@ -371,6 +400,9 @@ class Poignee(BaseHTTPRequestHandler):
             lance, message = SESSION.flasher(c.get('port', '').strip(),
                                              bool(c.get('recompiler')))
             return self._envoyer({'ok': lance, 'message': message})
+        if self.path == '/api/connecter_usb':
+            relie, message = SESSION.connecter_usb(c.get('port', ''))
+            return self._envoyer({'ok': relie, 'message': message})
         if self.path == '/api/preparer':
             lance, message = SESSION.preparer(c.get('volume', ''))
             return self._envoyer({'ok': lance, 'message': message})
@@ -580,7 +612,8 @@ function peindre(e){
   const p = $('#pastille');
   if (e.carte){
     p.className = 'pastille vivante';
-    p.textContent = e.carte.hote + ' · ' + (e.carte.version||'?') + ' · ' + (e.carte.device_id||'');
+    p.textContent = (e.carte.usb ? '⎯ câble · ' : '')
+      + e.carte.hote + ' · ' + (e.carte.version||'?') + ' · ' + (e.carte.device_id||'');
   } else { p.className = 'pastille'; p.textContent = 'Aucune carte'; }
 
   for (const t of CAT.tests){
@@ -594,7 +627,7 @@ function peindre(e){
   }
 
   const al = $('#alerte');
-  if (e.carte && !e.carte.jeton){
+  if (e.carte && !e.carte.jeton && !e.carte.usb){
     al.className = 'bloc alerte';
     al.innerHTML = '<p style="margin:0 0 6px"><b>La carte ne publie plus son jeton.</b></p>'
       + '<p class="aparte" style="margin:0">Le firmware ne le donne que pendant les 10 minutes '
@@ -684,7 +717,14 @@ function chercherUsb(){
         ? 'AdhanBox (ESP32-S3)' : (c.produit || 'Appareil inconnu');
       el.querySelector('span').textContent =
         c.port + ' · ' + c.fabricant + (c.produit ? ' · ' + c.produit : '');
-      const b = el.querySelector('button');
+      el.querySelector('.ident').insertAdjacentHTML('afterend',
+        '<button class="relier">Tester par le câble</button>');
+      el.querySelector('.relier').onclick = () => {
+        $('#message').textContent = 'Ouverture du câble…';
+        poste('/api/connecter_usb', {port: c.port})
+          .then(r => { $('#message').textContent = r.message; rafraichir(); });
+      };
+      const b = el.querySelector('button:last-of-type');
       b.textContent = 'Flasher cette carte';
       b.className = c.espressif ? 'fort' : '';
       b.onclick = () => {

@@ -27,6 +27,7 @@ import argparse
 import json
 import os
 import re
+import select
 import subprocess
 import sys
 import time
@@ -451,6 +452,173 @@ def preparer_carte(volume, source=None, sortie=info, avancement=None, arret=None
                   % (copies, ignores, enleves, fantomes))
 
 
+# ───────────────────── liaison serie (carte neuve) ──────────────────
+
+class BoxSerie:
+    """La meme carte, vue par le cable USB au lieu du reseau.
+
+    Une carte neuve n'a pas d'identifiants Wi-Fi : elle part en appairage BLE
+    au demarrage et reste injoignable par HTTP. Mais elle est deja au bout du
+    cable qui vient de servir a la flasher.
+
+    Cette classe presente EXACTEMENT la surface de `Box` — `get`, `post`,
+    `hote`, `token`. Les 14 controles passent par leur `Contexte` et ne savent
+    donc pas par ou ils parlent : aucun n'a eu besoin d'etre retouche.
+
+    Sans pyserial : `stty` configure le port, `select` borne les attentes. Le
+    banc garde ainsi sa propriete la plus utile — rien a installer, sur
+    n'importe quel Mac.
+    """
+
+    def __init__(self, port, timeout=12):
+        self.hote = port
+        self.token = 'usb'                  # le cable vaut authentification
+        self.timeout = timeout
+        subprocess.run(['stty', '-f', port, '115200', 'cs8', '-cstopb',
+                        '-parenb', 'raw', '-echo'],
+                       check=True, capture_output=True, timeout=5)
+        self._fd = os.open(port, os.O_RDWR | os.O_NOCTTY | os.O_NONBLOCK)
+
+    def fermer(self):
+        try:
+            os.close(self._fd)
+        except Exception:
+            pass
+
+    def _lignes(self, fin_attente):
+        """Rend les lignes recues jusqu'a l'echeance."""
+        tampon = b''
+        while time.time() < fin_attente:
+            pret, _, _ = select.select([self._fd], [], [],
+                                       max(0.05, fin_attente - time.time()))
+            if not pret:
+                continue
+            try:
+                morceau = os.read(self._fd, 4096)
+            except BlockingIOError:
+                continue
+            if not morceau:
+                continue
+            tampon += morceau
+            while b'\n' in tampon:
+                ligne, tampon = tampon.split(b'\n', 1)
+                yield ligne.decode('utf-8', 'replace').strip()
+
+    def _commande(self, texte, attente=None):
+        """Envoie une commande et rend la ligne <BANC> correspondante.
+
+        La carte parle beaucoup au demarrage : on ne retient que les lignes
+        prefixees, et on ignore tout le reste.
+        """
+        try:
+            while select.select([self._fd], [], [], 0)[0]:
+                if not os.read(self._fd, 4096):
+                    break
+        except (BlockingIOError, OSError):
+            pass
+        os.write(self._fd, ('t:%s\n' % texte).encode())
+        for ligne in self._lignes(time.time() + (attente or self.timeout)):
+            if ligne.startswith('<BANC>'):
+                return ligne[6:]
+        raise RuntimeError('pas de reponse de la carte sur %s (commande « %s »)'
+                           % (self.hote, texte))
+
+    def get(self, chemin, params=None, brut=False):
+        if chemin == '/api/audio/list':
+            # Pas d'equivalent direct : `ls` travaille dossier par dossier, ce
+            # qui evite de construire 456 entrees dans la RAM de l'ESP32. On
+            # recompose la meme liste de chemins complets que la route HTTP —
+            # /quran exclu, exactement comme v2ListDir.
+            fichiers = []
+            for dossier in ('/azkar', '/mp3'):
+                try:
+                    fichiers += ['%s/%s' % (dossier, n) for n in self.lister(dossier)]
+                except Exception:
+                    pass
+            return fichiers
+
+        cmd = self._traduire(chemin, params or {})
+        # Le banc de debit SD lit 256 ko a 1 MHz : il lui faut sa minute.
+        corps = self._commande(cmd, attente=30 if chemin == '/api/diag' else None)
+        if brut:
+            # Certaines routes repondent en text/plain cote HTTP. On rend la
+            # MEME chose ici, sinon les controles lisent autre chose selon le
+            # transport — c'est ce qui a fait dire « Stopped » a l'horloge.
+            if chemin == '/play':
+                return 'Playing'
+            if chemin == '/stopplay':
+                return 'Stopped'
+            if chemin == '/rtc_time':
+                return 'RTC: %s' % json.loads(corps).get('time', '')
+            return corps
+        d = json.loads(corps)
+        if chemin == '/api/audio/play' and d.get('exists') is False:
+            raise urllib.error.HTTPError(chemin, 404, 'absent', None, None)
+        if chemin == '/api/audio/play' and 'started' not in d:
+            d['started'] = d.get('exists', False)
+        return d
+
+    def post(self, chemin, donnees):
+        return self._commande(self._traduire(chemin, donnees))
+
+    def _traduire(self, chemin, d):
+        """Le seul endroit qui connaisse les deux transports."""
+        table = {
+            '/api/device/info': lambda: 'info',
+            '/api/diag': lambda: 'diag',
+            '/rtc_time': lambda: 'rtc',
+            '/api/wifi/status': lambda: 'wifi',
+            '/api/led/status': lambda: 'ledstatus',
+            '/api/audio/status': lambda: 'audiostatus',
+            '/stopplay': lambda: 'stop',
+            '/play': lambda: 'track %s' % d.get('track', 1),
+            '/api/audio/play': lambda: 'play %s' % d.get('f', ''),
+            '/api/audio/volume': lambda: 'vol %s' % d.get('vol', d.get('volume', 15)),
+            '/api/led/brightness': lambda: 'bright %s' % d.get('bright', d.get('brightness', 100)),
+            '/api/led/rgb': lambda: 'rgb %s %s %s' % (d.get('r', 0), d.get('g', 0), d.get('b', 0)),
+            '/api/led/scenario': lambda: 'led %s' % d.get('scenario', 0),
+        }
+        if chemin not in table:
+            raise RuntimeError('chemin sans equivalent serie : %s' % chemin)
+        return table[chemin]()
+
+    def lister(self, dossier):
+        """Contenu d'un dossier de la carte SD (non recursif)."""
+        return json.loads(self._commande('ls %s' % dossier))
+
+    def scan_wifi(self):
+        """Nombre de reseaux visibles. Eprouve la radio, pas la connexion."""
+        return int(json.loads(self._commande('wifiscan', attente=30))
+                   .get('reseaux', 0))
+
+
+def trouver_box_serie(port=None):
+    """Ouvre la liaison serie avec une carte, et lit son identite.
+
+    Retourne (box, infos) comme trouver_box(), pour que la suite ne voie pas
+    la difference.
+    """
+    if not port:
+        candidates = [c for c in cartes_usb() if c['espressif']]
+        if not candidates:
+            return None, None
+        port = candidates[0]['port']
+    try:
+        b = BoxSerie(port)
+    except Exception:
+        return None, None
+    # Ouvrir le port peut faire redemarrer la carte, et elle passe alors par
+    # ~15 s de demarrage avant de repondre. On insiste plutot que d'abandonner.
+    fin = time.time() + 40
+    while time.time() < fin:
+        try:
+            return b, b.get('/api/device/info')
+        except Exception:
+            time.sleep(1.5)
+    b.fermer()
+    return None, None
+
+
 # ─────────────────────── le monde autour d'un test ──────────────────
 
 class Contexte:
@@ -616,10 +784,28 @@ def t_rtc(ctx):
 
 
 def t_wifi(ctx):
+    """Au banc, une carte neuve n'a aucun identifiant Wi-Fi.
+
+    La juger sur « est-elle connectee ? » n'aurait aucun sens — et la faire
+    passer parce que l'IP vaut « 0.0.0.0 » serait pire : le rapport
+    affirmerait un Wi-Fi fonctionnel sans l'avoir constate. On verifie donc ce
+    qui EST verifiable a ce stade : que la radio voit des reseaux. C'est ce
+    qui attrape une antenne mal soudee.
+    """
     w = ctx.box.get('/api/wifi/status')
-    connecte = str(w.get('status', '')).lower() in ('connected', 'ok', '3', 'true')
-    return (connecte or bool(w.get('ip')),
-            '%s · %s' % (w.get('ssid', '?'), w.get('ip', 'sans IP')))
+    ip = str(w.get('ip', '') or '')
+    connecte = (str(w.get('status', '')).lower() in ('connected', 'ok', '3', 'true')
+                and ip not in ('', '0.0.0.0'))
+    if connecte:
+        return True, '%s · %s' % (w.get('ssid', '?'), ip)
+
+    scan = getattr(ctx.box, 'scan_wifi', None)
+    if scan is None:
+        return False, 'non connectee (%s)' % (ip or 'sans IP')
+    vus = scan()
+    return vus > 0, ('radio active — %d reseaux vus (carte non connectee, '
+                     'normal au banc)' % vus if vus > 0
+                     else 'radio muette : aucun reseau vu — antenne ?')
 
 
 def t_led_couleurs(ctx):

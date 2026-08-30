@@ -30,13 +30,19 @@ le savoir.
 
 ## Le déroulé d'un boîtier
 
+Tout se fait par le câble USB. **La carte n'a jamais besoin d'être sur ton
+Wi-Fi.**
+
 0. **Préparer la carte SD** — branche-la, « Chercher une carte », « Préparer ».
 1. **Flasher le firmware** — branche la carte en USB, « Chercher une carte »,
    puis « Flasher cette carte » sur la bonne.
-2. **Chercher la carte** — mDNS, point d'accès, ou l'adresse que tu saisis.
+2. **Tester par le câble** — le second bouton de la même ligne.
 3. **Tout tester** — l'outil s'arrête aux questions et aux appuis.
 4. **N° de série** puis **Enregistrer le rapport**.
 5. **Carte suivante** — remet les compteurs à zéro.
+
+Le bloc « Chercher la carte » en haut reste là pour un boîtier **déjà installé**
+sur le réseau — un exemplaire d'atelier, ou celui d'un client à dépanner.
 
 Un contrôle en échec ? Corrige, et relance **ce seul contrôle** avec son ▶.
 
@@ -226,3 +232,45 @@ confirmation avant d'écrire quoi que ce soit.
 Aucune carte détectée alors qu'elle est branchée ? C'est presque toujours le
 câble : beaucoup de cordons USB ne portent que l'alimentation, sans les paires
 de données.
+
+## Tester une carte neuve, sans réseau
+
+Une carte fraîchement soudée n'a aucun identifiant Wi-Fi. Au démarrage elle
+part en appairage BLE pour 5 minutes et reste injoignable par HTTP. La tester
+par le réseau imposerait d'ouvrir un point d'accès et d'y basculer le Mac à
+chaque carte.
+
+Le banc passe donc par **le câble qui vient de servir à flasher**. Bouton
+« Tester par le câble », et les 14 contrôles se déroulent à l'identique.
+
+### Comment ça tient
+
+Les contrôles ne parlent jamais au réseau : ils passent par leur `Contexte`.
+`BoxSerie` présente exactement la même surface que `Box` — `get`, `post`,
+`hote`, `token` — et traduit chaque chemin HTTP en commande série. **Aucun des
+14 contrôles n'a eu besoin d'être retouché.**
+
+Côté firmware, `bancCommande()` répond à `t:<commande>` par une ligne préfixée
+`<BANC>`, ce qui permet de la retrouver au milieu des traces de démarrage. Ces
+commandes ne passent pas par `requireApiKey` : être au bout du câble **est** la
+preuve d'accès physique. Elles n'ouvrent rien sur le réseau.
+
+Une commande `t:` reçue pendant la fenêtre BLE en fait sortir la carte
+immédiatement — sans quoi le banc attendrait 5 minutes par carte.
+
+### Deux différences avec le test réseau
+
+**Wi-Fi.** Une carte neuve n'est connectée à rien. Le contrôle vérifie donc que
+la **radio voit des réseaux** (`t:wifiscan`), ce qui attrape une antenne mal
+soudée — au lieu de juger une connexion qui ne peut pas exister. Le faire
+passer parce que l'IP vaut `0.0.0.0` aurait été pire que de le supprimer : le
+rapport aurait affirmé un Wi-Fi fonctionnel sans l'avoir constaté.
+
+**Aucune histoire de jeton.** La fenêtre de 10 minutes ne concerne que le
+réseau. Par le câble, tout est accessible en permanence.
+
+### Rien à installer
+
+Pas de `pyserial` : `stty` configure le port, `select` borne les attentes. Le
+banc garde sa propriété la plus utile — il tourne sur n'importe quel Mac, sans
+préparation.

@@ -499,6 +499,7 @@ void stopConfigAP();
 #if ENABLE_BLE
 void startBLEProvisioning();
 void stopBLEProvisioning();
+static void bancCommande(String c);   // [BANC] pilotage par le cable USB
 void handleBLEProvisioning();
 #endif
 void getCalculationAngles(double &fajrAngle, double &ishaAngle, String &methodName);
@@ -4202,6 +4203,20 @@ void setup() {
       break;
     }
 
+    // [BANC] Le banc de production prend la main. Une carte neuve n'a pas de
+    // Wi-Fi : elle arrive ici et y resterait 5 minutes, sourde au cable qui
+    // vient de la flasher. Une commande « t:… » la fait donc sortir tout de
+    // suite, et on y repond avant de quitter — le banc n'attend jamais.
+    if (Serial.available()) {
+      String tcmd = Serial.readStringUntil('\n');
+      tcmd.trim();
+      if (tcmd.startsWith("t:")) {
+        Serial.println("[BLE] Banc de production detecte — sortie immediate.");
+        bancCommande(tcmd.substring(2));
+        break;
+      }
+    }
+
     // Bouton tactile : arrêt manuel (transition HIGH→LOW uniquement, anti-rebond).
     // Desactive pendant un appairage demande (pairBoot) pour ne pas sortir tot sur
     // un faux contact du capteur tactile.
@@ -4289,6 +4304,172 @@ void setup() {
   Serial.println("Commandes serie: startap, stopap, startble, stopble, showloc");
 }
 
+
+// ───────────────────── Banc de production (USB) ─────────────────────
+// Une carte neuve n'a pas d'identifiants Wi-Fi : au demarrage elle part en
+// appairage BLE et reste injoignable par le reseau. La tester imposerait donc
+// d'ouvrir un point d'acces et de basculer le Mac dessus a chaque carte. Le
+// cable qui vient de servir au flash suffit.
+//
+// Chaque reponse tient sur UNE ligne prefixee <BANC> : le banc la retrouve
+// ainsi au milieu des traces de demarrage, sans avoir a les filtrer.
+//
+// Ces commandes ne passent PAS par requireApiKey : etre au bout du cable EST
+// la preuve d'acces physique. Elles n'ouvrent donc rien sur le reseau.
+static void bancRep(const String &json) {
+  Serial.print(F("<BANC>"));
+  Serial.println(json);
+}
+
+static void bancCommande(String c) {
+  c.trim();
+  int esp = c.indexOf(' ');
+  String verbe = (esp < 0) ? c : c.substring(0, esp);
+  String arg   = (esp < 0) ? String("") : c.substring(esp + 1);
+  arg.trim();
+  char buf[288];
+
+  if (verbe == "info") {
+    snprintf(buf, sizeof(buf),
+             "{\"version\":\"3.0.6\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
+             deviceIdHex().c_str());
+    bancRep(buf);
+
+  } else if (verbe == "diag") {
+    stopPlay();                                  // mesure au repos, comme /api/diag
+    int kBs = audio.sdBenchKBs("/quran/afs/001.mp3", 256 * 1024);
+    snprintf(buf, sizeof(buf),
+             "{\"sd_clock_hz\":%lu,\"sd_read_kBs\":%d,\"need_kBs\":16,"
+             "\"free_heap\":%u,\"psram_size\":%u}",
+             (unsigned long)audio.sdClock(), kBs,
+             (unsigned)ESP.getFreeHeap(), (unsigned)ESP.getPsramSize());
+    bancRep(buf);
+
+  } else if (verbe == "file") {
+    bool ex = audio.sdOk() && SD.exists(arg);
+    uint32_t sz = 0;
+    if (ex) { File f = SD.open(arg); if (f) { sz = f.size(); f.close(); } }
+    snprintf(buf, sizeof(buf), "{\"exists\":%s,\"size\":%lu}",
+             ex ? "true" : "false", (unsigned long)sz);
+    bancRep(buf);
+
+  } else if (verbe == "ls") {
+    // Non recursif : le banc interroge un dossier a la fois, ce qui evite de
+    // construire une chaine de 456 entrees en RAM.
+    String out = "[";
+    File dir = SD.open(arg.length() ? arg : "/");
+    if (dir) {
+      bool premier = true;
+      for (File f = dir.openNextFile(); f; f = dir.openNextFile()) {
+        if (!f.isDirectory()) {
+          if (!premier) out += ",";
+          out += "\"" + String(f.name()) + "\"";
+          premier = false;
+        }
+        f.close();
+      }
+      dir.close();
+    }
+    out += "]";
+    bancRep(out);
+
+  } else if (verbe == "play") {
+    // Rend aussi la taille : le controle « contenu audio » l'affiche, et le
+    // rapport doit dire la meme chose par le cable et par le reseau.
+    uint32_t sz = 0;
+    if (SD.exists(arg)) { File f = SD.open(arg); if (f) { sz = f.size(); f.close(); } }
+    bool ok = audio.playPath(arg.c_str());
+    if (ok) isPlaying = true;
+    snprintf(buf, sizeof(buf), "{\"started\":%s,\"size\":%lu,\"exists\":%s}",
+             ok ? "true" : "false", (unsigned long)sz,
+             sz ? "true" : "false");
+    bancRep(buf);
+
+  } else if (verbe == "track") {
+    playTrack(arg.toInt());
+    bancRep(F("{\"ok\":true}"));
+
+  } else if (verbe == "stop") {
+    stopPlay();
+    bancRep(F("{\"ok\":true}"));
+
+  } else if (verbe == "vol") {
+    audio.volume(constrain(arg.toInt(), 0, 30));
+    bancRep(F("{\"ok\":true}"));
+
+  } else if (verbe == "audiostatus") {
+    snprintf(buf, sizeof(buf), "{\"playing\":%s}",
+             (isPlaying && audio.isRunning()) ? "true" : "false");
+    bancRep(buf);
+
+  } else if (verbe == "led") {
+    // Memes effets de bord que handleSetLedScenario : sans eux le test
+    // passerait pendant que le bandeau ne bouge pas.
+    int sc = arg.toInt();
+    if (sc < 0 || sc >= TOTAL_SCENES) { bancRep(F("{\"error\":\"scenario\"}")); return; }
+    ledScenario = sc;
+    ledCustomActive = false;
+    if (ledScenario == 0) {
+      setLedDuty(0);
+      if (useAddressableLEDs) stripSetAll(0, 0, 0);
+    } else {
+      setLedDuty(128);
+    }
+    bancRep(F("{\"ok\":true}"));
+
+  } else if (verbe == "rgb") {
+    int r = 0, g = 0, b = 0;
+    if (sscanf(arg.c_str(), "%d %d %d", &r, &g, &b) != 3) {
+      bancRep(F("{\"error\":\"rgb\"}")); return;
+    }
+    ledCustomR = (uint8_t)constrain(r, 0, 255);
+    ledCustomG = (uint8_t)constrain(g, 0, 255);
+    ledCustomB = (uint8_t)constrain(b, 0, 255);
+    ledCustomActive = true;
+    bancRep(F("{\"ok\":true}"));
+
+  } else if (verbe == "bright") {
+    ledBrightness = constrain(arg.toInt(), 0, 100);
+    bancRep(F("{\"ok\":true}"));
+
+  } else if (verbe == "ledstatus") {
+    snprintf(buf, sizeof(buf),
+             "{\"scenario\":%d,\"brightness\":%d,\"custom\":%s}",
+             ledScenario, ledBrightness, ledCustomActive ? "true" : "false");
+    bancRep(buf);
+
+  } else if (verbe == "rtc") {
+    if (rtc.begin()) {
+      DateTime now = rtc.now();
+      snprintf(buf, sizeof(buf), "{\"time\":\"%04u-%02u-%02u %02u:%02u:%02u\"}",
+               now.year(), now.month(), now.day(),
+               now.hour(), now.minute(), now.second());
+      bancRep(buf);
+    } else {
+      bancRep(F("{\"error\":\"RTC absente\"}"));
+    }
+
+  } else if (verbe == "wifiscan") {
+    // Une carte neuve n'a pas d'identifiants : on ne peut pas la juger sur sa
+    // connexion. Compter les reseaux visibles prouve en revanche que la radio
+    // et l'antenne fonctionnent — c'est ce qui attrape une soudure ratee.
+    int n = WiFi.scanNetworks();
+    snprintf(buf, sizeof(buf), "{\"reseaux\":%d}", n);
+    bancRep(buf);
+    WiFi.scanDelete();
+
+  } else if (verbe == "wifi") {
+    snprintf(buf, sizeof(buf), "{\"status\":\"%s\",\"ssid\":\"%s\",\"ip\":\"%s\"}",
+             (WiFi.status() == WL_CONNECTED) ? "connected" : "offline",
+             WiFi.SSID().c_str(), WiFi.localIP().toString().c_str());
+    bancRep(buf);
+
+  } else {
+    bancRep(F("{\"error\":\"commande inconnue\"}"));
+  }
+}
+
+
 void loop() {
   // [SECU] Abonne la tache loop() au watchdog a la 1re iteration seulement, puis
   // la nourrit a chaque tour. Ainsi setup() ne peut pas declencher le WDT.
@@ -4347,7 +4528,9 @@ void loop() {
   if (Serial.available()) {
     String cmd = Serial.readStringUntil('\n');
     cmd.trim();
-    if (cmd.equalsIgnoreCase("startap")) {
+    if (cmd.startsWith("t:")) {
+      bancCommande(cmd.substring(2));
+    } else if (cmd.equalsIgnoreCase("startap")) {
       startConfigAP();
       Serial.println("AP started via serial command");
 #if ENABLE_BLE
