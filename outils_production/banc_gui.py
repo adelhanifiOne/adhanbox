@@ -340,6 +340,8 @@ class Poignee(BaseHTTPRequestHandler):
             })
         if self.path == '/api/etat':
             return self._envoyer(SESSION.etat())
+        if self.path == '/api/usb':
+            return self._envoyer({'cartes': bt.cartes_usb()})
         if self.path == '/api/cartes':
             return self._envoyer({'cartes': bt.cartes_sd()})
         if self.path == '/api/ports':
@@ -491,6 +493,16 @@ pre{background:var(--carte);border:1px solid var(--trait);border-radius:10px;pad
 
 <div class="bloc">
   <div class="rangee">
+    <b style="font-size:15px">Carte branchée en USB</b>
+    <span class="aparte" style="margin:0">Pour téléverser le firmware.</span>
+    <span style="flex:1"></span>
+    <button id="b-usb">Chercher une carte</button>
+  </div>
+  <div id="usb"></div>
+</div>
+
+<div class="bloc">
+  <div class="rangee">
     <b style="font-size:15px">Carte SD</b>
     <span class="aparte" style="margin:0">Copie le contenu de référence, sans doublon invisible.</span>
     <span style="flex:1"></span>
@@ -623,7 +635,9 @@ function peindre(e){
 
   const pris = e.occupe || e.flash;
   $('#b-cartes').disabled = e.occupe || e.flash;
-  for (const el of document.querySelectorAll('#cartes button')) el.disabled = e.occupe || e.flash;
+  $('#b-usb').disabled = e.occupe || e.flash;
+  for (const el of document.querySelectorAll('#cartes button, #usb button'))
+    el.disabled = e.occupe || e.flash;
   for (const id of ['#b-tout','#b-auto','#b-flash','#b-chercher'])
     $(id).disabled = pris || (id !== '#b-chercher' && id !== '#b-flash' && !e.carte);
   $('#b-stop').className = e.occupe && !e.flash ? 'danger' : 'danger cache';
@@ -650,6 +664,42 @@ function peindre(e){
 
 const go = o => o >= 1e9 ? (o/1e9).toFixed(1) + ' Go'
                          : Math.round(o/1e6) + ' Mo';
+
+function chercherUsb(){
+  $('#usb').innerHTML = '<p class="aparte">Recherche…</p>';
+  fetch('/api/usb').then(r=>r.json()).then(d => {
+    const h = $('#usb'); h.innerHTML = '';
+    if (!d.cartes.length){
+      h.innerHTML = '<p class="aparte">Aucune carte détectée. Branche-la en USB, '
+        + 'puis reclique. Si rien n\'apparaît, essaie un autre câble : '
+        + 'beaucoup ne portent que l\'alimentation.</p>';
+      return;
+    }
+    for (const c of d.cartes){
+      const el = document.createElement('div');
+      el.className = 'sd';
+      el.innerHTML = '<div class="ident"><b></b><br><span></span></div>'
+        + '<button></button>';
+      el.querySelector('b').textContent = c.espressif
+        ? 'AdhanBox (ESP32-S3)' : (c.produit || 'Appareil inconnu');
+      el.querySelector('span').textContent =
+        c.port + ' · ' + c.fabricant + (c.produit ? ' · ' + c.produit : '');
+      const b = el.querySelector('button');
+      b.textContent = 'Flasher cette carte';
+      b.className = c.espressif ? 'fort' : '';
+      b.onclick = () => {
+        if (!c.espressif && !confirm('« ' + (c.produit || c.port) + ' » n\'est pas '
+          + 'un appareil Espressif.\n\nTéléverser dessus n\'aura aucun effet utile, '
+          + 'et pourrait perturber cet appareil. Continuer quand même ?')) return;
+        $('#message').textContent = 'Compilation et téléversement — ouvre le journal pour suivre.';
+        poste('/api/flash', {port: c.port})
+          .then(r => { $('#message').textContent = r.message; rafraichir(); });
+      };
+      h.append(el);
+    }
+  });
+}
+$('#b-usb').onclick = chercherUsb;
 
 function chercherCartes(){
   $('#cartes').innerHTML = '<p class="aparte">Recherche…</p>';

@@ -31,7 +31,8 @@ le savoir.
 ## Le déroulé d'un boîtier
 
 0. **Préparer la carte SD** — branche-la, « Chercher une carte », « Préparer ».
-1. **Flasher le firmware** — compile si besoin, téléverse par USB, attend.
+1. **Flasher le firmware** — branche la carte en USB, « Chercher une carte »,
+   puis « Flasher cette carte » sur la bonne.
 2. **Chercher la carte** — mDNS, point d'accès, ou l'adresse que tu saisis.
 3. **Tout tester** — l'outil s'arrête aux questions et aux appuis.
 4. **N° de série** puis **Enregistrer le rapport**.
@@ -208,3 +209,20 @@ autre machine) :
 ```bash
 ADHANBOX_SD_SOURCE=/Volumes/DISQUE/sd_preload python3 outils_production/banc_gui.py
 ```
+
+## Reconnaître la carte branchée en USB
+
+Le bloc « Carte branchée en USB » liste les appareils branchés et dit **qui**
+est derrière chaque port. Le chemin seul ne suffit pas : un Ozobot, un Arduino
+ou un câble de debug apparaissent tous comme `/dev/cu.usbmodem*`, et téléverser
+sur le mauvais serait au mieux inutile.
+
+L'outil interroge donc `ioreg` et affiche le fabricant. Une carte Espressif
+(identifiant vendeur `0x303A`, l'USB natif de l'ESP32-S3) est annoncée
+**« AdhanBox (ESP32-S3) »** avec un bouton mis en avant. Tout autre appareil
+reste listé — on ne cache rien — mais son bouton est discret et demande une
+confirmation avant d'écrire quoi que ce soit.
+
+Aucune carte détectée alors qu'elle est branchée ? C'est presque toujours le
+câble : beaucoup de cordons USB ne portent que l'alimentation, sans les paires
+de données.

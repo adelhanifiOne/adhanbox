@@ -156,6 +156,51 @@ def ports_serie():
                   glob.glob('/dev/cu.wchusbserial*'))
 
 
+# Espressif : 0x303A. C'est ce que presente l'USB natif de l'ESP32-S3.
+VENDEUR_ESPRESSIF = '12346'
+
+
+def cartes_usb():
+    """Cartes branchees en USB, avec ce que le systeme sait d'elles.
+
+    Le port seul ne suffit pas : un Ozobot, un Arduino ou un cable de debug
+    apparaissent tous comme /dev/cu.usbmodem*. Televerser sur le mauvais
+    appareil serait au mieux inutile, au pire destructeur — on demande donc a
+    ioreg QUI est derriere chaque port, et on le montre a l'operateur.
+    """
+    connus = {}
+    try:
+        r = subprocess.run(['ioreg', '-r', '-c', 'IOUSBHostDevice', '-l', '-w0'],
+                           capture_output=True, text=True, timeout=10)
+        courant = {}
+        for ligne in r.stdout.splitlines():
+            # ioreg imprime en profondeur d'abord : les attributs d'un
+            # peripherique precedent toujours le port de son sous-arbre.
+            for cle, champ in (('"USB Vendor Name"', 'fabricant'),
+                               ('"USB Product Name"', 'produit'),
+                               ('"USB Serial Number"', 'serie'),
+                               ('"idVendor"', 'vendeur')):
+                if cle in ligne and '=' in ligne:
+                    courant[champ] = ligne.split('=', 1)[1].strip().strip('"')
+            if '"IOCalloutDevice"' in ligne and '=' in ligne:
+                port = ligne.split('=', 1)[1].strip().strip('"')
+                connus[port] = dict(courant)
+    except Exception:
+        pass
+
+    cartes = []
+    for port in ports_serie():
+        d = connus.get(port, {})
+        cartes.append({
+            'port': port,
+            'fabricant': d.get('fabricant', 'inconnu'),
+            'produit': d.get('produit', ''),
+            'serie': d.get('serie', ''),
+            'espressif': d.get('vendeur') == VENDEUR_ESPRESSIF,
+        })
+    return cartes
+
+
 def trouver_cli():
     for p in ['/opt/homebrew/bin/arduino-cli', '/usr/local/bin/arduino-cli', 'arduino-cli']:
         try:
