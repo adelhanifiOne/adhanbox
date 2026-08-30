@@ -46,8 +46,11 @@ String messageAmical(Object? erreur, {String? repli}) {
         "box est allumée.";
   }
   if (t.contains('401') || t.contains('403') || t.contains('unauthorized')) {
-    return "L'application n'est plus autorisée à piloter cette box. "
-        "Refaites l'appairage depuis les réglages.";
+    // Surtout ne pas envoyer vers un reappairage Bluetooth : il couperait la
+    // box du Wi-Fi. Le bon remede est le parcours guide des reglages, qui ne
+    // demande qu'un debranchement.
+    return "Ce téléphone n'est pas autorisé à piloter cette box. "
+        "Allez dans Réglages → « Autoriser ce téléphone ».";
   }
   if (t.contains('404')) {
     return "Contenu introuvable sur la box. Vérifiez que la carte mémoire "

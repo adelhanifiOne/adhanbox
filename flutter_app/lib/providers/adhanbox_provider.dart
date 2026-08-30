@@ -13,6 +13,57 @@ import '../models/prayer_time.dart';
 /// Stocke le token API récupéré depuis le device après la première connexion.
 final adhanboxApiKeyProvider = StateProvider<String?>((ref) => null);
 
+/// Résout le jeton d'API d'une box, du plus fiable au moins fiable :
+///   1. celui que la box publie elle-même (fenêtre d'appairage : mode AP ou
+///      moins de 10 min après son démarrage) — mis en cache au passage ;
+///   2. le cache indexé par IDENTIFIANT MATÉRIEL, qui survit aux changements
+///      d'adresse IP ;
+///   3. l'ancien cache indexé par IP, migré vers l'identifiant au passage.
+///
+/// Pourquoi l'identifiant prime : une box qui change d'IP (bail DHCP renouvelé)
+/// reste la même box. Indexer le jeton par IP a déjà fait perdre son
+/// autorisation à un téléphone parfaitement appairé — l'app affichait alors
+/// « plus autorisée » sans qu'on ait rien fait de mal.
+Future<String?> resolveApiToken(SharedPreferences prefs, String ip) async {
+  String? token;
+  String? id;
+  try {
+    final info = await AdhanBoxAPI(
+      baseUrl: 'http://$ip',
+      timeout: const Duration(seconds: 3),
+    ).getDeviceInfo();
+    id = info['device_id'] as String?;
+    token = info['token'] as String?;
+  } catch (_) {
+    // box injoignable : on retombe sur les caches ci-dessous
+  }
+
+  if (token != null && token.isNotEmpty) {
+    await prefs.setString('api_token_$ip', token);
+    if (id != null && id.isNotEmpty) {
+      await prefs.setString('api_token_id_$id', token);
+    }
+    return token;
+  }
+
+  if (id != null && id.isNotEmpty) {
+    token = prefs.getString('api_token_id_$id');
+    if (token != null && token.isNotEmpty) {
+      await prefs.setString('api_token_$ip', token); // réaligne l'ancien cache
+      return token;
+    }
+  }
+
+  token = prefs.getString('api_token_$ip');
+  if (token != null && token.isNotEmpty) {
+    if (id != null && id.isNotEmpty) {
+      await prefs.setString('api_token_id_$id', token); // migration
+    }
+    return token;
+  }
+  return null;
+}
+
 /// Provider pour l'instance API — inclut la clé d'auth si disponible.
 final adhanboxApiProvider = Provider<AdhanBoxAPI?>((ref) {
   final deviceIp = ref.watch(currentDeviceIpProvider);
@@ -85,28 +136,13 @@ final autoReconnectProvider = FutureProvider<String?>((ref) async {
   final prefs = await SharedPreferences.getInstance();
   final savedIp = prefs.getString('deviceIp');
 
-  // Helper: charger le token API depuis le device ou prefs, et l'activer
+  // Helper: charger le token API depuis le device ou les caches, et l'activer.
+  // Toujours poser l'etat, meme null : sinon, en basculant d'une box vers une
+  // autre dont on n'a pas le jeton, l'API garderait le jeton de la PRECEDENTE
+  // et chaque appel protege echouerait avec un 401 trompeur.
   Future<void> loadApiToken(String ip) async {
-    String? token;
-    try {
-      final devApi = AdhanBoxAPI(baseUrl: 'http://$ip', timeout: const Duration(seconds: 3));
-      final info = await devApi.getDeviceInfo();
-      token = info['token'] as String?;
-    } catch (_) {
-      // device injoignable -> on tentera le cache ci-dessous
-    }
-    // Le firmware n'expose le token que pendant la fenetre d'appairage. Hors de
-    // cette fenetre (usage normal) device/info ne renvoie plus de token : on
-    // retombe alors sur le jeton mis en cache lors du 1er appairage. Sinon on
-    // cache le nouveau jeton.
-    if (token != null && token.isNotEmpty) {
-      await prefs.setString('api_token_$ip', token);
-    } else {
-      token = prefs.getString('api_token_$ip');
-    }
-    if (token != null && token.isNotEmpty) {
-      ref.read(adhanboxApiKeyProvider.notifier).state = token;
-    }
+    final token = await resolveApiToken(prefs, ip);
+    ref.read(adhanboxApiKeyProvider.notifier).state = token;
   }
 
   // Helper: synchroniser l'heure du RTC après connexion
@@ -146,7 +182,17 @@ final autoReconnectProvider = FutureProvider<String?>((ref) async {
       devices[index] = SavedDevice(
           name: devices[index].name, ip: ip, id: id);
     }
+    // Un doublon fantome peut detenir le SEUL exemplaire du jeton (celui mis
+    // en cache sous l'ancienne IP). Le migrer avant de purger — le supprimer
+    // ici a deja desautorise un telephone parfaitement appaire.
     for (final ghost in devices.where((d) => d.id == id && d.ip != ip)) {
+      final orphan = prefs.getString('api_token_${ghost.ip}');
+      if (orphan != null && orphan.isNotEmpty) {
+        await prefs.setString('api_token_id_$id', orphan);
+        if ((prefs.getString('api_token_$ip') ?? '').isEmpty) {
+          await prefs.setString('api_token_$ip', orphan);
+        }
+      }
       await prefs.remove('api_token_${ghost.ip}');
     }
     devices.removeWhere((d) => d.id == id && d.ip != ip);
@@ -261,12 +307,16 @@ Future<void> saveDeviceIp(WidgetRef ref, String ip,
 
   if (existingIndex >= 0) {
     final previous = devices[existingIndex];
-    // L'appareil a change d'adresse : le jeton API est indexe par IP, il faut
-    // le deplacer sinon l'app perd l'authentification et redemande un appairage.
+    // L'appareil a change d'adresse : deplacer le jeton vers la nouvelle IP,
+    // et le fixer sous l'identifiant materiel — la clef qui, elle, ne bouge
+    // jamais, quel que soit le prochain caprice du DHCP.
     if (previous.ip != ip) {
       final token = prefs.getString('api_token_${previous.ip}');
       if (token != null && token.isNotEmpty) {
         await prefs.setString('api_token_$ip', token);
+        if (id != null && id.isNotEmpty) {
+          await prefs.setString('api_token_id_$id', token);
+        }
       }
       await prefs.remove('api_token_${previous.ip}');
     }

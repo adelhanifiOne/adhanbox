@@ -110,10 +110,21 @@ class _DeviceSetupScreenState extends ConsumerState<DeviceSetupScreen>
     super.dispose();
   }
 
-  // ── Auto-detect: find new device on current network ──
+  // ── Auto-detect ──
+  // Cas principal : on associe un NOUVEL appareil, donc en mode provisioning BLE
+  // (pas encore sur le WiFi). On va DIRECTEMENT au scan BLE — plus de
+  // "Vérification sur le réseau local" qui bloque l'écran indéfiniment.
+  // En parallèle, une détection réseau tourne en arrière-plan : si l'appareil est
+  // déjà sur le WiFi (ré-appairage), elle finalise sans intervention.
   Future<void> _autoDetect() async {
-    setState(() { _phase = _Phase.detecting; _error = null; });
+    _startBleScan();
+    _backgroundNetworkDetect();
+  }
 
+  // Détection réseau NON bloquante : ne prend la main que si elle trouve un
+  // appareil NOUVEAU déjà connecté au WiFi, et seulement si l'utilisateur n'a pas
+  // déjà commencé à interagir avec le scan BLE.
+  Future<void> _backgroundNetworkDetect() async {
     Set<String> knownIps = {};
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -126,22 +137,25 @@ class _DeviceSetupScreenState extends ConsumerState<DeviceSetupScreen>
 
     try {
       final discovery = ESP32DiscoveryService();
-      final devices = await discovery.discoverDevices(timeout: const Duration(seconds: 5));
+      final devices = await discovery
+          .discoverDevices(timeout: const Duration(seconds: 5))
+          .timeout(const Duration(seconds: 8), onTimeout: () => <DiscoveredDevice>[]);
       for (final d in devices) {
         if (knownIps.contains(d.host)) continue;
-        if (!mounted) return;
+        // L'utilisateur a-t-il avancé (connexion BLE, mode AP…) ? Alors on n'interfère pas.
+        if (!mounted || _phase != _Phase.bleScan || _isBusy) return;
         try {
           final api = AdhanBoxAPI(baseUrl: 'http://${d.host}', timeout: const Duration(seconds: 4));
           final status = await api.getStatus();
           if (status.containsKey('wifi') || status.containsKey('rtc_ok')) {
-            await _finalizeDevice(d.host);
+            if (mounted && _phase == _Phase.bleScan && !_isBusy) {
+              await _finalizeDevice(d.host);
+            }
             return;
           }
         } catch (_) {}
       }
     } catch (_) {}
-
-    if (mounted) _startBleScan();
   }
 
   Future<void> _startBleScan() async {
@@ -627,6 +641,12 @@ class _DeviceSetupScreenState extends ConsumerState<DeviceSetupScreen>
       if (token != null && token.isNotEmpty) {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('api_token_$ip', token);
+        // Sous l'identifiant materiel aussi : l'IP changera un jour (DHCP),
+        // l'identifiant jamais. C'est lui qui garde l'autorisation en vie.
+        final id = info['device_id'] as String?;
+        if (id != null && id.isNotEmpty) {
+          await prefs.setString('api_token_id_$id', token);
+        }
         ref.read(adhanboxApiKeyProvider.notifier).state = token;
       }
     } catch (_) {}
