@@ -202,6 +202,37 @@ def cartes_usb():
     return cartes
 
 
+def qui_occupe_port(port):
+    """Quel programme tient ce port ? Rend une phrase, ou None.
+
+    Sur macOS un port serie s'ouvre en exclusivite. Le moniteur serie de
+    l'Arduino IDE le reprend des qu'une carte reapparait — et il le reprend
+    APRES chaque televersement, donc le probleme revient a chaque carte.
+    esptool ne dit alors que « Resource busy », ce qui envoie chercher au
+    mauvais endroit : le cable, la carte, le firmware.
+
+    On n'appelle CECI QU'APRES un echec, jamais en prevention : le
+    serial-discovery d'Arduino ouvre les ports au vol pour les detecter, et
+    refuser un televersement sur cette base bloquerait des cartes saines.
+    """
+    try:
+        # Surtout pas de -t : il annule -F et ne rend que des numeros de
+        # processus, jamais leur nom — donc jamais de diagnostic lisible.
+        r = subprocess.run(['lsof', '-F', 'cn', port],
+                           capture_output=True, text=True, timeout=6)
+    except Exception:
+        return None
+    noms = [l[1:] for l in r.stdout.splitlines() if l.startswith('c')]
+    noms = [n for n in noms if n]
+    if not noms:
+        return None
+    if any('serial-mo' in n or 'arduino' in n.lower() for n in noms):
+        return ("le moniteur serie de l'Arduino IDE occupe ce port. "
+                "Ferme-le dans l'IDE (icone loupe, ou Ctrl+Maj+M) et reessaie.")
+    return ('le port est occupe par « %s ». Ferme ce programme et reessaie.'
+            % noms[0])
+
+
 def trouver_cli():
     for p in ['/opt/homebrew/bin/arduino-cli', '/usr/local/bin/arduino-cli', 'arduino-cli']:
         try:
@@ -252,8 +283,22 @@ def flasher(port=None, recompiler=False, sortie=info):
         sortie('Binaire deja compile, reutilise : %s' % os.path.relpath(binaire, RACINE))
 
     sortie('Televersement…')
+    trace = []
+
+    def tracer(ligne):
+        trace.append(ligne)
+        sortie(ligne)
+
     if _courir([cli, 'upload', '--fqbn', FQBN, '--port', port,
-                '--input-dir', build, SKETCH], sortie) != 0:
+                '--input-dir', build, SKETCH], tracer) != 0:
+        texte = '\n'.join(trace).lower()
+        if 'busy' in texte or 'resource busy' in texte or 'could not open' in texte:
+            occupant = qui_occupe_port(port)
+            if occupant:
+                return False, 'Televersement impossible : %s' % occupant
+            return False, ('Televersement impossible : le port est pris par un '
+                           'autre programme. Le moniteur serie de l\'Arduino IDE '
+                           'en est la cause la plus frequente — ferme-le.')
         return False, 'Televersement echoue.'
     return True, 'Firmware televerse sur %s. La carte redemarre (~20 s).' % port
 
@@ -480,10 +525,18 @@ class BoxSerie:
         self._fd = os.open(port, os.O_RDWR | os.O_NOCTTY | os.O_NONBLOCK)
 
     def fermer(self):
+        fd, self._fd = getattr(self, '_fd', None), None
+        if fd is None:
+            return
         try:
-            os.close(self._fd)
+            os.close(fd)
         except Exception:
             pass
+
+    def __del__(self):
+        # Dernier filet : un descripteur oublie garderait le port pris, et
+        # ferait echouer le televersement suivant sur « Resource busy ».
+        self.fermer()
 
     def _lignes(self, fin_attente):
         """Rend les lignes recues jusqu'a l'echeance."""
@@ -605,18 +658,28 @@ def trouver_box_serie(port=None):
         port = candidates[0]['port']
     try:
         b = BoxSerie(port)
-    except Exception:
-        return None, None
+    except Exception as e:
+        occupant = qui_occupe_port(port)
+        raise RuntimeError(occupant or
+                           'ouverture de %s impossible (%s)' % (port, e))
     # Ouvrir le port peut faire redemarrer la carte, et elle passe alors par
     # ~15 s de demarrage avant de repondre. On insiste plutot que d'abandonner.
     fin = time.time() + 40
-    while time.time() < fin:
-        try:
-            return b, b.get('/api/device/info')
-        except Exception:
-            time.sleep(1.5)
-    b.fermer()
-    return None, None
+    derniere = None
+    try:
+        while time.time() < fin:
+            try:
+                return b, b.get('/api/device/info')
+            except Exception as e:
+                derniere = e
+                time.sleep(1.5)
+    except BaseException:
+        b.fermer()
+        raise
+    b.fermer()      # sans ca, le port resterait pris pour le flash suivant
+    raise RuntimeError(
+        'la carte ne repond pas sur %s. Porte-t-elle bien un firmware V3 '
+        'recent ? Televerse-le, puis reessaie. (%s)' % (port, derniere))
 
 
 # ─────────────────────── le monde autour d'un test ──────────────────

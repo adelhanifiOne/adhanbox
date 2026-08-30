@@ -91,14 +91,15 @@ class Session:
         if port not in ports:
             return False, 'Carte introuvable — reclique sur « Chercher une carte ».'
         ancien = (self.infos or {}).get('device_id')
-        if isinstance(self.box, bt.BoxSerie):
-            self.box.fermer()
+        self.liberer_cable()
         self.noter('Ouverture du cable %s…' % port)
-        box, infos = bt.trouver_box_serie(port)
-        if not box:
-            self.noter('Pas de reponse sur %s' % port)
-            return False, ("Pas de reponse sur ce port. La carte porte-t-elle bien "
-                           "le firmware ? Le televersement est peut-etre a refaire.")
+        try:
+            box, infos = bt.trouver_box_serie(port)
+        except Exception as e:
+            # Le message porte la cause exacte : port occupe par un autre
+            # programme, ou carte sans firmware. Pas « pas de reponse ».
+            self.noter('ECHEC ' + str(e))
+            return False, str(e)
         with self.verrou:
             self.box, self.infos = box, infos or {}
         if self.infos.get('device_id') != ancien:
@@ -210,9 +211,24 @@ class Session:
             pass
 
     # — flash —
+    def liberer_cable(self):
+        """Rend le port serie avant de televerser.
+
+        Le banc garde le port ouvert tant qu'il pilote une carte par le
+        cable. esptool, lui, exige l'exclusivite : sans ce relachement, le
+        banc bloquerait son propre televersement avec « Resource busy » — en
+        accusant au passage le cable ou la carte.
+        """
+        with self.verrou:
+            if isinstance(self.box, bt.BoxSerie):
+                self.noter('Liberation du cable %s avant televersement.' % self.box.hote)
+                self.box.fermer()
+                self.box, self.infos = None, {}
+
     def flasher(self, port=None, recompiler=False):
         if self.occupe():
             return False, 'Un controle est en cours.'
+        self.liberer_cable()
 
         def travail():
             with self.verrou:
