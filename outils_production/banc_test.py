@@ -776,6 +776,15 @@ def t_heap(ctx):
     return h > 60000, '%d octets' % h
 
 
+def taille_reference(chemin):
+    """Taille attendue d'apres sd_preload, ou None si la reference manque."""
+    p = os.path.join(SD_SOURCE, chemin.lstrip('/'))
+    try:
+        return os.path.getsize(p)
+    except OSError:
+        return None
+
+
 def t_contenu(ctx):
     """Les 4 automatismes doivent pouvoir demarrer.
 
@@ -789,8 +798,15 @@ def t_contenu(ctx):
     for chemin, nom in CONTENU_ATTENDU.items():
         try:
             r = ctx.box.get('/api/audio/play', {'f': chemin})
-            if r.get('started'):
-                presents.append('%s %.1f Mo' % (nom, r.get('size', 0) / 1048576.0))
+            taille = r.get('size', 0)
+            attendu = taille_reference(chemin)
+            if attendu is not None and taille != attendu:
+                # « Present » ne veut pas dire « utilisable » : une copie
+                # interrompue laisse un fichier de la bonne taille zero.
+                manquants.append('%s (%d octets au lieu de %d — copie incomplete)'
+                                 % (nom, taille, attendu))
+            elif r.get('started'):
+                presents.append('%s %.1f Mo' % (nom, taille / 1048576.0))
             else:
                 manquants.append('%s (presente mais ne demarre pas)' % nom)
         except urllib.error.HTTPError as e:
@@ -805,6 +821,45 @@ def t_contenu(ctx):
     return (not manquants,
             'les 4 demarrent — ' + ', '.join(presents) if not manquants
             else 'manque : ' + ', '.join(manquants))
+
+
+def t_adhans(ctx):
+    """Les pistes d'adhan, celles que /play joue par numero.
+
+    Aucun controle ne les regardait : le boitier d'atelier fonctionnait, donc
+    on n'a jamais vu qu'une carte neuve pouvait porter un /mp3/0002.mp3 de
+    zero octet. La lecture « demarre » et se termine aussitot : silence, sans
+    la moindre erreur.
+    """
+    pistes = sorted(f for f in os.listdir(os.path.join(SD_SOURCE, 'mp3'))
+                    if f.endswith('.mp3')) if os.path.isdir(
+                        os.path.join(SD_SOURCE, 'mp3')) else []
+    if not pistes:
+        return False, 'contenu de reference introuvable (%s)' % SD_SOURCE
+
+    bons, mauvais = 0, []
+    for nom in pistes:
+        chemin = '/mp3/' + nom
+        attendu = taille_reference(chemin)
+        try:
+            r = ctx.box.get('/api/audio/play', {'f': chemin})
+            taille = r.get('size', 0)
+        except urllib.error.HTTPError as e:
+            mauvais.append('%s (%s)' % (nom, 'absent' if e.code == 404 else e))
+            continue
+        except Exception as e:
+            mauvais.append('%s (%s)' % (nom, e))
+            continue
+        finally:
+            ctx.stop_lecture()
+        if taille != attendu:
+            mauvais.append('%s : %d octets au lieu de %d' % (nom, taille, attendu))
+        else:
+            bons += 1
+
+    if mauvais:
+        return False, 'copie incomplete — ' + ' ; '.join(mauvais)
+    return True, '%d pistes conformes a la reference' % bons
 
 
 def _jumeau_fantome(chemin):
@@ -822,12 +877,33 @@ def t_fantomes(ctx):
     """
     trouves = []
     for chemin in ctx.box.get('/api/audio/list'):
-        if chemin.rpartition('/')[2].startswith('._'):
+        n = chemin.rpartition('/')[2]
+        if n.startswith('._') or n == '.DS_Store':
             trouves.append(chemin)
 
-    # /quran est absent de cette liste (v2ListDir l'exclut). On interroge donc
-    # les jumeaux des deux sourates automatisees, les seuls chemins qu'on
-    # connaisse la-dedans. 404 = propre, 200 = le fantome est bien la.
+    # Par le cable on peut lister /quran directement — et y trouver les
+    # jumeaux des DOSSIERS (._afs, ._dosari…), que l'interrogation fichier par
+    # fichier ne pouvait pas voir.
+    lister = getattr(ctx.box, 'lister', None)
+    if lister is not None:
+        for dossier in ('/quran', '/quran/afs', '/quran/dosari',
+                        '/quran/ghamdi', '/quran/maher'):
+            try:
+                for n in lister(dossier):
+                    if n.startswith('._') or n == '.DS_Store':
+                        trouves.append('%s/%s' % (dossier, n))
+            except Exception:
+                pass
+        reserve = ''
+        if not trouves:
+            return True, 'aucun' + reserve
+        apercu = ', '.join(trouves[:3])
+        reste = len(trouves) - 3
+        return False, '%d trouves : %s%s' % (
+            len(trouves), apercu, ' … +%d autres' % reste if reste > 0 else '')
+
+    # Par le reseau, /quran est invisible (v2ListDir l'exclut) : on ne peut
+    # interroger que les jumeaux des deux sourates automatisees.
     quran_vu = True
     for chemin in CONTENU_ATTENDU:
         if not chemin.startswith('/quran'):
@@ -1040,6 +1116,9 @@ TESTS = [
          "Sous 16 ko/s, l'audio se coupe en pleine lecture."),
     Test('heap', 'Mémoire libre', 'auto', t_heap,
          'Une marge trop courte fait redémarrer la carte au bout de quelques jours.'),
+    Test('adhans', 'Pistes d\'adhan', 'auto', t_adhans,
+         'Les 6 pistes jouees par numero, comparees a la reference — '
+         'un fichier vide ne fait aucun bruit et aucune erreur.'),
     Test('contenu', 'Contenu audio', 'auto', t_contenu,
          'Les 4 fichiers des automatismes s\'ouvrent et démarrent vraiment.'),
     Test('fantomes', 'Fichiers fantômes macOS', 'auto', t_fantomes,

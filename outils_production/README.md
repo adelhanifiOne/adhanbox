@@ -71,6 +71,7 @@ forcer la compilation, `--hote <ip>` si la carte n'est pas trouvée toute seule,
 | PSRAM | présente — son absence était la loterie des modules V2 |
 | Débit carte SD | ≥ 16 ko/s, le seuil sous lequel l'audio se coupe |
 | Mémoire libre | > 60 ko de tas |
+| Pistes d'adhan | les 6 pistes jouées par numéro, **taille comparée à la référence** |
 | Contenu audio | les 4 automatismes s'ouvrent et démarrent (voir plus bas) |
 | Fichiers fantômes | aucun `._X.mp3` laissé par macOS (voir plus bas) |
 | Horloge temps réel | date plausible |
@@ -283,3 +284,14 @@ réseau. Par le câble, tout est accessible en permanence.
 Pas de `pyserial` : `stty` configure le port, `select` borne les attentes. Le
 banc garde sa propriété la plus utile — il tourne sur n'importe quel Mac, sans
 préparation.
+
+## « Présent » ne veut pas dire « utilisable »
+
+La première carte de production portait un `/mp3/0002.mp3` de **zéro octet** :
+la copie s'était interrompue. Le fichier existait, la lecture « démarrait » et
+se terminait aussitôt — silence complet, sans la moindre erreur. Un contrôle
+d'existence l'aurait laissé passer.
+
+Les tailles sont donc comparées à `sd_preload`, fichier par fichier. Une copie
+tronquée est un défaut de production courant ; elle ne doit pas franchir le
+banc.

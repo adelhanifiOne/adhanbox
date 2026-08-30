@@ -4398,13 +4398,17 @@ static void bancCommande(String c) {
   } else if (verbe == "play") {
     // Rend aussi la taille : le controle « contenu audio » l'affiche, et le
     // rapport doit dire la meme chose par le cable et par le reseau.
+    // « exists » doit dire si le fichier EST LA, pas s'il est utilisable :
+    // un fichier de zero octet existe. Les confondre ferait annoncer
+    // « absent » pour une copie tronquee — et chercher au mauvais endroit.
+    bool present = SD.exists(arg);
     uint32_t sz = 0;
-    if (SD.exists(arg)) { File f = SD.open(arg); if (f) { sz = f.size(); f.close(); } }
+    if (present) { File f = SD.open(arg); if (f) { sz = f.size(); f.close(); } }
     bool ok = audio.playPath(arg.c_str());
     if (ok) isPlaying = true;
     snprintf(buf, sizeof(buf), "{\"started\":%s,\"size\":%lu,\"exists\":%s}",
              ok ? "true" : "false", (unsigned long)sz,
-             sz ? "true" : "false");
+             present ? "true" : "false");
     bancRep(buf);
 
   } else if (verbe == "track") {
