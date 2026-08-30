@@ -3904,6 +3904,13 @@ void v2Tick() {
 
 void setup() {
   Serial.begin(115200);
+#if ARDUINO_USB_CDC_ON_BOOT
+  // [BANC] Serial passe par l'USB (CDCOnBoot=cdc) pour que le banc de
+  // production pilote la carte par le cable. Mais un boitier chez un client
+  // tourne SANS cable : sans ce zero, chaque Serial.print attendrait un hote
+  // qui ne viendra jamais. A zero, les traces sont simplement perdues.
+  Serial.setTxTimeoutMs(0);
+#endif
   delay(100);
   Serial.println("AdhanBox V3 firmware v3.0.4 starting...");
 

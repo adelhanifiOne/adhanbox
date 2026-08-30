@@ -38,7 +38,7 @@ from datetime import datetime, timezone
 RACINE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RAPPORTS = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'rapports')
 SKETCH = os.path.join(RACINE, 'adhanbox_v3')
-FQBN = 'esp32:esp32:esp32s3:PartitionScheme=min_spiffs,PSRAM=enabled'
+FQBN = 'esp32:esp32:esp32s3:PartitionScheme=min_spiffs,PSRAM=enabled,CDCOnBoot=cdc'
 HOTES = ['adhanbox.local', '192.168.4.1']   # mDNS, puis point d'acces de la box
 
 # Contenu attendu sur la carte SD (voir sd_preload/ dans le depot)
