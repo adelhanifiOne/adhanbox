@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/adhanbox_provider.dart';
 import 'quran_player_screen.dart';
 import '../utils/friendly_error.dart';
+import '../utils/autorisation.dart';
 
 /// Automatisations Azkar & Coran (V2) : par automatisation -> on/off, heure,
 /// volume, jours de la semaine. Auto-save (pas de bouton Enregistrer).
@@ -110,7 +111,11 @@ class _AzkarCoranScreenState extends ConsumerState<AzkarCoranScreen> {
       await api.playFile(path, volume: item.volume);
       if (mounted) _snack('Lecture de $title sur votre AdhanBox');
     } catch (e) {
-      if (mounted) _snack(messageAmical(e, repli: 'La lecture n\'a pas demarre.'));
+      if (mounted) {
+        afficherErreurBox(context, ref, e,
+            repli: 'La lecture n\'a pas demarre.',
+            reessayer: () => _playNow(item, path, title));
+      }
     } finally {
       if (mounted) setState(() => _launching = null);
     }
@@ -149,9 +154,8 @@ class _AzkarCoranScreenState extends ConsumerState<AzkarCoranScreen> {
     } catch (e) {
       if (mounted) {
         setState(() => _saveState = '');
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(messageAmical(e,
-                repli: "Impossible d'enregistrer vos réglages."))));
+        afficherErreurBox(context, ref, e,
+            repli: "Impossible d'enregistrer vos réglages.");
       }
     }
   }

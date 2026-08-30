@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../providers/adhanbox_provider.dart';
 import '../theme/app_theme.dart';
+import '../utils/autorisation.dart';
 
 const int _kSceneOff = 0;
 const int _kSceneDefault = 6; // jaune par défaut
@@ -98,7 +99,11 @@ class _LedControlScreenState extends ConsumerState<LedControlScreen> {
     if (api == null) return;
     try {
       await api.setLedScenario(scene);
-    } catch (_) {}
+    } catch (e) {
+      if (mounted) afficherErreurBox(context, ref, e,
+          repli: "La box n'a pas pris en compte ce réglage.",
+          reessayer: () => _applyScene(scene));
+    }
   }
 
   Future<void> _applyColor(Color c) async {
@@ -111,7 +116,11 @@ class _LedControlScreenState extends ConsumerState<LedControlScreen> {
     if (api == null) return;
     try {
       await api.setLedRgb(c.red, c.green, c.blue);
-    } catch (_) {}
+    } catch (e) {
+      if (mounted) afficherErreurBox(context, ref, e,
+          repli: "La box n'a pas pris en compte cette couleur.",
+          reessayer: () => _applyColor(c));
+    }
   }
 
   void _togglePower() {
@@ -190,7 +199,12 @@ class _LedControlScreenState extends ConsumerState<LedControlScreen> {
                   try {
                     final api = ref.read(adhanboxApiProvider);
                     if (api != null) await api.setLedBrightness(v.toInt());
-                  } catch (_) {} finally {
+                  } catch (e) {
+                    if (mounted) {
+                      afficherErreurBox(context, ref, e,
+                          repli: "La box n'a pas pris en compte la luminosité.");
+                    }
+                  } finally {
                     if (mounted) setState(() => _isSendingBrightness = false);
                   }
                 },

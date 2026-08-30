@@ -5,9 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../providers/adhanbox_provider.dart';
-import '../services/adhanbox_api.dart';
 import '../services/location_service.dart';
 import '../theme/app_theme.dart';
 import '../main.dart';
@@ -15,6 +13,7 @@ import 'privacy_policy_screen.dart';
 import 'device_setup_screen.dart';
 import 'audio_content_screen.dart';
 import '../utils/friendly_error.dart';
+import '../utils/autorisation.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({Key? key}) : super(key: key);
@@ -358,118 +357,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   /// interdit le scan Wi-Fi aux applications, et une fois la box partie sur le
   /// nouveau reseau son ancienne adresse IP ne repond plus. On repasse donc par
   /// le meme chemin que le premier appairage, qui lui est eprouve.
-  /// Donne a CE telephone le droit de piloter la box deja installee.
-  ///
-  /// Le cas type : un premier telephone appaire la box, puis un second membre
-  /// de la famille l'ajoute a son app. Par securite, le firmware ne publie son
-  /// jeton d'API que pendant la fenetre d'appairage (10 min apres le
-  /// branchement). Ajoutee hors fenetre, l'app du second telephone n'a donc
-  /// aucun jeton : tout ce qui est protege refuse (LED, azkar, Coran…), et
-  /// seul l'adhan passe — /play est la seule commande sans authentification.
-  ///
-  /// La cle de la porte, c'est la prise electrique : debrancher/rebrancher
-  /// rouvre la fenetre, et cet ecran recupere le jeton tout seul. Pas besoin
-  /// de refaire l'appairage Bluetooth, qui couperait la box du Wi-Fi.
-  Future<void> _autoriserTelephone() async {
-    final ip = ref.read(currentDeviceIpProvider);
-    if (ip == null || ip.isEmpty) {
-      _showError('Aucun appareil connecté.');
-      return;
-    }
-
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Autoriser ce téléphone'),
-        content: const Text(
-          "Par sécurité, votre AdhanBox ne donne son autorisation que dans "
-          "les 10 minutes qui suivent son branchement électrique.\n\n"
-          "1. Débranchez votre AdhanBox.\n"
-          "2. Rebranchez-la. Ne touchez à rien d'autre.\n"
-          "3. Laissez cet écran ouvert : l'autorisation sera récupérée "
-          "automatiquement dès qu'elle revient en ligne.",
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Annuler')),
-          FilledButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text("C'est fait")),
-        ],
-      ),
-    );
-    if (ok != true || !mounted) return;
-
-    var annule = false;
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        content: Row(
-          children: const [
-            CircularProgressIndicator(),
-            SizedBox(width: 20),
-            Expanded(
-              child: Text("En attente de la box…\n"
-                  "Elle met environ une minute à revenir en ligne."),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              annule = true;
-              Navigator.pop(ctx);
-            },
-            child: const Text('Annuler'),
-          ),
-        ],
-      ),
-    );
-
-    // On attend le jeton frais publie par la box — PAS un cache : c'est
-    // justement parce que ce telephone n'en a pas qu'on est ici.
-    String? token;
-    final fin = DateTime.now().add(const Duration(minutes: 5));
-    while (!annule && DateTime.now().isBefore(fin)) {
-      try {
-        final info = await AdhanBoxAPI(
-          baseUrl: 'http://$ip',
-          timeout: const Duration(seconds: 3),
-        ).getDeviceInfo();
-        final t = info['token'] as String?;
-        if (t != null && t.isNotEmpty) {
-          final prefs = await SharedPreferences.getInstance();
-          await prefs.setString('api_token_$ip', t);
-          final id = info['device_id'] as String?;
-          if (id != null && id.isNotEmpty) {
-            await prefs.setString('api_token_id_$id', t);
-          }
-          ref.read(adhanboxApiKeyProvider.notifier).state = t;
-          token = t;
-          break;
-        }
-      } catch (_) {
-        // box en plein redemarrage : normal, on repassera
-      }
-      await Future.delayed(const Duration(seconds: 2));
-    }
-
-    if (!mounted || annule) return;
-    Navigator.pop(context); // ferme l'attente
-
-    if (token != null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Téléphone autorisé — vous avez le contrôle complet.'),
-        backgroundColor: AppTheme.emerald,
-      ));
-    } else {
-      _showError(
-          "La box n'a pas rouvert sa fenêtre d'autorisation. Vérifiez qu'elle "
-          "a bien été débranchée puis rebranchée, et réessayez.");
-    }
-  }
+  /// Le parcours vit dans utils/autorisation.dart : il est aussi declenche
+  /// automatiquement des qu'une commande est refusee, depuis n'importe quel
+  /// ecran. Cette tuile n'est que la porte d'entree manuelle.
+  Future<void> _autoriserTelephone() => autoriserCeTelephone(context, ref);
 
   Future<void> _relancerAppairage() async {
     final api = ref.read(adhanboxApiProvider);

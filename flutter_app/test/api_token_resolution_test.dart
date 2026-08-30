@@ -7,6 +7,7 @@
 // authentification. La resolution est testee contre un vrai serveur HTTP
 // local qui repond comme handleDeviceInfo() du firmware.
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -14,6 +15,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:adhanbox/providers/adhanbox_provider.dart';
+import 'package:adhanbox/utils/friendly_error.dart';
 
 /// Fausse box : ne sert que /api/device/info, comme le firmware —
 /// avec ou sans jeton selon qu'on est dans la fenetre d'appairage.
@@ -93,6 +95,26 @@ void main() {
 
     expect(await resolveApiToken(prefs, ip), isNull);
     await box.close();
+  });
+
+  // C'est ce predicat qui decide si l'app se contente d'un message ou propose
+  // le parcours de reparation. Se tromper ici, c'est soit laisser
+  // l'utilisateur sans issue, soit lui proposer un debranchement pour un
+  // simple probleme de Wi-Fi.
+  group('estRefusAutorisation', () {
+    test('reconnait un refus d\'autorisation', () {
+      expect(estRefusAutorisation(Exception('HTTP 401')), isTrue);
+      expect(estRefusAutorisation(Exception('HTTP 403')), isTrue);
+      expect(estRefusAutorisation('Unauthorized — missing X-API-Key'), isTrue);
+    });
+
+    test('ne confond pas avec les autres pannes', () {
+      expect(estRefusAutorisation(null), isFalse);
+      expect(estRefusAutorisation(Exception('HTTP 404')), isFalse);
+      expect(estRefusAutorisation(Exception('HTTP 500')), isFalse);
+      expect(estRefusAutorisation(const SocketException('refused')), isFalse);
+      expect(estRefusAutorisation(TimeoutException('trop long')), isFalse);
+    });
   });
 
   test('box injoignable mais jeton en cache sous l\'IP : on garde la main',

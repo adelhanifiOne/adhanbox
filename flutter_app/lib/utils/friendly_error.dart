@@ -7,6 +7,16 @@ import 'dart:io';
 /// Future not completed », « SocketException: Connection refused »…) n'ont
 /// aucun sens pour quelqu'un qui veut juste écouter le Coran. On les
 /// remplace par une explication et, surtout, par ce qu'il faut faire.
+/// Ce refus vient-il d'un manque d'autorisation (401/403) ?
+///
+/// L'app peut alors proposer la réparation au lieu de constater la panne :
+/// voir `afficherErreurBox` dans utils/autorisation.dart.
+bool estRefusAutorisation(Object? erreur) {
+  if (erreur == null) return false;
+  final t = erreur.toString().toLowerCase();
+  return t.contains('401') || t.contains('403') || t.contains('unauthorized');
+}
+
 String messageAmical(Object? erreur, {String? repli}) {
   final defaut = repli ?? "Une erreur est survenue. Réessayez dans un instant.";
   if (erreur == null) return defaut;

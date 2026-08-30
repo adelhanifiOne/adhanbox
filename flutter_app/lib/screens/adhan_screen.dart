@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 import '../providers/adhanbox_provider.dart';
 import '../theme/app_theme.dart';
 import '../utils/friendly_error.dart';
+import '../utils/autorisation.dart';
 
 const _trackNames = {
   2:  'Adhan 1',
@@ -179,8 +180,16 @@ class _AdhanScreenState extends ConsumerState<AdhanScreen> {
         );
       }
     } catch (e) {
-      setState(() => _errorMessage =
-          messageAmical(e, repli: 'Impossible d\'enregistrer vos réglages.'));
+      // Un refus d'autorisation est traite par le dialogue de reparation :
+      // l'afficher AUSSI en bandeau ferait doublon.
+      if (!estRefusAutorisation(e)) {
+        setState(() => _errorMessage =
+            messageAmical(e, repli: 'Impossible d\'enregistrer vos réglages.'));
+      }
+      if (mounted) {
+        afficherErreurBox(context, ref, e,
+            repli: 'Impossible d\'enregistrer vos réglages.');
+      }
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
