@@ -128,6 +128,15 @@ class Box:
             raise
 
 
+def _supprimer_reseau(box, chemin):
+    """Equivalent HTTP de BoxSerie.supprimer()."""
+    try:
+        box.get('/api/audio/delete', {'f': chemin}, brut=True)
+        return True
+    except Exception:
+        return False
+
+
 def trouver_box(hote_force=None, token=None):
     """Cherche la carte : hote impose, puis mDNS, puis le point d'acces.
 
@@ -639,6 +648,10 @@ class BoxSerie:
         """Contenu d'un dossier de la carte SD (non recursif)."""
         return json.loads(self._commande('ls %s' % dossier))
 
+    def supprimer(self, chemin):
+        """Supprime un fichier. Le firmware refuse tout ce qui n'est pas « ._ »."""
+        return json.loads(self._commande('rm %s' % chemin)).get('supprime', False)
+
     def scan_wifi(self):
         """Nombre de reseaux visibles. Eprouve la radio, pas la connexion."""
         return int(json.loads(self._commande('wifiscan', attente=30))
@@ -951,10 +964,62 @@ def t_bouton_stop(ctx):
         ctx.stop_lecture()
 
 
+def reparer_fantomes(ctx, sortie=info):
+    """Supprime les jumeaux « ._ » trouves par le controle.
+
+    On relit la carte plutot que de se fier a un resultat affiche : entre le
+    controle et le clic, l'operateur a pu changer de carte SD.
+    """
+    trouves = []
+    for chemin in ctx.box.get('/api/audio/list'):
+        if chemin.rpartition('/')[2].startswith('._'):
+            trouves.append(chemin)
+    for chemin in CONTENU_ATTENDU:
+        if not chemin.startswith('/quran'):
+            continue
+        jumeau = _jumeau_fantome(chemin)
+        try:
+            ctx.box.get('/api/audio/play', {'f': jumeau})
+            trouves.append(jumeau)
+        except urllib.error.HTTPError as e:
+            if e.code != 404:
+                raise
+        except RuntimeError:
+            pass                       # jeton absent : on ne peut pas regarder
+        finally:
+            ctx.stop_lecture()
+
+    if not trouves:
+        return True, 'aucun fantome a supprimer'
+
+    supprimer = getattr(ctx.box, 'supprimer', None)
+    if supprimer is None:
+        supprimer = lambda c: _supprimer_reseau(ctx.box, c)
+
+    faits, rates = 0, []
+    for chemin in trouves:
+        # Ceinture et bretelles : le firmware refuse deja tout ce qui n'est
+        # pas un jumeau, mais on ne lui envoie que ca.
+        if not chemin.rpartition('/')[2].startswith('._'):
+            continue
+        if supprimer(chemin):
+            faits += 1
+            sortie('supprime %s' % chemin)
+        else:
+            rates.append(chemin)
+    if rates:
+        return False, '%d supprimes, %d resistants : %s' % (
+            faits, len(rates), ', '.join(rates[:3]))
+    return True, '%d fichiers fantomes supprimes' % faits
+
+
 class Test:
-    def __init__(self, clef, nom, groupe, fn, pourquoi=''):
+    def __init__(self, clef, nom, groupe, fn, pourquoi='', reparation=None):
         self.clef, self.nom, self.groupe = clef, nom, groupe
         self.fn, self.pourquoi = fn, pourquoi
+        # (libelle, fonction) : un controle qui sait se reparer propose son
+        # bouton. L'interface n'a rien de particulier a savoir.
+        self.reparation = reparation
 
 
 GROUPES = [
@@ -979,7 +1044,8 @@ TESTS = [
          'Les 4 fichiers des automatismes s\'ouvrent et démarrent vraiment.'),
     Test('fantomes', 'Fichiers fantômes macOS', 'auto', t_fantomes,
          "macOS depose un ._X.mp3 par fichier copie : l'app les affiche, "
-         "et ils ne jouent rien."),
+         "et ils ne jouent rien.",
+         reparation=('Supprimer ces fichiers', reparer_fantomes)),
     Test('rtc', 'Horloge temps réel', 'auto', t_rtc,
          "Sans elle, pas d'adhan à l'heure après une coupure de courant."),
     Test('wifi', 'Wi-Fi', 'auto', t_wifi,

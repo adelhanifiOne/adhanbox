@@ -248,6 +248,47 @@ class Session:
         self.travail.start()
         return True, 'Televersement lance — suis le journal.'
 
+    def reparer(self, clef):
+        """Repare, puis REJOUE le controle : le resultat affiche doit toujours
+        venir d'une mesure, jamais d'une promesse."""
+        if self.occupe():
+            return False, 'Une autre operation est en cours.'
+        test = bt.PAR_CLEF.get(clef)
+        if not test or not test.reparation:
+            return False, 'Ce controle ne propose pas de reparation.'
+        if not self.box:
+            return False, 'Aucune carte connectee.'
+
+        libelle, fonction = test.reparation
+
+        def travail():
+            ctx = ContexteGUI(self)
+            with self.verrou:
+                self.en_cours = clef
+                self.resultats.pop(clef, None)
+            try:
+                fait, message = fonction(ctx, sortie=self.noter)
+                self.noter(('OK  ' if fait else 'ECHEC ') + message)
+            except Exception as e:
+                self.noter('ECHEC reparation : %s' % e)
+            finally:
+                with self.verrou:
+                    self.en_cours = None
+            # On remesure : c'est le controle qui a le dernier mot.
+            reussi, detail = bt.executer(test, ctx)
+            with self.verrou:
+                self.resultats[clef] = {
+                    'ok': reussi, 'detail': detail,
+                    'horo': datetime.now().strftime('%H:%M:%S'),
+                }
+            self.noter('%s %s — %s' % ('OK  ' if reussi else 'ECHEC',
+                                       test.nom, detail))
+
+        self.arret.clear()
+        self.travail = threading.Thread(target=travail, daemon=True)
+        self.travail.start()
+        return True, '%s…' % libelle
+
     # — carte SD —
     def preparer(self, volume):
         if self.occupe():
@@ -381,7 +422,9 @@ class Poignee(BaseHTTPRequestHandler):
             return self._envoyer({
                 'groupes': [{'clef': g, 'nom': n, 'sous_titre': s} for g, n, s in bt.GROUPES],
                 'tests': [{'clef': t.clef, 'nom': t.nom, 'groupe': t.groupe,
-                           'pourquoi': t.pourquoi} for t in bt.TESTS],
+                           'pourquoi': t.pourquoi,
+                           'reparation': t.reparation[0] if t.reparation else None}
+                          for t in bt.TESTS],
             })
         if self.path == '/api/etat':
             return self._envoyer(SESSION.etat())
@@ -419,6 +462,9 @@ class Poignee(BaseHTTPRequestHandler):
         if self.path == '/api/connecter_usb':
             relie, message = SESSION.connecter_usb(c.get('port', ''))
             return self._envoyer({'ok': relie, 'message': message})
+        if self.path == '/api/reparer':
+            lance, message = SESSION.reparer(c.get('clef', ''))
+            return self._envoyer({'ok': lance, 'message': message})
         if self.path == '/api/preparer':
             lance, message = SESSION.preparer(c.get('volume', ''))
             return self._envoyer({'ok': lance, 'message': message})
@@ -601,7 +647,8 @@ function dessinerCatalogue(){
       a.className = 'test'; a.id = 'test-' + t.clef;
       a.innerHTML = '<button class="jouer" title="Lancer ce contrôle">▶</button>'
         + '<div class="corps"><div class="nom"></div>'
-        + '<div class="pourquoi"></div><div class="detail"></div></div>'
+        + '<div class="pourquoi"></div><div class="detail"></div>'
+        + '<div class="reparation"></div></div>'
         + '<div class="marque">—</div>';
       a.querySelector('.nom').textContent = t.nom;
       a.querySelector('.pourquoi').textContent = t.pourquoi;
@@ -639,6 +686,23 @@ function peindre(e){
     a.className = 'test' + (actif ? ' actif' : r ? (r.ok ? ' ok' : ' ko') : '');
     a.querySelector('.marque').textContent = actif ? '…' : r ? (r.ok ? '✓ OK' : '✗ Échec') : '—';
     a.querySelector('.detail').textContent = actif ? '' : (r ? r.detail : '');
+
+    // Le bouton de réparation n'a de sens que sur un échec constaté.
+    const zr = a.querySelector('.reparation');
+    if (t.reparation && r && !r.ok && !actif){
+      if (!zr.firstChild){
+        const b = document.createElement('button');
+        b.textContent = t.reparation;
+        b.style.marginTop = '8px';
+        b.onclick = () => {
+          if (!confirm(t.reparation + ' ?\n\n' + r.detail)) return;
+          poste('/api/reparer', {clef: t.clef})
+            .then(x => { $('#message').textContent = x.message; rafraichir(); });
+        };
+        zr.append(b);
+      }
+      zr.querySelector('button').disabled = e.occupe || e.flash;
+    } else zr.innerHTML = '';
     a.querySelector('.jouer').disabled = e.occupe || e.flash || !e.carte;
   }
 

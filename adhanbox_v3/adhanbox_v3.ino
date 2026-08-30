@@ -4380,6 +4380,21 @@ static void bancCommande(String c) {
     out += "]";
     bancRep(out);
 
+  } else if (verbe == "rm") {
+    // Suppression VOLONTAIREMENT limitee aux jumeaux AppleDouble. Le banc
+    // n'a jamais besoin d'effacer autre chose, et cette commande est exposee
+    // sur le cable : la restreindre ici, au plus pres du disque, rend
+    // impossible d'effacer une recitation par erreur de code ou de frappe.
+    int barre = arg.lastIndexOf('/');
+    String nom = (barre < 0) ? arg : arg.substring(barre + 1);
+    if (!nom.startsWith("._")) {
+      bancRep(F("{\"error\":\"refuse : seuls les jumeaux ._ sont supprimables\"}"));
+      return;
+    }
+    bool fait = SD.exists(arg) && SD.remove(arg);
+    snprintf(buf, sizeof(buf), "{\"supprime\":%s}", fait ? "true" : "false");
+    bancRep(buf);
+
   } else if (verbe == "play") {
     // Rend aussi la taille : le controle « contenu audio » l'affiche, et le
     // rapport doit dire la meme chose par le cable et par le reseau.

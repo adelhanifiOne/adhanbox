@@ -172,6 +172,15 @@ jouera rien.
 Le contrôle les repère dans `/api/audio/list`, et interroge en plus les jumeaux
 des deux sourates automatisées — `/quran` étant invisible dans cette liste.
 
+**Un bouton « Supprimer ces fichiers » apparaît sur le contrôle en échec.** Il
+les efface, puis **rejoue le contrôle** : le vert affiché vient toujours d'une
+mesure, jamais d'une promesse.
+
+La suppression est verrouillée à deux niveaux. Le banc n'envoie que des chemins
+dont le nom commence par `._`, et le firmware **refuse** tout le reste
+(`t:rm`) — au plus près du disque, là où une erreur de code ou de frappe
+n'aurait aucun filet. Effacer une récitation par ce chemin est impossible.
+
 Pour nettoyer une carte, avant de la monter :
 
 ```bash
