@@ -51,7 +51,7 @@ function etapes(courante) {
   const l = [
     ['Commande confirmée', 1],
     ['En préparation', 2],
-    ['Assemblée et testée', 3],
+    ['Assemblée', 3],
     ['Expédiée', 4],
   ];
   return encadre(l.map(([nom, n]) => {
@@ -86,12 +86,17 @@ export function stepEmail(step, { firstName, ref, config, tracking, carrier }) {
 
   if (step === 'montage') {
     return {
-      subject: `Votre AdhanBox n° ${ref} est assemblée`,
+      subject: `Votre AdhanBox n° ${ref} est prête, et une question`,
       html: shell(`
         ${salut(firstName)}
-        ${par(`Votre AdhanBox est <b>assemblée et testée</b>. Elle a passé le contrôle : audio, lumière, connexion et déclenchement de l'adhan à l'heure.`)}
+        ${par(`Votre AdhanBox est <b>assemblée</b>. Elle est en ce moment sur le banc de test : audio, lumière, connexion et déclenchement de l'adhan à l'heure. Chaque boîtier y passe un par un, aucun ne part sans.`)}
         ${conf}
-        ${par(`Il ne reste plus qu'à l'emballer. Vous recevrez votre numéro de suivi dès qu'elle partira.`)}
+        ${par(`Il ne restera plus qu'à l'emballer. Vous recevrez votre numéro de suivi dès qu'elle partira.`)}
+        ${encadre(`
+          ${par(`<b>Une question avant l'envoi — pour les téléphones Android</b>`)}
+          ${par(`L'application Android est pour l'instant distribuée <b>sur invitation</b>. Pour que chacun chez vous puisse piloter l'AdhanBox, j'ai besoin des adresses.`)}
+          ${par(`<b>Répondez simplement à cet e-mail</b> en indiquant les adresses Gmail de <b>toutes les personnes du foyer</b> qui utiliseront l'AdhanBox depuis un téléphone Android.`)}
+          ${par(`Je les ajoute avant l'envoi : l'application sera installable dès que vous recevrez le boîtier. <b>Sur iPhone, rien à faire.</b>`)}`)}
         ${etapes(3)}
         ${num}`),
     };
