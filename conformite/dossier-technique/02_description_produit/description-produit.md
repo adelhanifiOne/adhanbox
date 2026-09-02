@@ -46,7 +46,7 @@ il n'est pas destiné aux enfants sans surveillance.
 | Pile de sauvegarde de l'horloge | **Pile bouton lithium CR1225, 3 V, non rechargeable** (V3 uniquement). Logée dans un support Keystone 3000 soudé en face arrière de la carte, à l'intérieur du boîtier fermé par vis. Elle n'alimente que l'horloge temps réel en l'absence de secteur ; autonomie estimée ≈ 7 ans à 0,75 µA. Fournie montée dans l'appareil. |
 | Éclairage | 25 LED adressables WS2812B, 5 V, basse puissance |
 | Boîtier | PETG imprimé en 3D, non conducteur |
-| Dimensions / masse | ~85 × 85 × 85 mm · ~250 g |
+| Dimensions / masse | **95 × 106 × 100 mm** · masse ~250 g *(dimensions mesurées sur le boîtier V3 monté, révision 3 — août 2026 ; la valeur précédente « ~85 × 85 × 85 mm » était erronée. Masse à reconfirmer sur un exemplaire monté.)* |
 | Conditions d'utilisation | intérieur sec, 0 °C à 40 °C |
 | Indice de protection | IP20 (aucune protection contre l'eau) |
 
