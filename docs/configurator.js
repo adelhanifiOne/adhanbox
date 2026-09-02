@@ -357,7 +357,7 @@
       });
     });
 
-    // ─── Précommande : le bouton crée la commande via le backend
+    // ─── Commande : le bouton crée la commande via le backend
     //     (config transmise UNE fois, visible dans Stripe + email de
     //     confirmation personnalisé). Si le backend est indisponible,
     //     secours automatique : Payment Link direct (client_reference_id).
@@ -382,7 +382,7 @@
       }
       const cta = document.getElementById('config-cta');
       cta.href = STRIPE_PAYMENT_LINK + '?client_reference_id=' + encodeURIComponent(ref);
-      cta.textContent = 'Précommander cette configuration — 95 €';
+      cta.textContent = 'Commander cette configuration — 95 €';
     }
     updateQuoteLink();
 

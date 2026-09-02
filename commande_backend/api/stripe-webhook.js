@@ -40,7 +40,7 @@ function clientEmailText({ firstName, ref, config, amount, shipToLines }) {
   return [
     `As-salāmu ʿalaykum${firstName ? ' ' + firstName : ''},`,
     '',
-    'Merci du fond du cœur pour votre précommande AdhanBox.',
+    'Merci du fond du cœur pour votre commande AdhanBox.',
     'Votre boîtier sera fabriqué à la main, à la commande, exactement dans la configuration que vous avez choisie.',
     '',
     `Votre configuration : ${config}`,
@@ -75,7 +75,7 @@ function clientEmailHtml({ firstName, ref, config, amount, shipTo }) {
     <tr><td style="background:#FFFFFF;padding:32px;">
       <div style="font-size:20px;color:#0C5B45;font-family:Georgia,serif;font-weight:700;">As-salāmu ʿalaykum${firstName ? ' ' + firstName : ''} 🌙</div>
       <p style="color:#444;font-size:15px;line-height:1.6;margin:14px 0 0;">
-        Merci du fond du cœur pour votre précommande. Votre AdhanBox sera
+        Merci du fond du cœur pour votre commande. Votre AdhanBox sera
         <b>fabriquée à la main, à la commande</b>, exactement dans la
         configuration que vous avez choisie&nbsp;:
       </p>
@@ -87,7 +87,7 @@ function clientEmailHtml({ firstName, ref, config, amount, shipTo }) {
 
       <table role="presentation" width="100%" style="border-collapse:collapse;border-top:1px solid #EEE;">
         ${row('Commande', 'N° ' + ref)}
-        ${row('AdhanBox — Précommande', amount)}
+        ${row('AdhanBox — Commande', amount)}
         ${row('Livraison', 'Offerte')}
         <tr>
           <td style="padding:10px 0;color:#0C5B45;font-size:15px;font-weight:700;border-top:1px solid #EEE;">Total payé</td>
@@ -128,7 +128,7 @@ function sellerEmailHtml({ ref, config, amount, name, email, phone, shipTo, piId
   const li = (k, v) => v ? `<li><b>${k} :</b> ${v}</li>` : '';
   return `
 <div style="font-family:Arial,sans-serif;font-size:15px;color:#232323;line-height:1.7;">
-  <h2 style="color:#0C5B45;">🎉 Nouvelle précommande AdhanBox</h2>
+  <h2 style="color:#0C5B45;">🎉 Nouvelle commande AdhanBox</h2>
   <ul style="padding-left:18px;">
     ${li('Commande', 'N° ' + ref)}
     ${li('Configuration', '<span style="color:#0C5B45;font-weight:700;">' + config + '</span>')}
@@ -242,7 +242,7 @@ export default async function handler(req, res) {
         from: FROM_EMAIL,
         to: details.email,
         replyTo: 'contact@adhanbox.fr',
-        subject: `Votre précommande AdhanBox est confirmée 🌙 (n° ${ref})`,
+        subject: `Votre commande AdhanBox est confirmée 🌙 (n° ${ref})`,
         html: clientEmailHtml({ firstName, ref, config, amount, shipTo }),
         text: clientEmailText({ firstName, ref, config, amount, shipToLines }),
       });
@@ -259,14 +259,14 @@ export default async function handler(req, res) {
     const envoiVendeur = await resend.emails.send({
       from: FROM_EMAIL,
       to: NOTIF_EMAIL,
-      subject: `🎉 Nouvelle précommande — ${config} — ${amount}`,
+      subject: `🎉 Nouvelle commande — ${config} — ${amount}`,
       html: sellerEmailHtml({
         ref, config, amount,
         name: details.name, email: details.email, phone: details.phone,
         shipTo, piId, sessionId: session.id,
       }),
       text: [
-        `Nouvelle précommande AdhanBox`,
+        `Nouvelle commande AdhanBox`,
         `Commande : N° ${ref}`,
         `Configuration : ${config}`,
         `Montant : ${amount}`,

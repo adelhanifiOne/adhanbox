@@ -85,7 +85,7 @@ export default async function handler(req, res) {
           currency: 'eur',
           unit_amount: AMOUNT_CENTS,
           product_data: {
-            name: 'AdhanBox — Précommande',
+            name: 'AdhanBox — Commande',
             description: configLabel,
             images: [`${SITE}/og-adhanbox.jpg`],
           },
