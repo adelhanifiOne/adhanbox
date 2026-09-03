@@ -55,6 +55,48 @@ orientation : ils naissent en pointe sur la paroi et grossissent à 45° vers le
 bas, donc **aucun support n'est nécessaire**. Vérifié par balayage : 0 point
 non soutenu.
 
+## `cercles_faces_courtes.py`
+
+Écart entre l'arche et le petit cercle, sur les **deux faces courtes** du
+boîtier. Constaté à l'impression le 03/09/2026 : la paroi entre les deux était
+trop fine et sortait mal.
+
+**Le diagnostic** — les 4 arches (12 mm) et les 3 cercles (Ø5) sont dessinés
+identiques sur les quatre faces. Mais la face courte fait 95,2 mm contre
+106 mm : le motif y est serré au pas de **19 mm au lieu de 21**.
+
+| | face courte | face longue |
+|---|---|---|
+| largeur | 95,2 mm | 106 mm |
+| pas du motif | 19 mm | 21 mm |
+| écart arche/cercle **avant** | **2,03 mm** | 2,94 mm |
+| écart arche/cercle **après** | **3,01 mm** | 2,94 mm (inchangé) |
+
+**Pourquoi on n'écarte pas le motif** — les angles portent un congé **R8 sur
+toute la hauteur** (centres 8,8 / 87,8 / 87,98 / 8,98). La partie *plate* de la
+face courte ne fait donc que **79 mm**. Le motif espacé comme sur les faces
+longues en occuperait 75 : il ne resterait que 2 mm jusqu'au congé.
+
+**Le correctif** — les 3 cercles des faces courtes passent de **Ø5 à Ø3**. Les
+arches, motif signature, ne bougent pas ; les cercles des faces longues non
+plus. La face courte cesse d'être le point faible.
+
+`Esquisse4` pilote les deux faces courtes (plan XZ), `Esquisse6` les deux faces
+longues (plan YZ). Les deux esquisses sont **libres** — ni cote ni contrainte —
+donc le rayon se règle directement par l'API.
+
+**Valeurs de contrôle** (mesurées par `measureMinimumDistance`, 03/09/2026)
+
+| contrôle | valeur |
+|---|---|
+| paroi la plus fine, face courte | 3,013 mm |
+| paroi la plus fine, face longue | 2,940 mm |
+| diamètre des cercles, faces courtes | 3,0 mm |
+| diamètre des cercles, faces longues | 5,0 mm |
+
+Le script est **rejouable** : au second passage il annonce « 0 cercle ramené »
+et se contente de remesurer.
+
 ## Et surtout
 
 **Enregistrer le document Fusion après exécution.** C'est la seule chose que
