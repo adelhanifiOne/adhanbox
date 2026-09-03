@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Reconnaissance de dette — AdhanBox</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{--emerald:#0C5B45;--deep:#08402F;--gold:#C9A227;--ink:#1c211b;--muted:#5d645b;--rule:#d8d2c4;}
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html,body{background:#e8e4da;}
+  body{font-family:'Inter',sans-serif;color:var(--ink);font-size:10.2pt;line-height:1.55;
+       -webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  @page{size:A4;margin:0;}
+  .note{max-width:190mm;margin:14px auto;font-size:.85rem;line-height:1.6;color:#333;}
+  .btn{font:inherit;font-weight:600;cursor:pointer;background:var(--deep);color:#fff;
+       border:none;border-radius:999px;padding:9px 20px;}
+  .sheet{width:210mm;min-height:297mm;background:#fff;margin:10px auto;padding:18mm 20mm 16mm;
+         box-shadow:0 6px 30px rgba(0,0,0,.15);}
+  @media print{html,body{background:none;} .sheet{margin:0;box-shadow:none;} .no-print{display:none!important;}}
+
+  h1{font-family:'Fraunces',Georgia,serif;font-size:19pt;color:var(--deep);font-weight:600;
+     letter-spacing:.01em;line-height:1.15;}
+  .kicker{font-size:7.5pt;letter-spacing:.22em;text-transform:uppercase;color:var(--gold);
+          font-weight:700;margin-bottom:3mm;}
+  .head{border-bottom:.5mm solid var(--deep);padding-bottom:5mm;margin-bottom:7mm;}
+  .head .sub{font-size:9.4pt;color:var(--muted);margin-top:2mm;}
+
+  h2{font-family:'Inter',sans-serif;font-size:9pt;letter-spacing:.14em;text-transform:uppercase;
+     color:var(--emerald);font-weight:700;margin:6.5mm 0 2.5mm;}
+  p{margin-bottom:2.4mm;}
+  .parties{display:flex;gap:6mm;margin-bottom:2mm;}
+  .party{flex:1;border:.3mm solid var(--rule);border-radius:1.5mm;padding:4mm 4.5mm;}
+  .party .role{font-size:7.5pt;letter-spacing:.16em;text-transform:uppercase;
+               color:var(--gold);font-weight:700;margin-bottom:2.5mm;}
+  .party .who{font-weight:600;font-size:10.5pt;color:var(--deep);}
+  .fill{display:block;border-bottom:.25mm dotted #9a9384;min-height:5.2mm;margin-top:1.6mm;}
+  .fill span{font-size:7.6pt;color:var(--muted);}
+  .lbl{font-size:7.6pt;color:var(--muted);}
+
+  table{width:100%;border-collapse:collapse;margin:2.5mm 0 1mm;}
+  th,td{text-align:left;padding:1.8mm 2.5mm;border-bottom:.25mm solid var(--rule);font-size:9.6pt;}
+  th{font-size:7.6pt;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:600;}
+  td.num{text-align:right;font-variant-numeric:tabular-nums;}
+  tr.tot td{border-bottom:none;border-top:.4mm solid var(--deep);font-weight:700;color:var(--deep);}
+
+  .hand{border:.4mm solid var(--gold);background:#FDFAF2;border-radius:1.5mm;
+        padding:4.5mm 5mm;margin:4mm 0 2mm;}
+  .hand .t{font-weight:700;color:var(--deep);font-size:9.6pt;margin-bottom:1.5mm;}
+  .hand .q{font-style:italic;color:#3f463d;font-size:9.6pt;}
+  .hand .rule{border-bottom:.25mm dotted #9a9384;height:7mm;margin-top:3mm;}
+
+  .sign{display:flex;gap:8mm;margin-top:6mm;}
+  .sign div{flex:1;}
+  .sign .box{border:.3mm solid var(--rule);border-radius:1.5mm;height:30mm;margin-top:2mm;}
+  .foot{margin-top:7mm;border-top:.3mm solid var(--rule);padding-top:3.5mm;
+        font-size:7.8pt;line-height:1.5;color:var(--muted);}
+  b{font-weight:600;}
+</style>
+</head>
+<body>
+
+<div class="note no-print">
+  <p><b>Reconnaissance de dette — prêt sans intérêt de 1 500 €.</b> Imprimer en
+  <b>deux exemplaires originaux</b>, un pour chacun. Les zones pointillées se remplissent
+  à la main.</p>
+  <p style="margin-top:8px;"><b>Le passage encadré en doré doit être recopié à la main
+  par toi</b>, l'emprunteur : l'article 1376 du code civil exige que la somme figure en
+  toutes lettres <i>et</i> en chiffres, écrite de la main de celui qui s'engage. Sans
+  cette mention manuscrite, l'acte perd sa valeur de preuve.</p>
+  <p style="margin-top:10px;"><button class="btn" onclick="window.print()">Imprimer / PDF</button></p>
+</div>
+
+<div class="sheet">
+
+  <div class="head">
+    <div class="kicker">Acte sous signature privée</div>
+    <h1>Reconnaissance de dette</h1>
+    <div class="sub">Prêt d'argent entre particuliers, consenti à titre gratuit et sans intérêt</div>
+  </div>
+
+  <h2>Entre les soussignés</h2>
+  <div class="parties">
+    <div class="party">
+      <div class="role">Le prêteur</div>
+      <span class="fill"><span>Nom et prénom</span></span>
+      <span class="fill"><span>Né(e) le &nbsp;·&nbsp; à</span></span>
+      <span class="fill"><span>Adresse</span></span>
+      <span class="fill"><span>Code postal et ville</span></span>
+    </div>
+    <div class="party">
+      <div class="role">L'emprunteur</div>
+      <div class="who">Adel Hanifi</div>
+      <p style="font-size:9.4pt;margin:1.5mm 0 0;color:var(--muted);line-height:1.45;">
+        14 rue du Corps Franc Pommiès<br>
+        65500 Vic-en-Bigorre<br>
+        Entrepreneur individuel — AdhanBox<br>
+        SIRET 932 355 589 00023
+      </p>
+      <span class="fill" style="margin-top:2.5mm;"><span>Né le &nbsp;·&nbsp; à</span></span>
+    </div>
+  </div>
+
+  <h2>Article 1 — Objet du prêt</h2>
+  <p>Le prêteur remet à l'emprunteur, qui le reconnaît et l'accepte, la somme de
+  <b>mille cinq cents euros (1 500,00 €)</b>. L'emprunteur reconnaît devoir cette somme
+  au prêteur et s'engage à la lui restituer dans les conditions ci-après.</p>
+  <p>Cette somme est destinée à financer l'achat de composants et d'emballages pour
+  l'activité AdhanBox exercée par l'emprunteur.</p>
+
+  <h2>Article 2 — Absence d'intérêt</h2>
+  <p>Le présent prêt est consenti <b>à titre entièrement gratuit</b>. Il ne produit
+  <b>aucun intérêt</b>, aucune indemnité, aucune commission ni rémunération d'aucune
+  sorte. L'emprunteur ne devra restituer que le montant exact prêté, soit 1 500,00 €.</p>
+
+  <h2>Article 3 — Modalités de remboursement</h2>
+  <p>Le remboursement s'effectuera en <b>six mensualités égales de 250,00 €</b>, par
+  virement bancaire sur le compte du prêteur, selon l'échéancier suivant :</p>
+  <table>
+    <tr><th>Échéance</th><th>Date convenue</th><th class="num">Montant</th></tr>
+    <tr><td>1<sup>re</sup></td><td></td><td class="num">250,00 €</td></tr>
+    <tr><td>2<sup>e</sup></td><td></td><td class="num">250,00 €</td></tr>
+    <tr><td>3<sup>e</sup></td><td></td><td class="num">250,00 €</td></tr>
+    <tr><td>4<sup>e</sup></td><td></td><td class="num">250,00 €</td></tr>
+    <tr><td>5<sup>e</sup></td><td></td><td class="num">250,00 €</td></tr>
+    <tr><td>6<sup>e</sup></td><td></td><td class="num">250,00 €</td></tr>
+    <tr class="tot"><td>Total</td><td></td><td class="num">1 500,00 €</td></tr>
+  </table>
+
+  <h2>Article 4 — Remboursement anticipé</h2>
+  <p>L'emprunteur pourra se libérer par anticipation, en tout ou partie, à tout moment
+  et <b>sans pénalité ni indemnité</b>.</p>
+
+  <h2>Article 5 — Bonne foi</h2>
+  <p>Les parties conviennent qu'en cas de difficulté de l'emprunteur, elles se
+  rapprocheront pour convenir d'un nouvel échéancier avant toute autre démarche.</p>
+
+  <div class="hand">
+    <div class="t">À recopier intégralement à la main par l'emprunteur</div>
+    <div class="q">« Je reconnais avoir reçu à titre de prêt la somme de mille cinq cents
+      euros (1 500,00 €), sans aucun intérêt, et m'engage à la rembourser selon
+      l'échéancier ci-dessus. »</div>
+    <div class="rule"></div>
+    <div class="rule"></div>
+    <div class="rule"></div>
+  </div>
+
+  <div class="sign">
+    <div>
+      <span class="lbl">Fait à</span><span class="fill"></span>
+      <span class="lbl">Le</span><span class="fill"></span>
+    </div>
+    <div><span class="lbl">En deux exemplaires originaux, un pour chaque partie.</span></div>
+  </div>
+
+  <div class="sign">
+    <div>
+      <span class="lbl">Signature du prêteur, précédée de « Lu et approuvé »</span>
+      <div class="box"></div>
+    </div>
+    <div>
+      <span class="lbl">Signature de l'emprunteur, précédée de « Lu et approuvé »</span>
+      <div class="box"></div>
+    </div>
+  </div>
+
+  <div class="foot">
+    <b>Pourquoi la mention manuscrite.</b> L'article 1376 du code civil impose que l'acte
+    par lequel une seule partie s'engage à payer une somme comporte la signature de celui
+    qui s'engage et la mention, <b>écrite de sa main</b>, de la somme en toutes lettres et
+    en chiffres. En cas de différence entre les deux, c'est la somme en lettres qui fait foi.<br>
+    <b>Déclaration fiscale.</b> Un prêt entre particuliers n'est à déclarer à
+    l'administration fiscale (formulaire n° 2062) qu'au-delà de 5 000 €. Ce prêt de
+    1 500 € n'a donc pas à être déclaré. Conserver néanmoins la preuve du virement.
+  </div>
+
+</div>
+</body>
+</html>
