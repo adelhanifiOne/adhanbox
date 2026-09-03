@@ -19,6 +19,9 @@ const BACKEND = process.env.BACKEND_URL || 'https://adhanbox-commande.vercel.app
 // 'AdhanBox <onboarding@resend.dev>' (n'envoie qu'à ta propre adresse).
 const FROM_EMAIL = process.env.FROM_EMAIL || 'AdhanBox <commande@adhanbox.fr>';
 
+const escHtml = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) =>
+  ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
 const euros = (cents) =>
   (cents / 100).toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' });
 
@@ -124,7 +127,7 @@ function clientEmailHtml({ firstName, ref, config, amount, shipTo }) {
 }
 
 // ── Email vendeur : notification nouvelle commande ──
-function sellerEmailHtml({ ref, config, amount, name, email, phone, shipTo, piId, sessionId }) {
+function sellerEmailHtml({ ref, config, amount, name, email, phone, shipTo, piId, sessionId, giftMsg }) {
   const li = (k, v) => v ? `<li><b>${k} :</b> ${v}</li>` : '';
   return `
 <div style="font-family:Arial,sans-serif;font-size:15px;color:#232323;line-height:1.7;">
@@ -132,6 +135,7 @@ function sellerEmailHtml({ ref, config, amount, name, email, phone, shipTo, piId
   <ul style="padding-left:18px;">
     ${li('Commande', 'N° ' + ref)}
     ${li('Configuration', '<span style="color:#0C5B45;font-weight:700;">' + config + '</span>')}
+    ${li('✍️ Message pour la carte', giftMsg ? '<span style="background:#FBF3E3;padding:2px 8px;border-radius:6px;">« ' + escHtml(giftMsg) + ' »</span>' : '')}
     ${li('Montant', amount)}
     ${li('Client', name)}
     ${li('Email', email)}
@@ -223,6 +227,8 @@ export default async function handler(req, res) {
   const piId = typeof session.payment_intent === 'string' ? session.payment_intent : '';
   const ref = (piId || session.id).slice(-8).toUpperCase();
   const config = session.metadata?.config || 'Configuration standard';
+  // Message cadeau saisi sur la page de paiement (champ facultatif).
+  const giftMsg = ((session.custom_fields || []).find((f) => f.key === 'message_carte')?.text?.value || '').trim();
   const amount = euros(session.amount_total ?? 0);
   const firstName = (details.name || '').trim().split(/\s+/)[0] || '';
   const shipToLines = shipping ? addressLines(shipping.name || details.name, shipping.address) : [];
@@ -261,7 +267,7 @@ export default async function handler(req, res) {
       to: NOTIF_EMAIL,
       subject: `🎉 Nouvelle commande — ${config} — ${amount}`,
       html: sellerEmailHtml({
-        ref, config, amount,
+        ref, config, amount, giftMsg,
         name: details.name, email: details.email, phone: details.phone,
         shipTo, piId, sessionId: session.id,
       }),
@@ -269,6 +275,7 @@ export default async function handler(req, res) {
         `Nouvelle commande AdhanBox`,
         `Commande : N° ${ref}`,
         `Configuration : ${config}`,
+        ...(giftMsg ? [`Message pour la carte : « ${giftMsg} »`] : []),
         `Montant : ${amount}`,
         `Client : ${details.name || '-'} · ${details.email || '-'} · ${details.phone || '-'}`,
         ...(shipToLines.length ? ['Livraison :', ...shipToLines] : []),

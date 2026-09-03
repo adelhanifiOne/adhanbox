@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AdhanBox — L'adhan chez vous, comme à la mosquée · Commander</title>
-  <meta name="description" content="AdhanBox : boîtier d'appel à la prière artisanal et connecté. La lumière s'éveille à travers les arches et l'adhan de votre mosquée résonne. Commandez — paiement en 3x sans frais, livraison offerte.">
+  <meta name="description" content="AdhanBox, l'objet du foyer musulman : l'adhan de votre mosquée, le Coran et les azkar, une lumière d'ambiance — pilotés depuis votre téléphone. Fait main en France. Commandez — paiement en 3x sans frais, livraison offerte.">
   <meta name="theme-color" content="#0C5B45">
   <link rel="canonical" href="https://adhanbox.fr/">
   <meta name="robots" content="index, follow, max-image-preview:large">
@@ -14,7 +14,7 @@
   <meta property="og:site_name" content="AdhanBox">
   <meta property="og:url" content="https://adhanbox.fr/">
   <meta property="og:title" content="AdhanBox — L'adhan chez vous, comme à la mosquée">
-  <meta property="og:description" content="Boîtier d'appel à la prière artisanal et connecté. Commande en ligne — paiement 3x sans frais, livraison offerte en France.">
+  <meta property="og:description" content="AdhanBox, l'objet du foyer musulman : l'adhan de votre mosquée, le Coran et les azkar, une lumière d'ambiance — pilotés depuis votre téléphone. Fait main en France. Paiement 3x sans frais, livraison offerte en France.">
   <meta property="og:locale" content="fr_FR">
   <meta property="og:image" content="https://adhanbox.fr/og-adhanbox.jpg">
   <meta property="og:image:width" content="1200">
@@ -22,7 +22,7 @@
   <meta property="og:image:alt" content="Boîtier AdhanBox lumineux avec motifs de mosquée sculptés">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="AdhanBox — L'adhan chez vous, comme à la mosquée">
-  <meta name="twitter:description" content="Boîtier d'appel à la prière artisanal et connecté. Commande en ligne — 3x sans frais, livraison offerte.">
+  <meta name="twitter:description" content="AdhanBox, l'objet du foyer musulman : l'adhan de votre mosquée, le Coran et les azkar, une lumière d'ambiance — pilotés depuis votre téléphone. Fait main en France.">
   <meta name="twitter:image" content="https://adhanbox.fr/og-adhanbox.jpg">
   <link rel="icon" type="image/png" href="logo-app.png">
   <script type="application/ld+json">
@@ -59,7 +59,7 @@
         "@type": "Product",
         "name": "AdhanBox",
         "image": "https://adhanbox.fr/og-adhanbox.jpg",
-        "description": "Boîtier d'appel à la prière connecté : horaires de prière précis (compatible Mawaqit), adhan automatique, Coran (114 sourates, 4 récitateurs) et azkar, lumière d'ambiance pilotée par l'application iPhone et Android. Fabriqué à la main en France.",
+        "description": "Objet connecté du foyer musulman : horaires de prière précis (compatible Mawaqit), adhan automatique, Coran (114 sourates, 4 récitateurs) et azkar, lumière d'ambiance pilotée par l'application iPhone et Android. Fabriqué à la main en France.",
         "brand": { "@type": "Brand", "name": "AdhanBox" },
         "category": "Objet connecté religieux",
         "countryOfOrigin": "FR",
@@ -327,6 +327,13 @@
     .foot-col a:hover { color:#fff; }
     .foot-base { margin-top:30px; padding-top:18px; border-top:1px solid rgba(247,238,220,.15); display:flex; flex-wrap:wrap; gap:10px 30px; justify-content:space-between; }
     .bismillah { font-family:var(--font-arabic); color:var(--gold); }
+    /* ── Offrir ── */
+    .gift-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:22px; margin-top:34px; }
+    .gift-grid .g { background:var(--card,#fff); border:1px solid rgba(0,0,0,.08); border-radius:16px; padding:24px 26px; }
+    .gift-grid .g .ic { width:44px; height:44px; border-radius:12px; background:var(--gold-soft); color:var(--gold-deep); display:grid; place-items:center; margin-bottom:14px; }
+    .gift-grid .g h3 { font-size:1.05rem; margin-bottom:.4rem; }
+    .gift-grid .g p { color:var(--muted); font-size:.95rem; line-height:1.6; margin:0; }
+    @media (max-width:760px){ .gift-grid { grid-template-columns:1fr; } }
   </style>
 </head>
 <body>
@@ -353,8 +360,9 @@
       <h1>L'adhan chez vous, <em>comme à la mosquée</em></h1>
       <p class="sub">
         À chaque prière, la lumière s'éveille doucement à travers les arches
-        et l'adhan de <strong>votre mosquée</strong> s'élève — un rappel paisible
-        au cœur du foyer. Façonné à la main en France.
+        et l'adhan de <strong>votre mosquée</strong> s'élève. Entre deux prières,
+        le Coran et les azkar, d'un geste depuis votre téléphone. Un objet du foyer,
+        façonné à la main en France.
       </p>
       <div class="hero-ctas">
         <a href="#precommande" class="btn btn-emerald btn-big">Commander — 95&nbsp;€</a>
@@ -492,6 +500,37 @@
     <div id="temoignages-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:22px;margin-top:34px;"></div>
     <div class="center" style="margin-top:30px;">
       <a href="avis.html" class="btn btn-outline">Voir tous les avis &amp; laisser le vôtre</a>
+    </div>
+  </div>
+</section>
+
+<!-- ── OFFRIR ── -->
+<section class="block" id="offrir">
+  <div class="container">
+    <div class="center">
+      <p class="eyebrow">Offrir</p>
+      <h2>Le cadeau que l'on est <em>fier</em> d'offrir</h2>
+      <p class="lead">Mariage, naissance, nouvelle maison, retour de Omra : un objet fait main, avec une carte signée et votre message. Tout est prêt à offrir en sortant du carton.</p>
+    </div>
+    <div class="gift-grid">
+      <div class="g">
+        <div class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></div>
+        <h3>Une carte signée à la main</h3>
+        <p>Chaque boîtier part avec une carte signée par celui qui l'a assemblé, glissée sur le dessus du colis.</p>
+      </div>
+      <div class="g">
+        <div class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>
+        <h3>Votre message, écrit sur la carte</h3>
+        <p>Au moment du paiement, un champ « Message pour la carte » : nous l'écrivons à la main, mot pour mot.</p>
+      </div>
+      <div class="g">
+        <div class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20 12v9H4v-9"/><path d="M2 7h20v5H2z"/><path d="M12 22V7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg></div>
+        <h3>Prêt à offrir</h3>
+        <p>Emballage soigné, notice et alimentation incluses, livraison suivie offerte en France. Vous pouvez faire livrer directement chez la personne.</p>
+      </div>
+    </div>
+    <div class="center" style="margin-top:30px;">
+      <a href="personnaliser.html" class="btn btn-gold btn-big">Offrir une AdhanBox</a>
     </div>
   </div>
 </section>
