@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<title>AdhanBox — Habillage cube 130 mm</title>
+<title>AdhanBox — Habillage cube 130 mm (planche A3)</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=Amiri:wght@400;700&display=swap" rel="stylesheet">
@@ -16,7 +16,7 @@
   body{font-family:'Inter',sans-serif;color:var(--ink);
        -webkit-print-color-adjust:exact;print-color-adjust:exact;}
 
-  @page{size:A4;margin:0;}
+  @page{size:A3;margin:0;}
 
   .note{max-width:190mm;margin:14px auto;font-size:.85rem;line-height:1.6;color:#333;}
   .note b{color:var(--emerald-deep);}
@@ -24,10 +24,18 @@
        color:#fff;border:none;border-radius:999px;padding:9px 20px;}
 
   .sheet{
-    width:210mm;height:297mm;background:#fff;margin:10px auto;
-    padding:18.5mm 40mm;display:flex;flex-direction:column;gap:0;
+    width:297mm;height:420mm;background:#fff;margin:10px auto;position:relative;
+    padding:15mm 18.5mm;display:grid;gap:0;
+    grid-template-columns:130mm 130mm;grid-template-rows:130mm 130mm 130mm;
     box-shadow:0 6px 30px rgba(0,0,0,.15);
   }
+  /* Panneaux jointifs : les reperes d'angle tomberaient dans le voisin.
+     On les remplace par des traits de coupe traverses dans les marges. */
+  .slot .mk{display:none;}
+  .slot:nth-child(even) .face{left:auto;right:-11mm;transform:none;}
+  .slot:nth-child(odd)  .face{left:-11mm;}
+  .cut{position:absolute;background:#000;}
+  .cut.v{width:.2mm;height:5mm;} .cut.h{height:.2mm;width:5mm;}
   @media print{
     html,body{background:none;}
     .sheet{margin:0;box-shadow:none;page-break-after:always;}
@@ -165,7 +173,7 @@
 <body>
 
 <div class="note no-print">
-  <p><b>Habillage du cube 130 × 130 × 130 mm</b> — 6 panneaux, 2 par feuille A4.
+  <p><b>Habillage du cube 130 × 130 × 130 mm</b> — les 6 panneaux sur une seule feuille A3.
   Imprimer à <b>100 % (échelle réelle, surtout pas « ajuster à la page »)</b>, marges
   aucune, arrière-plans activés. Papier mat 120-160 g. Découper aux repères d'angle,
   coller à la colle en bâton ou en spray.</p>
@@ -179,7 +187,6 @@
   <p style="margin-top:10px;"><button class="btn" onclick="window.print()">Imprimer / PDF</button></p>
 </div>
 
-<!-- ════════ FEUILLE 1 ════════ -->
 <div class="sheet">
 
   <div class="slot"><span class="face">DESSUS — coller avec le bord CE / QR tourné vers la face avant</span>
@@ -230,10 +237,6 @@
     </div>
   </div>
 
-</div>
-
-<!-- ════════ FEUILLE 2 ════════ -->
-<div class="sheet">
 
   <div class="slot"><span class="face">FACE ARRIÈRE</span>
     <i class="mk h tl-h"></i><i class="mk v tl-v"></i><i class="mk h tr-h"></i><i class="mk v tr-v"></i>
@@ -274,10 +277,6 @@
     </div>
   </div>
 
-</div>
-
-<!-- ════════ FEUILLE 3 ════════ -->
-<div class="sheet">
 
   <div class="slot"><span class="face">CÔTÉ DROIT</span>
     <i class="mk h tl-h"></i><i class="mk v tl-v"></i><i class="mk h tr-h"></i><i class="mk v tr-v"></i>
@@ -315,7 +314,20 @@
     </div>
   </div>
 
+    <i class="cut v" style="left:18.5mm;top:8mm"></i>
+  <i class="cut v" style="left:18.5mm;top:407mm"></i>
+  <i class="cut v" style="left:148.5mm;top:8mm"></i>
+  <i class="cut v" style="left:148.5mm;top:407mm"></i>
+  <i class="cut v" style="left:278.5mm;top:8mm"></i>
+  <i class="cut v" style="left:278.5mm;top:407mm"></i>
+  <i class="cut h" style="top:15mm;left:11mm"></i>
+  <i class="cut h" style="top:15mm;left:281mm"></i>
+  <i class="cut h" style="top:145mm;left:11mm"></i>
+  <i class="cut h" style="top:145mm;left:281mm"></i>
+  <i class="cut h" style="top:275mm;left:11mm"></i>
+  <i class="cut h" style="top:275mm;left:281mm"></i>
+  <i class="cut h" style="top:405mm;left:11mm"></i>
+  <i class="cut h" style="top:405mm;left:281mm"></i>
 </div>
-
 </body>
 </html>
