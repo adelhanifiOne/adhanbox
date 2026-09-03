@@ -7,11 +7,13 @@ Bonjour,
 Je suis passé chez vous hier soir pour des impressions. J'aurais besoin d'un
 devis pour une petite série, avec les trois fichiers en pièce jointe.
 
-  1) HABILLAGE DE BOÎTE  —  3 jeux complets
-     Fichier : 1_habillage-cube-6-faces-A3.pdf
-     3 feuilles A3, quadri recto seul, papier mat 120 à 170 g
-     Chaque feuille porte les 6 faces, à découper en carrés de 130 × 130 mm
-     (traits de coupe sur le fichier, 3 mm de fond perdu)
+  1) HABILLAGE DE BOÎTE  —  de quoi habiller 3 boîtes
+     Fichier : 1_habillage-partiel-A3.pdf
+     2 feuilles A3, quadri recto seul, papier mat 120 à 170 g
+       page 1 : 6 panneaux à découper en carrés de 130 × 130 mm
+                (une rangée = une boîte), 3 mm de fond perdu
+       page 2 : 24 stickers ronds Ø 60 mm à découper
+     Traits de coupe sur le fichier
 
   2) NOTICE  —  4 feuilles, soit 12 notices
      Fichier : 3_notice-A3-3-par-feuille.pdf
