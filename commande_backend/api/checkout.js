@@ -91,8 +91,29 @@ export default async function handler(req, res) {
           },
         },
       }],
-      shipping_address_collection: { allowed_countries: ['FR', 'BE', 'CH', 'LU', 'MC'] },
+      // France metropolitaine + Monaco uniquement : c'est ce que promettent les
+      // CGV (art. 7, Colissimo suivi, livraison offerte). Ne pas rouvrir la
+      // Suisse sans ajouter des frais de port ET la declaration douaniere :
+      // hors union douaniere, le colis coute bien plus cher et le client peut
+      // avoir des frais a payer a la reception.
+      shipping_address_collection: { allowed_countries: ['FR', 'MC'] },
       phone_number_collection: { enabled: true },
+      // Facture obligatoire en vente a distance. Stripe la genere et l'envoie
+      // au client ; elle est aussi telechargeable depuis le dashboard.
+      invoice_creation: {
+        enabled: true,
+        invoice_data: {
+          description: `AdhanBox — ${configLabel}`,
+          footer: [
+            'TVA non applicable, article 293 B du CGI (franchise en base de TVA).',
+            'Adel Hanifi — AdhanBox, 14 rue du Corps Franc Pommiès, 65500 Vic-en-Bigorre.',
+            'SIRET 932 355 589 00023 — contact@adhanbox.fr — adhanbox.fr',
+            'Livraison offerte en France métropolitaine par Colissimo suivi.',
+          ].join('\n'),
+          rendering_options: { amount_tax_display: 'exclude_tax' },
+          metadata,
+        },
+      },
       // Cadeau : message facultatif, recopie a la main sur la carte signee.
       // Lu par le webhook (session.custom_fields) et transmis au vendeur.
       custom_fields: [{
