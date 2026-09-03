@@ -55,47 +55,57 @@ orientation : ils naissent en pointe sur la paroi et grossissent à 45° vers le
 bas, donc **aucun support n'est nécessaire**. Vérifié par balayage : 0 point
 non soutenu.
 
-## `cercles_faces_courtes.py`
+## `cercles_support_led.py`
 
-Écart entre l'arche et le petit cercle, sur les **deux faces courtes** du
-boîtier. Constaté à l'impression le 03/09/2026 : la paroi entre les deux était
-trop fine et sortait mal.
+Écart entre l'arche et le petit cercle, sur les **deux faces courtes** de
+`support_led`. Constaté à l'impression le 03/09/2026 : la paroi entre les deux
+était trop fine et sortait mal.
 
-**Le diagnostic** — les 4 arches (12 mm) et les 3 cercles (Ø5) sont dessinés
-identiques sur les quatre faces. Mais la face courte fait 95,2 mm contre
-106 mm : le motif y est serré au pas de **19 mm au lieu de 21**.
+**Deux pièces portent le même motif, ne pas se tromper de cible.**
+`AdhanBox_Fusion` est la coque extérieure (corps racine), souvent **masquée** ;
+`support_led / AdhanBox_Lid.step` est le support intérieur, **visible**. Elles
+s'emboîtent : les ouvertures du support sont dessinées ~1 mm plus grandes que
+celles de la coque, pour que ce soit la coque qui dessine la forme vue. Mesurer
+la mauvaise des deux fait perdre beaucoup de temps — ça m'est arrivé.
+
+**Le diagnostic** — sur `support_led`, 4 arches de 14 mm et 3 cercles Ø7. La
+face longue les espace au pas de 21 mm, la face courte au pas de 19 mm.
 
 | | face courte | face longue |
 |---|---|---|
-| largeur | 95,2 mm | 106 mm |
 | pas du motif | 19 mm | 21 mm |
-| écart arche/cercle **avant** | **2,03 mm** | 2,94 mm |
-| écart arche/cercle **après** | **3,01 mm** | 2,94 mm (inchangé) |
+| matière arche/cercle **avant** | **0,329 mm** | 1,118 mm |
+| matière arche/cercle **après** | **0,961 mm** | 1,118 mm (inchangé) |
 
-**Pourquoi on n'écarte pas le motif** — les angles portent un congé **R8 sur
-toute la hauteur** (centres 8,8 / 87,8 / 87,98 / 8,98). La partie *plate* de la
-face courte ne fait donc que **79 mm**. Le motif espacé comme sur les faces
-longues en occuperait 75 : il ne resterait que 2 mm jusqu'au congé.
+0,33 mm, c'est moins d'un trait de buse.
 
-**Le correctif** — les 3 cercles des faces courtes passent de **Ø5 à Ø3**. Les
-arches, motif signature, ne bougent pas ; les cercles des faces longues non
-plus. La face courte cesse d'être le point faible.
+**Le correctif** — la pièce vient d'un STEP importé : on ne peut pas y rétrécir
+un trou, il faut **ajouter** de la matière. Le script pose une couronne
+(extérieur Ø7, intérieur Ø5,5) dans chacun des 3 cercles des deux faces
+courtes, extrudée en jonction sur les 1,2 mm d'épaisseur de paroi. Les faces
+longues ne sont pas touchées.
 
-`Esquisse4` pilote les deux faces courtes (plan XZ), `Esquisse6` les deux faces
-longues (plan YZ). Les deux esquisses sont **libres** — ni cote ni contrainte —
-donc le rayon se règle directement par l'API.
+**Le réglage du diamètre** — la matière restante suit le diamètre choisi :
 
-**Valeurs de contrôle** (mesurées par `measureMinimumDistance`, 03/09/2026)
+| diamètre | matière | vs la face longue (1,118 mm) |
+|---|---|---|
+| Ø5,0 | 1,250 mm | au-dessus |
+| Ø5,2 | ≈ 1,13 mm | à égalité |
+| **Ø5,5** *(retenu)* | **0,961 mm** | en dessous de 14 % |
+
+Si une impression montre encore un défaut, descendre `R_INT` dans le script.
+
+**Valeurs de contrôle** (03/09/2026)
 
 | contrôle | valeur |
 |---|---|
-| paroi la plus fine, face courte | 3,013 mm |
-| paroi la plus fine, face longue | 2,940 mm |
-| diamètre des cercles, faces courtes | 3,0 mm |
-| diamètre des cercles, faces longues | 5,0 mm |
+| matière la plus fine, faces courtes | 0,961 mm |
+| matière la plus fine, face longue | 1,118 mm |
+| cercles, faces courtes | Ø5,5 |
+| cercles, faces longues | Ø7,0 |
+| fonctions ajoutées | `reduction_cercles_mur_Y0`, `reduction_cercles_mur_Y99` |
 
-Le script est **rejouable** : au second passage il annonce « 0 cercle ramené »
-et se contente de remesurer.
+Le script est **rejouable** : au second passage il annonce « déjà présent ».
 
 ## Et surtout
 
