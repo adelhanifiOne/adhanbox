@@ -24,7 +24,7 @@
        color:#fff;border:none;border-radius:999px;padding:9px 20px;}
 
   .sheet{
-    width:210mm;height:297mm;background:#fff;margin:10px auto;
+    width:210mm;height:297mm;background:#fff;margin:10px auto;position:relative;
     padding:18.5mm 40mm;display:flex;flex-direction:column;gap:0;
     box-shadow:0 6px 30px rgba(0,0,0,.15);
   }
@@ -35,7 +35,9 @@
   }
 
   /* ── Un emplacement : 130 x 130 mm + repères de coupe ── */
-  .slot{position:relative;width:130mm;height:130mm;}
+  .slot{position:relative;width:130mm;height:130mm;z-index:1;}
+  /* Fond perdu : la creme deborde de 3 mm autour du bloc de panneaux. */
+  .bleed{position:absolute;background:var(--cream);z-index:0;}
   /* Nom de la face, imprimé dans la marge sous le panneau : visible sur la
      feuille, hors du carré de 130 mm, donc absent une fois découpé. */
   .face{position:absolute;top:0;left:-14mm;height:130mm;display:flex;
@@ -181,7 +183,8 @@
 
 <!-- ════════ FEUILLE 1 ════════ -->
 <div class="sheet">
-
+  <div class="bleed" style="left:37mm;top:15.5mm;width:136mm;height:266mm"></div>
+  
   <div class="slot"><span class="face">DESSUS — coller avec le bord CE / QR tourné vers la face avant</span>
     <i class="mk h tl-h"></i><i class="mk v tl-v"></i><i class="mk h tr-h"></i><i class="mk v tr-v"></i>
     <i class="mk h bl-h"></i><i class="mk v bl-v"></i><i class="mk h br-h"></i><i class="mk v br-v"></i>
@@ -234,7 +237,8 @@
 
 <!-- ════════ FEUILLE 2 ════════ -->
 <div class="sheet">
-
+  <div class="bleed" style="left:37mm;top:15.5mm;width:136mm;height:266mm"></div>
+  
   <div class="slot"><span class="face">FACE ARRIÈRE</span>
     <i class="mk h tl-h"></i><i class="mk v tl-v"></i><i class="mk h tr-h"></i><i class="mk v tr-v"></i>
     <i class="mk h bl-h"></i><i class="mk v bl-v"></i><i class="mk h br-h"></i><i class="mk v br-v"></i>
@@ -278,7 +282,8 @@
 
 <!-- ════════ FEUILLE 3 ════════ -->
 <div class="sheet">
-
+  <div class="bleed" style="left:37mm;top:15.5mm;width:136mm;height:266mm"></div>
+  
   <div class="slot"><span class="face">CÔTÉ DROIT</span>
     <i class="mk h tl-h"></i><i class="mk v tl-v"></i><i class="mk h tr-h"></i><i class="mk v tr-v"></i>
     <i class="mk h bl-h"></i><i class="mk v bl-v"></i><i class="mk h br-h"></i><i class="mk v br-v"></i>

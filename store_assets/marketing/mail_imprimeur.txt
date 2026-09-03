@@ -1,0 +1,82 @@
+Objet : Demande de devis — 3 imprimés pour AdhanBox (habillage boîte, carte, notice)
+
+---
+
+Bonjour,
+
+Je fabrique AdhanBox, un petit boîtier connecté assemblé à la main dans les
+Hautes-Pyrénées. J'aimerais faire imprimer les trois éléments qui accompagnent
+chaque appareil et j'ai besoin d'un devis.
+
+Les fichiers sont en pièce jointe, prêts à l'impression, en PDF vectoriel RVB
+(profil sRGB). Dites-moi si vous préférez du CMJN, je vous les refais.
+
+Merci de me chiffrer pour 25, 50 et 100 exemplaires, afin que je puisse choisir
+le palier le plus juste.
+
+═══════════════════════════════════════════════════════════════════════
+1) HABILLAGE DE BOÎTE — 6 panneaux à coller sur un cube de 130 mm
+═══════════════════════════════════════════════════════════════════════
+  Fichier principal  1_habillage-cube-6-faces-A3.pdf  (1 page A3, les 6 faces)
+  Variante fournie   1b_habillage-cube-6-faces-A4.pdf (3 pages A4, 2 faces/page)
+  Format fini        6 carrés de 130 × 130 mm
+  Impression         quadri, recto seul
+  Support            papier mat 120 à 170 g
+  Fond perdu         3 mm tout autour du bloc de panneaux
+  Façonnage          découpe en 6 carrés, traits de coupe sur le fichier
+  Quantité           1 jeu de 6 panneaux par boîte
+
+  À noter : les panneaux sont jointifs, une seule coupe sert deux panneaux.
+  Les noms de face (DESSUS, FACE AVANT, etc.) sont imprimés dans la marge et
+  disparaissent à la découpe.
+
+═══════════════════════════════════════════════════════════════════════
+2) CARTE DE REMERCIEMENT — format carte de visite
+═══════════════════════════════════════════════════════════════════════
+  Fichier principal  2_carte-remerciement-85x55-fond-perdu.pdf
+                     (2 pages : page 1 = recto, page 2 = verso)
+  Variante fournie   2b_carte-remerciement-planche-A4-10-poses.pdf
+  Format fini        85 × 55 mm
+  Format du fichier  91 × 61 mm (fond perdu de 3 mm sur les 4 côtés)
+  Impression         quadri recto verso
+  Support            300 g mat
+  Façonnage          coupe droite
+
+  Le recto est un aplat vert dégradé, le verso un fond crème : le repérage
+  recto/verso compte, merci d'y être attentif.
+
+═══════════════════════════════════════════════════════════════════════
+3) MANUEL D'UTILISATION — dépliant un pli
+═══════════════════════════════════════════════════════════════════════
+  Fichier            3_manuel-utilisation-120x120-un-pli.pdf
+                     (2 pages A4 paysage, recto puis verso)
+  Format ouvert      240 × 120 mm
+  Format fini        120 × 120 mm, un seul pli au centre
+  Impression         quadri recto verso, retournement bord court
+  Support            papier 120 à 170 g
+  Fond perdu         aucun (fond crème sur blanc)
+  Façonnage          coupe puis pliage au centre
+
+  Le repère de pli est tracé en pointillés sur le fichier, avec les traits de
+  coupe aux quatre angles.
+
+═══════════════════════════════════════════════════════════════════════
+
+Couleurs de la charte, si vous avez besoin de les caler :
+  vert       #0C5B45
+  vert foncé #08402F
+  doré       #C9A227
+  crème      #FAF6EE
+
+Pouvez-vous me confirmer les délais de fabrication et de livraison, ainsi que
+la possibilité d'un bon à tirer avant lancement ?
+
+Je reste disponible pour tout complément.
+
+Bien cordialement,
+
+Adel Hanifi
+AdhanBox
+14 rue du Corps Franc Pommiès — 65500 Vic-en-Bigorre
+contact@adhanbox.fr — adhanbox.fr
+SIRET 932 355 589 00023

@@ -43,7 +43,9 @@
   }
 
   /* ── Un emplacement : 130 x 130 mm + repères de coupe ── */
-  .slot{position:relative;width:130mm;height:130mm;}
+  .slot{position:relative;width:130mm;height:130mm;z-index:1;}
+  /* Fond perdu : la creme deborde de 3 mm autour du bloc de panneaux. */
+  .bleed{position:absolute;background:var(--cream);z-index:0;}
   /* Nom de la face, imprimé dans la marge sous le panneau : visible sur la
      feuille, hors du carré de 130 mm, donc absent une fois découpé. */
   .face{position:absolute;top:0;left:-14mm;height:130mm;display:flex;
@@ -188,7 +190,8 @@
 </div>
 
 <div class="sheet">
-
+  <div class="bleed" style="left:15.5mm;top:12mm;width:266mm;height:396mm"></div>
+  
   <div class="slot"><span class="face">DESSUS — coller avec le bord CE / QR tourné vers la face avant</span>
     <i class="mk h tl-h"></i><i class="mk v tl-v"></i><i class="mk h tr-h"></i><i class="mk v tr-v"></i>
     <i class="mk h bl-h"></i><i class="mk v bl-v"></i><i class="mk h br-h"></i><i class="mk v br-v"></i>
