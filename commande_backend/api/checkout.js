@@ -30,9 +30,10 @@ const ALLOWED_ORIGINS = [
 ];
 
 const SITE = process.env.SITE_URL || 'https://adhanbox.fr';
-// Prix en centimes — offre de lancement 95 €. Modifiable sans toucher au code
-// via la variable d'environnement AMOUNT_CENTS (puis redéployer).
-const AMOUNT_CENTS = parseInt(process.env.AMOUNT_CENTS || '9500', 10);
+// Prix en centimes — 119 € depuis le 04/09/2026 (fin de l'offre de lancement
+// à 95 €). Modifiable sans toucher au code via la variable d'environnement
+// AMOUNT_CENTS (puis redéployer).
+const AMOUNT_CENTS = parseInt(process.env.AMOUNT_CENTS || '11900', 10);
 // Participation demandee pour la livraison a domicile (le relais est offert).
 const DOMICILE_CENTS = parseInt(process.env.DOMICILE_CENTS || '500', 10);
 
