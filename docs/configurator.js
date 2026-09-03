@@ -363,6 +363,107 @@
     //     secours automatique : Payment Link direct (client_reference_id).
     const CHECKOUT_BACKEND = 'https://adhanbox-commande.vercel.app';
     const STRIPE_PAYMENT_LINK = 'https://buy.stripe.com/00w00kg6P7sb5Woe7LfjG01';
+    const PRICE_EUR = 95;
+    const DOMICILE_EUR = 5;
+
+    // ─── Livraison : point relais (offert) ou domicile (+5 €) ───
+    // La carte est le composant Boxtal (docs/vendor/boxtal-map.js). Son jeton
+    // vient du backend (/api/map-token) qui garde les cles Boxtal ; si le
+    // backend repond { enabled:false }, l'option relais disparait et la page
+    // se comporte comme avant : domicile uniquement.
+    const deliv = { mode: 'relais', relais: null, token: null, networks: ['MONR_NETWORK'], map: null, enabled: null };
+    const $ = (id) => document.getElementById(id);
+    const delivBtns = document.querySelectorAll('[data-livraison]');
+
+    function setDeliveryMode(mode) {
+      deliv.mode = mode;
+      delivBtns.forEach((b) => b.classList.toggle('active', b.dataset.livraison === mode));
+      $('relay-block').hidden = mode !== 'relais';
+      $('domicile-note').hidden = mode !== 'domicile';
+      updateQuoteLink();
+    }
+    delivBtns.forEach((b) => b.addEventListener('click', () => setDeliveryMode(b.dataset.livraison)));
+
+    function disableRelais(reason) {
+      deliv.enabled = false;
+      $('deliv-relais').hidden = true;
+      setDeliveryMode('domicile');
+      $('domicile-note').textContent = 'Colissimo suivi, remis à votre porte en 2 à 3 jours ouvrés. Livraison offerte.';
+      if (reason) console.warn('Point relais désactivé :', reason);
+    }
+
+    // Jeton de carte : demande au premier besoin, reutilise ensuite (il vit 60 min).
+    function getMapToken() {
+      if (deliv.token) return Promise.resolve(deliv.token);
+      return fetch(CHECKOUT_BACKEND + '/api/map-token')
+        .then((r) => r.json())
+        .then((d) => {
+          if (!d || !d.enabled || !d.accessToken) throw new Error((d && d.error) || 'carte indisponible');
+          deliv.token = d.accessToken;
+          if (Array.isArray(d.networks) && d.networks.length) deliv.networks = d.networks;
+          deliv.enabled = true;
+          return d.accessToken;
+        });
+    }
+
+    function showRelais(pt) {
+      deliv.relais = pt ? {
+        code: pt.code, network: pt.network, name: pt.name,
+        street: (pt.location && pt.location.street) || '',
+        zipCode: (pt.location && pt.location.zipCode) || '',
+        city: (pt.location && pt.location.city) || '',
+      } : null;
+      const el = $('relay-picked');
+      if (deliv.relais) {
+        el.innerHTML = '<b>Point relais choisi :</b> ' + escapeHtml(deliv.relais.name) + ' — ' +
+          escapeHtml(deliv.relais.street.replace(/\n/g, ', ')) + ', ' + escapeHtml(deliv.relais.zipCode + ' ' + deliv.relais.city);
+        el.hidden = false;
+      } else {
+        el.hidden = true;
+      }
+      updateQuoteLink();
+    }
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+
+    function searchRelais() {
+      const zip = ($('relay-zip').value || '').trim();
+      const city = ($('relay-city').value || '').trim();
+      const btn = $('relay-search');
+      if (!/^\d{5}$/.test(zip) || !city) {
+        $('relay-hint').textContent = 'Indiquez un code postal à 5 chiffres et une ville.';
+        return;
+      }
+      btn.disabled = true; btn.textContent = 'Recherche…';
+      getMapToken()
+        .then((token) => {
+          const M = (window.BoxtalParcelPointMap && (window.BoxtalParcelPointMap.BoxtalParcelPointMap || window.BoxtalParcelPointMap));
+          if (typeof M !== 'function') throw new Error('composant carte non chargé');
+          $('parcel-point-map').hidden = false;
+          const run = () => deliv.map.searchParcelPoints({ country: 'FR', zipCode: zip, city: city }, (pt) => showRelais(pt));
+          if (deliv.map) { run(); return; }
+          deliv.map = new M({
+            domToLoadMap: '#parcel-point-map',
+            accessToken: token,
+            config: {
+              locale: 'fr',
+              parcelPointNetworks: deliv.networks.map((code) => ({ code: code })),
+              options: { autoSelectNearestParcelPoint: true, primaryColor: '#0C5B45' },
+            },
+            onMapLoaded: run,
+          });
+        })
+        .then(() => { $('relay-hint').textContent = 'Cliquez sur un commerce pour le choisir. Le plus proche est présélectionné.'; })
+        .catch((err) => disableRelais(err && err.message))
+        .finally(() => { btn.disabled = false; btn.textContent = 'Trouver un point relais'; });
+    }
+    $('relay-search').addEventListener('click', searchRelais);
+    ['relay-zip', 'relay-city'].forEach((id) => $(id).addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); searchRelais(); } }));
+
+    // Interrupteur : on sonde le backend au chargement. Sans reponse positive,
+    // l'option relais n'est meme pas proposee.
+    getMapToken().catch((err) => disableRelais(err && err.message));
     function slug(s) {
       return (s || '').toLowerCase()
         .normalize('NFD').replace(/[̀-ͯ]/g, '')
@@ -382,7 +483,16 @@
       }
       const cta = document.getElementById('config-cta');
       cta.href = STRIPE_PAYMENT_LINK + '?client_reference_id=' + encodeURIComponent(ref);
-      cta.textContent = 'Commander cette configuration — 95 €';
+      const total = PRICE_EUR + (deliv.mode === 'domicile' ? DOMICILE_EUR : 0);
+      const needRelais = deliv.mode === 'relais' && deliv.enabled !== false && !deliv.relais;
+      cta.textContent = needRelais
+        ? 'Choisissez un point relais pour commander'
+        : 'Commander cette configuration — ' + total + ' €';
+      cta.classList.toggle('btn-disabled', needRelais);
+      cta.setAttribute('aria-disabled', needRelais ? 'true' : 'false');
+      const note = document.getElementById('cta-note');
+      if (note) note.textContent = 'Paiement sécurisé par Stripe · 3× sans frais possible · ' +
+        (deliv.mode === 'domicile' ? 'livraison à domicile 5 €.' : 'point relais offert.');
     }
     updateQuoteLink();
 
@@ -391,6 +501,13 @@
     // down, réseau), on laisse suivre le lien Stripe de secours (cta.href).
     document.getElementById('config-cta').addEventListener('click', function (e) {
       const cta = e.currentTarget;
+      // Relais choisi mais aucun point selectionne : on renvoie a la carte.
+      if (deliv.mode === 'relais' && deliv.enabled !== false && !deliv.relais) {
+        e.preventDefault();
+        document.getElementById('relay-zip').focus();
+        document.getElementById('relay-hint').textContent = 'Choisissez d\'abord votre point relais sur la carte (ou passez en livraison à domicile).';
+        return;
+      }
       if (!CHECKOUT_BACKEND || cta.dataset.busy) return; // secours : lien direct
       e.preventDefault();
       cta.dataset.busy = '1';
@@ -402,7 +519,9 @@
         body: JSON.stringify({
           finish: state.finish,
           mandala: state.mandala,
-          mandalaColor: state.mandalaColor
+          mandalaColor: state.mandalaColor,
+          livraison: deliv.enabled === false ? 'domicile' : deliv.mode,
+          relais: deliv.mode === 'relais' ? deliv.relais : null
         })
       })
         .then(function (r) { return r.json(); })

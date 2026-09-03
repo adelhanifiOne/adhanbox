@@ -26,6 +26,7 @@
   <script defer src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/DRACOLoader.js"></script>
+  <script defer src="vendor/boxtal-map.js"></script>
   <script defer src="configurator.js"></script>
   <script defer src="site.js"></script>
 </head>
@@ -67,10 +68,29 @@
             <div class="swatches" id="mcolor-swatches" role="group" aria-label="Couleur du motif"></div>
           </div>
 
+          <div id="delivery-group">
+            <span class="control-label">Livraison</span>
+            <div class="pill-options" role="group" aria-label="Mode de livraison">
+              <button class="pill-btn active" data-livraison="relais" id="deliv-relais">Point relais — offert</button>
+              <button class="pill-btn" data-livraison="domicile">À domicile — +5 €</button>
+            </div>
+            <div id="relay-block">
+              <div class="field-row">
+                <input type="text" id="relay-zip" inputmode="numeric" maxlength="5" placeholder="Code postal" autocomplete="postal-code" aria-label="Code postal">
+                <input type="text" id="relay-city" placeholder="Ville" autocomplete="address-level2" aria-label="Ville">
+                <button type="button" class="pill-btn" id="relay-search">Trouver un point relais</button>
+              </div>
+              <div id="parcel-point-map" hidden></div>
+              <p class="control-note relay-picked" id="relay-picked" hidden></p>
+              <p class="control-note" id="relay-hint">Mondial Relay, remis en 2 à 4 jours ouvrés. Choisissez le commerce le plus pratique pour vous sur la carte.</p>
+            </div>
+            <p class="control-note" id="domicile-note" hidden>Colissimo suivi, remis à votre porte en 2 à 3 jours ouvrés.</p>
+          </div>
+
           <a href="#" id="config-cta" class="btn btn-gold" style="align-self: flex-start;">
             Commander cette configuration — 95 €
           </a>
-          <p class="control-note" style="margin-top:.5rem;">Paiement sécurisé par Stripe · 3× sans frais possible · livraison incluse.</p>
+          <p class="control-note" style="margin-top:.5rem;" id="cta-note">Paiement sécurisé par Stripe · 3× sans frais possible · point relais offert.</p>
         </div>
       </div>
     </div>

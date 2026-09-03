@@ -1,8 +1,16 @@
-// POST /api/checkout  { finish, mandala, mandalaColor }
+// POST /api/checkout  { finish, mandala, mandalaColor, livraison, relais }
 // Crée une session Stripe Checkout avec la configuration choisie sur
 // adhanbox.fr/personnaliser.html : le client ne choisit qu'UNE fois (sur le
 // site), et la config est visible partout (page de paiement, dashboard,
 // reçu, email de confirmation) via le nom de l'article + les métadonnées.
+//
+// Livraison (choisie sur le site, voir docs/configurator.js) :
+//   livraison: 'relais'   -> point relais Mondial Relay, offert ;
+//                            relais = { code, network, name, street, zipCode, city }
+//                            tel que renvoye par la carte Boxtal.
+//   livraison: 'domicile' -> Colissimo suivi a domicile, +5 € (DOMICILE_CENTS).
+// Le mode et le point relais partent en metadonnees : le webhook les met dans
+// les emails, et le vendeur cree l'expedition Boxtal avec le code du relais.
 //
 // Signature Node (req, res) — les fonctions Vercel de ce projet tournent
 // SANS les helpers (@vercel/node, NODEJS_HELPERS=0) : lecture du flux et
@@ -25,6 +33,19 @@ const SITE = process.env.SITE_URL || 'https://adhanbox.fr';
 // Prix en centimes — offre de lancement 95 €. Modifiable sans toucher au code
 // via la variable d'environnement AMOUNT_CENTS (puis redéployer).
 const AMOUNT_CENTS = parseInt(process.env.AMOUNT_CENTS || '9500', 10);
+// Participation demandee pour la livraison a domicile (le relais est offert).
+const DOMICILE_CENTS = parseInt(process.env.DOMICILE_CENTS || '500', 10);
+
+// Point relais renvoye par la carte Boxtal : on ne garde que ce qui sert a
+// expedier, borne en longueur (les metadonnees Stripe sont limitees a 500 car.).
+function cleanRelais(r) {
+  if (!r || typeof r !== 'object') return null;
+  const s = (v, n) => String(v || '').replace(/\s+/g, ' ').trim().slice(0, n);
+  const code = s(r.code, 40), network = s(r.network, 40), name = s(r.name, 80);
+  const street = s(r.street, 120), zipCode = s(r.zipCode, 10), city = s(r.city, 60);
+  if (!code || !network || !name || !zipCode || !city) return null;
+  return { code, network, name, street, zipCode, city };
+}
 
 async function readJson(req) {
   const chunks = [];
@@ -65,11 +86,46 @@ export default async function handler(req, res) {
     ? `Châssis ${chassis} · Sans motif`
     : `Châssis ${chassis} · Motif ${m} (${motifColor})`;
 
+  // Livraison : 'relais' exige un point relais valide, sinon on retombe sur le
+  // domicile (jamais de commande bloquee pour un detail de livraison).
+  const relais = body.livraison === 'relais' ? cleanRelais(body.relais) : null;
+  const livraison = relais ? 'relais' : 'domicile';
+  const shippingOption = relais
+    ? {
+        shipping_rate_data: {
+          type: 'fixed_amount',
+          fixed_amount: { amount: 0, currency: 'eur' },
+          display_name: `Point relais — ${relais.name}`,
+          delivery_estimate: {
+            minimum: { unit: 'business_day', value: 2 },
+            maximum: { unit: 'business_day', value: 4 },
+          },
+        },
+      }
+    : {
+        shipping_rate_data: {
+          type: 'fixed_amount',
+          fixed_amount: { amount: DOMICILE_CENTS, currency: 'eur' },
+          display_name: 'Livraison à domicile — Colissimo suivi',
+          delivery_estimate: {
+            minimum: { unit: 'business_day', value: 2 },
+            maximum: { unit: 'business_day', value: 3 },
+          },
+        },
+      };
+
   const metadata = {
     couleur_boitier: chassis,
     motif: m === 0 ? 'Sans motif' : `Motif ${m}`,
     couleur_motif: m === 0 ? '-' : motifColor,
     config: configLabel,
+    livraison: relais ? 'Point relais' : 'Domicile',
+    ...(relais ? {
+      relais_code: relais.code,
+      relais_reseau: relais.network,
+      relais_nom: relais.name,
+      relais_adresse: `${relais.street} ${relais.zipCode} ${relais.city}`.trim(),
+    } : {}),
     source: 'adhanbox.fr/personnaliser',
   };
 
@@ -97,6 +153,10 @@ export default async function handler(req, res) {
       // hors union douaniere, le colis coute bien plus cher et le client peut
       // avoir des frais a payer a la reception.
       shipping_address_collection: { allowed_countries: ['FR', 'MC'] },
+      // Une seule option, celle choisie sur le site : Stripe l'affiche comme
+      // ligne de livraison (0 € en relais, DOMICILE_CENTS a domicile) et la
+      // reporte sur le recu et la facture.
+      shipping_options: [shippingOption],
       phone_number_collection: { enabled: true },
       // Facture obligatoire en vente a distance. Stripe la genere et l'envoie
       // au client ; elle est aussi telechargeable depuis le dashboard.
@@ -108,7 +168,9 @@ export default async function handler(req, res) {
             'TVA non applicable, article 293 B du CGI (franchise en base de TVA).',
             'Adel Hanifi — AdhanBox, 14 rue du Corps Franc Pommiès, 65500 Vic-en-Bigorre.',
             'SIRET 932 355 589 00023 — contact@adhanbox.fr — adhanbox.fr',
-            'Livraison offerte en France métropolitaine par Colissimo suivi.',
+            relais
+              ? `Livraison offerte en point relais (${relais.network === 'MONR_NETWORK' ? 'Mondial Relay' : relais.network}).`
+              : 'Livraison à domicile par Colissimo suivi.',
           ].join('\n'),
           rendering_options: { amount_tax_display: 'exclude_tax' },
           metadata,

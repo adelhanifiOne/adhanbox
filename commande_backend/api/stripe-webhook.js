@@ -39,7 +39,7 @@ function addressLines(name, a) {
 
 // Version texte brut de l'email client — un multipart HTML+texte passe
 // nettement mieux les filtres anti-spam qu'un HTML seul.
-function clientEmailText({ firstName, ref, config, amount, shipToLines }) {
+function clientEmailText({ firstName, ref, config, amount, shipToLines, livraison }) {
   return [
     `As-salāmu ʿalaykum${firstName ? ' ' + firstName : ''},`,
     '',
@@ -48,9 +48,11 @@ function clientEmailText({ firstName, ref, config, amount, shipToLines }) {
     '',
     `Votre configuration : ${config}`,
     `Commande : N° ${ref}`,
-    `Total payé : ${amount} (livraison offerte)`,
+    `Total payé : ${amount}${livraison.relais ? ' (livraison offerte)' : ''}`,
     '',
-    ...(shipToLines.length ? ['Adresse de livraison :', ...shipToLines, ''] : []),
+    ...(livraison.relais
+      ? ['Retrait en point relais :', livraison.relais.name, livraison.relais.address, '']
+      : (shipToLines.length ? ['Adresse de livraison :', ...shipToLines, ''] : [])),
     `Expédition prévue : ${SHIP_DATE}. Vous serez tenu informé à chaque étape : confirmation, assemblage, envoi avec numéro de suivi.`,
     '',
     'Garantie 2 ans · Retour 14 jours · Paiement sécurisé Stripe',
@@ -62,7 +64,7 @@ function clientEmailText({ firstName, ref, config, amount, shipToLines }) {
 }
 
 // ── Email client : merci + détail complet de la commande ──
-function clientEmailHtml({ firstName, ref, config, amount, shipTo }) {
+function clientEmailHtml({ firstName, ref, config, amount, shipTo, livraison }) {
   const row = (label, value) => `
     <tr>
       <td style="padding:6px 0;color:#6B6B6B;font-size:14px;">${label}</td>
@@ -91,18 +93,23 @@ function clientEmailHtml({ firstName, ref, config, amount, shipTo }) {
       <table role="presentation" width="100%" style="border-collapse:collapse;border-top:1px solid #EEE;">
         ${row('Commande', 'N° ' + ref)}
         ${row('AdhanBox — Commande', amount)}
-        ${row('Livraison', 'Offerte')}
+        ${row('Livraison', livraison.label)}
         <tr>
           <td style="padding:10px 0;color:#0C5B45;font-size:15px;font-weight:700;border-top:1px solid #EEE;">Total payé</td>
           <td style="padding:10px 0;color:#0C5B45;font-size:15px;font-weight:700;text-align:right;border-top:1px solid #EEE;">${amount}</td>
         </tr>
       </table>
 
-      ${shipTo ? `
+      ${livraison.relais ? `
+      <div style="margin-top:18px;">
+        <div style="font-size:12px;letter-spacing:1px;color:#0C5B45;font-weight:700;margin-bottom:6px;">RETRAIT EN POINT RELAIS</div>
+        <div style="font-size:14px;color:#444;line-height:1.5;"><b>${escHtml(livraison.relais.name)}</b><br>${escHtml(livraison.relais.address)}</div>
+        <div style="font-size:12px;color:#777;margin-top:6px;">Vous recevrez un message dès que le colis sera disponible. Pensez à une pièce d'identité pour le retrait.</div>
+      </div>` : (shipTo ? `
       <div style="margin-top:18px;">
         <div style="font-size:12px;letter-spacing:1px;color:#0C5B45;font-weight:700;margin-bottom:6px;">ADRESSE DE LIVRAISON</div>
         <div style="font-size:14px;color:#444;line-height:1.5;">${shipTo}</div>
-      </div>` : ''}
+      </div>` : '')}
 
       <div style="background:#FBF7EC;border-left:3px solid #C9A227;border-radius:0 8px 8px 0;padding:14px 16px;margin-top:22px;">
         <div style="font-size:14px;color:#5B4A17;line-height:1.6;">
@@ -127,7 +134,7 @@ function clientEmailHtml({ firstName, ref, config, amount, shipTo }) {
 }
 
 // ── Email vendeur : notification nouvelle commande ──
-function sellerEmailHtml({ ref, config, amount, name, email, phone, shipTo, piId, sessionId, giftMsg }) {
+function sellerEmailHtml({ ref, config, amount, name, email, phone, shipTo, piId, sessionId, giftMsg, livraison }) {
   const li = (k, v) => v ? `<li><b>${k} :</b> ${v}</li>` : '';
   return `
 <div style="font-family:Arial,sans-serif;font-size:15px;color:#232323;line-height:1.7;">
@@ -137,11 +144,15 @@ function sellerEmailHtml({ ref, config, amount, name, email, phone, shipTo, piId
     ${li('Configuration', '<span style="color:#0C5B45;font-weight:700;">' + config + '</span>')}
     ${li('✍️ Message pour la carte', giftMsg ? '<span style="background:#FBF3E3;padding:2px 8px;border-radius:6px;">« ' + escHtml(giftMsg) + ' »</span>' : '')}
     ${li('Montant', amount)}
+    ${li('🚚 Livraison', livraison.relais
+      ? '<b style="color:#B4791A;">Point relais</b> — ' + escHtml(livraison.relais.name) + ', ' + escHtml(livraison.relais.address)
+        + ' <span style="background:#FBF3E3;padding:1px 6px;border-radius:6px;font-family:monospace;">code ' + escHtml(livraison.relais.code) + '</span>'
+      : 'Domicile — Colissimo suivi')}
     ${li('Client', name)}
     ${li('Email', email)}
     ${li('Téléphone', phone)}
   </ul>
-  ${shipTo ? `<p><b>Livraison :</b><br>${shipTo}</p>` : ''}
+  ${shipTo ? `<p><b>${livraison.relais ? 'Destinataire (pour l\'étiquette)' : 'Adresse de livraison'} :</b><br>${shipTo}</p>` : ''}
   <p><a href="https://dashboard.stripe.com/payments/${piId}">Voir le paiement dans Stripe →</a></p>
   ${stepButtons(sessionId)}
 </div>`;
@@ -230,6 +241,14 @@ export default async function handler(req, res) {
   // Message cadeau saisi sur la page de paiement (champ facultatif).
   const giftMsg = ((session.custom_fields || []).find((f) => f.key === 'message_carte')?.text?.value || '').trim();
   const amount = euros(session.amount_total ?? 0);
+  // Mode de livraison choisi sur le site (voir api/checkout.js) : le relais
+  // porte son code, indispensable pour creer l'expedition chez Boxtal.
+  const md = session.metadata || {};
+  const shippingCents = session.shipping_cost?.amount_total ?? 0;
+  const livraison = md.livraison === 'Point relais' && md.relais_code
+    ? { label: 'Point relais — offerte',
+        relais: { code: md.relais_code, network: md.relais_reseau || '', name: md.relais_nom || '', address: md.relais_adresse || '' } }
+    : { label: shippingCents > 0 ? `Domicile — ${euros(shippingCents)}` : 'Domicile — offerte', relais: null };
   const firstName = (details.name || '').trim().split(/\s+/)[0] || '';
   const shipToLines = shipping ? addressLines(shipping.name || details.name, shipping.address) : [];
   const shipTo = shipToLines.join('<br>');
@@ -249,8 +268,8 @@ export default async function handler(req, res) {
         to: details.email,
         replyTo: 'contact@adhanbox.fr',
         subject: `Votre commande AdhanBox est confirmée 🌙 (n° ${ref})`,
-        html: clientEmailHtml({ firstName, ref, config, amount, shipTo }),
-        text: clientEmailText({ firstName, ref, config, amount, shipToLines }),
+        html: clientEmailHtml({ firstName, ref, config, amount, shipTo, livraison }),
+        text: clientEmailText({ firstName, ref, config, amount, shipToLines, livraison }),
       });
       console.log(`  -> email client accepte par Resend: ${envoi?.data?.id || '?'} (${details.email})`);
     } else {
@@ -267,7 +286,7 @@ export default async function handler(req, res) {
       to: NOTIF_EMAIL,
       subject: `🎉 Nouvelle commande — ${config} — ${amount}`,
       html: sellerEmailHtml({
-        ref, config, amount, giftMsg,
+        ref, config, amount, giftMsg, livraison,
         name: details.name, email: details.email, phone: details.phone,
         shipTo, piId, sessionId: session.id,
       }),
@@ -277,8 +296,11 @@ export default async function handler(req, res) {
         `Configuration : ${config}`,
         ...(giftMsg ? [`Message pour la carte : « ${giftMsg} »`] : []),
         `Montant : ${amount}`,
+        livraison.relais
+          ? `Livraison : POINT RELAIS ${livraison.relais.name} — ${livraison.relais.address} — code ${livraison.relais.code}`
+          : 'Livraison : domicile (Colissimo suivi)',
         `Client : ${details.name || '-'} · ${details.email || '-'} · ${details.phone || '-'}`,
-        ...(shipToLines.length ? ['Livraison :', ...shipToLines] : []),
+        ...(shipToLines.length ? [livraison.relais ? 'Destinataire :' : 'Adresse :', ...shipToLines] : []),
         `https://dashboard.stripe.com/payments/${piId}`,
       ].join('\n'),
     });

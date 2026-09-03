@@ -1716,3 +1716,32 @@
       .waitlist { padding: 4rem 1.3rem; }
       .waitlist-fields .btn-gold { width: 100%; justify-content: center; }
     }
+
+    /* ─── Livraison : point relais / domicile (personnaliser.html) ─── */
+    #relay-block { display: flex; flex-direction: column; gap: 0.7rem; margin-top: 0.8rem; }
+    .field-row { display: flex; flex-wrap: wrap; gap: 0.55rem; }
+    .field-row input {
+      flex: 1 1 110px;
+      min-width: 0;
+      font-family: var(--font-body);
+      font-size: 0.9rem;
+      padding: 0.55rem 0.8rem;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--ivory);
+      color: var(--ink, #232323);
+    }
+    .field-row input:focus { outline: none; border-color: var(--emerald); box-shadow: 0 0 0 3px rgba(12, 91, 69, 0.14); }
+    .field-row #relay-zip { flex: 0 1 120px; }
+    .field-row .pill-btn { flex: 0 0 auto; }
+    #parcel-point-map {
+      width: 100%;
+      height: 420px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      overflow: hidden;
+      background: var(--ivory);
+    }
+    .relay-picked { color: var(--emerald); background: rgba(12, 91, 69, 0.07); border-radius: 10px; padding: 0.55rem 0.8rem; margin-top: 0 !important; }
+    .btn-disabled { opacity: 0.55; cursor: not-allowed; }
+    @media (max-width: 600px) { #parcel-point-map { height: 460px; } }
