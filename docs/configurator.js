@@ -362,11 +362,8 @@
     //     confirmation personnalisé). Si le backend est indisponible,
     //     secours automatique : Payment Link direct (client_reference_id).
     const CHECKOUT_BACKEND = 'https://adhanbox-commande.vercel.app';
-    // ⚠ Ce Payment Link est figé à 95 € : il ne sert PLUS de secours depuis le
-    // passage à 119 € (il vendrait au mauvais prix). Le remplacer par un lien
-    // à 119 € pour réactiver le repli — voir le bloc catch plus bas.
-    const STRIPE_PAYMENT_LINK = null;
-    const PRICE_EUR = 119;
+    const STRIPE_PAYMENT_LINK = 'https://buy.stripe.com/00w00kg6P7sb5Woe7LfjG01';
+    const PRICE_EUR = 95;
     const DOMICILE_EUR = 5;
 
     // ─── Livraison : point relais (offert) ou domicile (+5 €) ───
@@ -485,7 +482,7 @@
         ref += '_motif-' + state.mandala + '-' + slug(MANDALA_COLORS[state.mandalaColor].label);
       }
       const cta = document.getElementById('config-cta');
-      cta.href = STRIPE_PAYMENT_LINK ? STRIPE_PAYMENT_LINK + '?client_reference_id=' + encodeURIComponent(ref) : '#';
+      cta.href = STRIPE_PAYMENT_LINK + '?client_reference_id=' + encodeURIComponent(ref);
       const total = PRICE_EUR + (deliv.mode === 'domicile' ? DOMICILE_EUR : 0);
       const needRelais = deliv.mode === 'relais' && deliv.enabled !== false && !deliv.relais;
       cta.textContent = needRelais
@@ -533,12 +530,9 @@
           else { throw new Error((d && d.error) || 'réponse invalide'); }
         })
         .catch(function () {
-          // Plus de repli tant qu'aucun Payment Link à 119 € n'existe : mieux
-          // vaut demander de réessayer que d'encaisser l'ancien prix.
+          // Secours : Payment Link direct (la config passe en client_reference_id)
           delete cta.dataset.busy;
           cta.textContent = prevText;
-          if (STRIPE_PAYMENT_LINK) { window.location.href = cta.href; return; }
-          var note = document.getElementById('cta-note');
-          if (note) note.innerHTML = 'Le paiement n\'a pas pu s\'ouvrir. Réessayez dans un instant, ou écrivez-nous à <a href="mailto:contact@adhanbox.fr">contact@adhanbox.fr</a>.';
+          window.location.href = cta.href;
         });
     });
