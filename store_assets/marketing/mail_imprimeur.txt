@@ -13,13 +13,14 @@ devis pour une petite série, avec les trois fichiers en pièce jointe.
      Chaque feuille porte les 6 faces, à découper en carrés de 130 × 130 mm
      (traits de coupe sur le fichier, 3 mm de fond perdu)
 
-  2) NOTICE  —  10 exemplaires
-     Fichier : 3_manuel-utilisation-120x120-un-pli.pdf
-     10 feuilles A4 paysage, quadri recto verso, retournement bord court
+  2) NOTICE  —  4 feuilles, soit 12 notices
+     Fichier : 3_notice-A3-3-par-feuille.pdf
+     4 feuilles A3 portrait, quadri recto verso, RETOURNEMENT BORD LONG
      Papier 120 à 170 g
-     Format fini 120 × 120 mm, un pli au centre (repère sur le fichier)
+     3 notices par feuille, à découper en rectangles de 240 × 120 mm
+     Format fini 120 × 120 mm, un pli au centre (repère pointillé sur le fichier)
 
-  3) CARTES DE REMERCIEMENT  —  2 pages, soit 20 cartes
+  3) CARTES DE REMERCIEMENT  —  2 feuilles, soit 20 cartes
      Fichier : 2_carte-remerciement-planche-A4-10-poses.pdf
      2 feuilles A4, quadri recto verso, 300 g mat
      10 cartes par feuille, format fini 85 × 55 mm, coupe droite
