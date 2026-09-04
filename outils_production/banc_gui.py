@@ -58,6 +58,7 @@ class Session:
         self.flash_actif = False
         self.copie = None            # avancement de la preparation de carte SD
         self.dernier_rapport = None
+        self.usine = None            # {ok, detail, horo} : remise a zero de CETTE carte
 
     # — journal —
     def noter(self, ligne):
@@ -77,6 +78,7 @@ class Session:
         with self.verrou:
             self.resultats = {}
             self.dernier_rapport = None
+            self.usine = None
 
     # — connexion —
     def connecter_usb(self, port):
@@ -150,6 +152,7 @@ class Session:
                 'copie': dict(self.copie) if self.copie else None,
                 'journal': self.journal[-120:],
                 'rapport': self.dernier_rapport,
+                'usine': self.usine,
             }
 
     # — lancement —
@@ -289,6 +292,45 @@ class Session:
         self.travail.start()
         return True, '%s…' % libelle
 
+    # — remise a zero usine —
+    def remise_a_zero(self):
+        """Efface Wi-Fi, mosquee, position et jeton, puis RELIT la carte :
+        le resultat affiche vient de cette relecture. Cable uniquement."""
+        if self.occupe():
+            return False, 'Une autre operation est en cours.'
+        if not self.box:
+            return False, 'Aucune carte connectee.'
+        if not isinstance(self.box, bt.BoxSerie):
+            return False, ('Remise a zero par le cable uniquement : par le reseau, '
+                           'on pourrait atteindre la carte d\'un client.')
+
+        def travail():
+            with self.verrou:
+                self.en_cours = 'usine'
+                self.usine = None
+            try:
+                reussi, message, box, infos = bt.remise_a_zero(self.box, sortie=self.noter)
+                with self.verrou:
+                    if box is not None:
+                        self.box, self.infos = box, infos or self.infos
+                    self.usine = {'ok': reussi, 'detail': message,
+                                  'horo': datetime.now().strftime('%H:%M:%S')}
+                self.noter(('OK  ' if reussi else 'ECHEC ') + 'Remise a zero — ' + message)
+            except Exception as e:
+                with self.verrou:
+                    self.box, self.infos = None, {}
+                    self.usine = {'ok': False, 'detail': str(e),
+                                  'horo': datetime.now().strftime('%H:%M:%S')}
+                self.noter('ECHEC remise a zero : %s — reclique sur « Tester par le cable ».' % e)
+            finally:
+                with self.verrou:
+                    self.en_cours = None
+
+        self.arret.clear()
+        self.travail = threading.Thread(target=travail, daemon=True)
+        self.travail.start()
+        return True, 'Remise a zero en cours — la carte va redemarrer.'
+
     # — carte SD —
     def preparer(self, volume):
         if self.occupe():
@@ -340,9 +382,11 @@ class Session:
                     lignes.append({'test': t.nom, 'ok': r['ok'], 'detail': r['detail']})
                 else:
                     non_faits.append(t.nom)
+            usine = ({'faite': True, 'ok': self.usine['ok'], 'heure': self.usine['horo'],
+                      'detail': self.usine['detail']} if self.usine else None)
             chemin, verdict = bt.ecrire_rapport(serie.strip(), self.infos, lignes,
                                                 self.box.hote if self.box else None,
-                                                non_faits)
+                                                non_faits, remise_a_zero=usine)
             self.dernier_rapport = {
                 'chemin': os.path.relpath(chemin, bt.RACINE),
                 'verdict': verdict,
@@ -465,6 +509,9 @@ class Poignee(BaseHTTPRequestHandler):
         if self.path == '/api/reparer':
             lance, message = SESSION.reparer(c.get('clef', ''))
             return self._envoyer({'ok': lance, 'message': message})
+        if self.path == '/api/usine':
+            lance, message = SESSION.remise_a_zero()
+            return self._envoyer({'ok': lance, 'message': message})
         if self.path == '/api/preparer':
             lance, message = SESSION.preparer(c.get('volume', ''))
             return self._envoyer({'ok': lance, 'message': message})
@@ -578,8 +625,10 @@ pre{background:var(--carte);border:1px solid var(--trait);border-radius:10px;pad
     <span style="flex:1"></span>
     <button id="b-tout" class="fort">Tout tester</button>
     <button id="b-auto">Contrôles automatiques</button>
+    <button id="b-usine" class="danger" title="Efface Wi-Fi, mosquée, position et jeton : la carte redémarre comme au premier allumage. Câble uniquement.">Remise à zéro usine</button>
     <button id="b-stop" class="danger cache">Arrêter</button>
   </div>
+  <p class="aparte" id="usine-msg"></p>
   <p class="aparte" id="message"></p>
 </div>
 
@@ -753,6 +802,16 @@ function peindre(e){
     el.disabled = e.occupe || e.flash;
   for (const id of ['#b-tout','#b-auto','#b-flash','#b-chercher'])
     $(id).disabled = pris || (id !== '#b-chercher' && id !== '#b-flash' && !e.carte);
+  // Remise a zero : seulement par le cable — le reseau pourrait viser un client.
+  $('#b-usine').disabled = pris || !(e.carte && e.carte.usb);
+  const um = $('#usine-msg');
+  if (e.en_cours === 'usine') um.textContent = 'Remise à zéro en cours — la carte redémarre…';
+  else if (e.usine) um.textContent = (e.usine.ok ? '✓ Remise à zéro faite à ' : '✗ Remise à zéro ÉCHOUÉE à ')
+                                     + e.usine.horo + ' — ' + e.usine.detail;
+  else if (e.carte) um.textContent = e.carte.usb
+    ? 'Carte non remise à zéro : elle partirait avec le Wi-Fi de l\'atelier.'
+    : 'Remise à zéro possible par le câble uniquement.';
+  else um.textContent = '';
   $('#b-stop').className = e.occupe && !e.flash ? 'danger' : 'danger cache';
 
   const joues = CAT.tests.filter(t => e.resultats[t.clef]);
@@ -865,6 +924,12 @@ $('#b-flash').onclick = () => {
 $('#b-tout').onclick = () => lancer(CAT.tests.map(t => t.clef));
 $('#b-auto').onclick = () => lancer(CAT.tests.filter(t=>t.groupe==='auto').map(t=>t.clef));
 $('#b-stop').onclick = () => poste('/api/arreter').then(rafraichir);
+$('#b-usine').onclick = () => {
+  if (!confirm('Remettre cette carte à zéro ?\n\nWi-Fi, mosquée, position et jeton seront effacés, '
+             + 'la carte redémarrera comme au premier allumage. À faire APRÈS les contrôles, '
+             + 'juste avant l\'emballage.')) return;
+  poste('/api/usine').then(r => { $('#message').textContent = r.message; rafraichir(); });
+};
 $('#b-rapport').onclick = () => poste('/api/rapport', {serie: $('#serie').value})
   .then(r => { if(!r.ok) $('#rapport-msg').textContent = r.message; rafraichir(); });
 $('#b-vider').onclick = () => {

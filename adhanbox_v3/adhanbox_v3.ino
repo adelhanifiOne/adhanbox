@@ -2,7 +2,7 @@
 // - Starts an AP when a long-press is detected on CONFIG_BUTTON_PIN
 // - Serves a small webpage that requests navigator.geolocation and POSTs lat/lon
 // - Stores lat/lon/accuracy/timestamp in Preferences (NVS)
-//Version: 3.0.6 (AdhanBox V3 / HW v3)
+//Version: 3.0.7 (AdhanBox V3 / HW v3)
 #include <Arduino.h>
 #include <esp_mac.h>   // esp_read_mac() : MAC eFuse, lisible sans Wi-Fi
 #include <Wire.h>
@@ -10,6 +10,8 @@
 #include <WiFiClientSecure.h>
 #include <WebServer.h>
 #include <Preferences.h>
+#include <nvs_flash.h>   // [BANC] remise a zero usine : effacement de la NVS
+#include <esp_wifi.h>    // [BANC] lecture des identifiants Wi-Fi memorises
 #include <RTClib.h>
 #include "rx8025t.h"   // [V3] RTC Epson RX-8025T (remplace le DS3231)
 #include <SPI.h>
@@ -1456,7 +1458,7 @@ void handleOtaUploadComplete() {
 // GET /api/firmware/version
 void handleFirmwareVersion() {
   server.send(200, "application/json",
-              "{\"version\":\"3.0.6\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
+              "{\"version\":\"3.0.7\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
 }
 
 // Returns true if the request carries the correct API key (or if token not yet set).
@@ -1543,11 +1545,11 @@ void handleDeviceInfo() {
   char buf[512];
   if (pairingWindow || hasValidToken) {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.6\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
+             "{\"version\":\"3.0.7\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
              OTA_HOSTNAME, deviceIdHex().c_str(), _apiToken.c_str(), _otaPass.c_str());
   } else {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.6\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
+             "{\"version\":\"3.0.7\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
              OTA_HOSTNAME, deviceIdHex().c_str());
   }
   server.send(200, "application/json", buf);
@@ -4338,7 +4340,7 @@ static void bancCommande(String c) {
 
   if (verbe == "info") {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.6\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
+             "{\"version\":\"3.0.7\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
              deviceIdHex().c_str());
     bancRep(buf);
 
@@ -4489,6 +4491,59 @@ static void bancCommande(String c) {
              (WiFi.status() == WL_CONNECTED) ? "connected" : "offline",
              WiFi.SSID().c_str(), WiFi.localIP().toString().c_str());
     bancRep(buf);
+
+  } else if (verbe == "usinestatus") {
+    // Ce qu'un client remarquerait si la carte partait telle quelle : le
+    // Wi-Fi memorise, la mosquee, la position. Le banc lit cet etat AVANT et
+    // APRES la remise a zero : le resultat affiche est une mesure, pas une
+    // promesse.
+    wifi_config_t wc;
+    bool wifiInit = (esp_wifi_get_config(WIFI_IF_STA, &wc) == ESP_OK);
+    String savedSsid = wifiInit ? String((const char *)wc.sta.ssid) : String("");
+    prefs.begin("adhancfg", true);
+    String mq  = prefs.getString("mq_uuid", "");
+    String lat = prefs.getString("lat", "");
+    bool hasTok = prefs.getString("api_token", "").length() > 0;
+    prefs.end();
+    snprintf(buf, sizeof(buf),
+             "{\"wifi_init\":%s,\"saved_ssid\":\"%s\",\"mq_uuid\":\"%s\",\"lat\":\"%s\",\"api_token\":%s}",
+             wifiInit ? "true" : "false", savedSsid.c_str(), mq.c_str(), lat.c_str(),
+             hasTok ? "true" : "false");
+    bancRep(buf);
+
+  } else if (verbe == "usine") {
+    // Remise a zero usine : la carte redemarre comme au premier allumage.
+    // Au banc, chaque carte est appairee sur le Wi-Fi de l'atelier pour etre
+    // testee ; sans ce nettoyage, le client recevrait une carte qui cherche
+    // un reseau qui n'existe pas chez lui, avec un jeton deja emis.
+    //
+    // Reserve au cable (comme tout bancCommande) : une remise a zero par le
+    // reseau pourrait atteindre la carte d'un client.
+    stopPlay();
+#if ENABLE_BLE
+    if (_bleActive) stopBLEProvisioning();
+#endif
+    // 1. Identifiants Wi-Fi : par l'API du pilote, qui sait ou il les range.
+    WiFi.disconnect(true, true);      // wifioff + eraseap
+    delay(100);
+    WiFi.mode(WIFI_OFF);              // le pilote ne les reecrira pas en s'arretant
+    // 2. Nos deux espaces de noms, explicitement.
+    prefs.begin("adhancfg", false); prefs.clear(); prefs.end();
+    prefs.begin("v2cfg", false);    prefs.clear(); prefs.end();
+    // 3. Coup de balai sur toute la NVS : ce que le pilote Wi-Fi, le BLE ou
+    //    une future version y auraient laisse. Le jeton d'API et le mot de
+    //    passe OTA sont regeneres au prochain demarrage (voir setup()).
+    esp_err_t e1 = nvs_flash_deinit();
+    esp_err_t e2 = nvs_flash_erase();
+    esp_err_t e3 = nvs_flash_init();
+    g_pairBootMagic = 0;              // pas de "reboot en appairage" fantome
+    snprintf(buf, sizeof(buf),
+             "{\"ok\":%s,\"nvs\":{\"deinit\":%d,\"erase\":%d,\"init\":%d},\"reboot\":true}",
+             (e2 == ESP_OK) ? "true" : "false", (int)e1, (int)e2, (int)e3);
+    bancRep(buf);
+    Serial.flush();                   // la reponse doit partir AVANT le reboot
+    delay(300);
+    ESP.restart();
 
   } else {
     bancRep(F("{\"error\":\"commande inconnue\"}"));

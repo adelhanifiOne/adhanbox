@@ -657,6 +657,16 @@ class BoxSerie:
         return int(json.loads(self._commande('wifiscan', attente=30))
                    .get('reseaux', 0))
 
+    def etat_usine(self):
+        """Ce qui distingue une carte configuree d'une carte neuve :
+        Wi-Fi memorise, mosquee, position. Lu avant ET apres la remise a zero."""
+        return json.loads(self._commande('usinestatus'))
+
+    def usine(self):
+        """Demande la remise a zero. La carte repond puis REDEMARRE : le port
+        tombe, il faut le rouvrir (voir remise_a_zero)."""
+        return json.loads(self._commande('usine', attente=20))
+
 
 def trouver_box_serie(port=None):
     """Ouvre la liaison serie avec une carte, et lit son identite.
@@ -693,6 +703,68 @@ def trouver_box_serie(port=None):
     raise RuntimeError(
         'la carte ne repond pas sur %s. Porte-t-elle bien un firmware V3 '
         'recent ? Televerse-le, puis reessaie. (%s)' % (port, derniere))
+
+
+def _configuree(etat):
+    """Vrai si la carte porte encore quelque chose d'un atelier ou d'un client."""
+    return bool(etat.get('saved_ssid') or etat.get('mq_uuid') or etat.get('lat'))
+
+
+def remise_a_zero(box, sortie=info):
+    """Remet la carte comme au premier allumage, et le PROUVE.
+
+    Au banc, chaque carte est appairee sur le Wi-Fi de l'atelier pour etre
+    testee. Sans ce nettoyage, le client recevrait une carte qui cherche un
+    reseau qui n'existe pas chez lui, avec une mosquee et un jeton deja
+    poses. Le firmware efface la NVS entiere et redemarre ; ici on rouvre le
+    cable et on relit l'etat : le verdict vient de cette relecture, jamais de
+    la reponse a l'ordre d'effacement.
+
+    Reserve au cable. Par le reseau, une remise a zero pourrait atteindre la
+    carte d'un client — le banc ne l'offre donc tout simplement pas.
+
+    Rend (reussi, message, box, infos) : la carte a redemarre, l'appelant doit
+    reprendre le NOUVEAU couple box/infos, l'ancien descripteur est mort.
+    """
+    if not isinstance(box, BoxSerie):
+        return False, 'remise a zero possible par le cable uniquement', box, None
+    port = box.hote
+    avant = box.etat_usine()
+    sortie('Avant : Wi-Fi « %s », mosquee %s, position %s.'
+           % (avant.get('saved_ssid') or '—',
+              'posee' if avant.get('mq_uuid') else '—',
+              'posee' if avant.get('lat') else '—'))
+    try:
+        rep = box.usine()
+    except RuntimeError as e:
+        # La carte peut rebooter avant que sa reponse ne traverse : on ne
+        # conclut rien ici, la relecture tranchera.
+        sortie('Pas de reponse a l\'ordre (%s) — on juge sur la relecture.' % e)
+        rep = {}
+    else:
+        nvs = rep.get('nvs', {})
+        sortie('Ordre recu : ok=%s, nvs deinit/erase/init = %s/%s/%s.'
+               % (rep.get('ok'), nvs.get('deinit'), nvs.get('erase'), nvs.get('init')))
+    box.fermer()
+    sortie('Redemarrage de la carte, reouverture du cable %s…' % port)
+    time.sleep(3)                     # le port USB tombe et revient
+    box2, infos2 = trouver_box_serie(port)     # insiste 40 s, comme au flash
+    apres = box2.etat_usine()
+    if not apres.get('wifi_init'):
+        # Sans pilote Wi-Fi demarre, on ne peut PAS lire les identifiants :
+        # dire « efface » serait une promesse, pas une mesure.
+        return (False, 'pilote Wi-Fi non demarre apres reboot : identifiants '
+                'invérifiables — relance le controle', box2, infos2)
+    if _configuree(apres):
+        return (False, 'la carte garde encore : Wi-Fi « %s », mosquee %s, '
+                'position %s' % (apres.get('saved_ssid') or '—',
+                                 apres.get('mq_uuid') or '—',
+                                 apres.get('lat') or '—'), box2, infos2)
+    if not apres.get('api_token'):
+        return (False, 'jeton d\'API non regenere au redemarrage', box2, infos2)
+    return (True, 'carte vierge — aucun Wi-Fi, aucune mosquee, aucune position ; '
+            'jeton regenere (firmware %s)' % (infos2 or {}).get('version', '?'),
+            box2, infos2)
 
 
 # ─────────────────────── le monde autour d'un test ──────────────────
@@ -1173,7 +1245,7 @@ class Bilan:
         return [l for l in self.lignes if not l['ok']]
 
 
-def ecrire_rapport(serie, infos, lignes, hote, non_executes=()):
+def ecrire_rapport(serie, infos, lignes, hote, non_executes=(), remise_a_zero=None):
     """Archive le resultat. `lignes` : [{test, ok, detail}, …]
 
     Un rapport ou tout n'a pas ete joue n'est pas CONFORME : il est PARTIEL.
@@ -1200,6 +1272,9 @@ def ecrire_rapport(serie, infos, lignes, hote, non_executes=()):
     }
     if non_executes:
         rap['non_executes'] = list(non_executes)
+    # Preuve que la carte est partie vierge — ou constat qu'elle ne l'est pas.
+    # Ce n'est pas un test : le verdict n'en depend pas, mais l'archive le dit.
+    rap['remise_a_zero'] = remise_a_zero or {'faite': False}
     nom = '%s_%s.json' % (serie or (infos or {}).get('device_id', 'inconnu'),
                           horo.strftime('%Y-%m-%d_%H%M'))
     chemin = os.path.join(RAPPORTS, nom)
@@ -1257,6 +1332,27 @@ def cmd_test(args):
     return 0 if not bilan.echecs else 2
 
 
+def cmd_usine(args):
+    titre('Remise a zero usine')
+    try:
+        box, infos = trouver_box_serie(args.port)
+    except Exception as e:
+        ko(str(e))
+        return 1
+    if not box:
+        ko('Aucune carte Espressif sur USB.')
+        return 1
+    ok('Carte %s (firmware %s)' % (box.hote, (infos or {}).get('version', '?')))
+    if not args.oui and not demande('Effacer Wi-Fi, mosquee, position et jeton de cette carte'):
+        info('Rien fait.')
+        return 0
+    reussi, message, box, _ = remise_a_zero(box)
+    (ok if reussi else ko)(message)
+    if box:
+        box.fermer()
+    return 0 if reussi else 2
+
+
 def cmd_serie(args):
     r = cmd_flash(args)
     if r != 0:
@@ -1291,6 +1387,11 @@ def main():
     s.add_argument('--recompiler', action='store_true')
     s.add_argument('--sans-operateur', action='store_true')
     s.set_defaults(fn=cmd_serie)
+
+    u = sp.add_parser('usine', help='remet une carte comme au premier allumage (cable USB)')
+    u.add_argument('--port', help='port serie (auto-detecte sinon)')
+    u.add_argument('--oui', action='store_true', help='ne demande pas confirmation')
+    u.set_defaults(fn=cmd_usine)
 
     args = p.parse_args()
     try:
