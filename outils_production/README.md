@@ -58,7 +58,7 @@ s'utilise aussi seul.
 | `flash` | téléverse le firmware par USB (port auto-détecté) |
 | `test` | teste une carte déjà flashée, par le réseau |
 | `serie` | enchaîne les deux, avec l'attente de redémarrage |
-| `usine` | remet une carte comme au premier allumage, par le câble (`--oui` sans confirmation) |
+| `usine` | remet une carte comme au premier allumage — par le câble, ou `--hote <ip>` pour un boîtier fermé (`--oui` sans confirmation) |
 
 Options : `--port` si plusieurs cartes sont branchées, `--recompiler` pour
 forcer la compilation, `--hote <ip>` si la carte n'est pas trouvée toute seule,
@@ -313,18 +313,32 @@ passe OTA, et part en appairage BLE.
 **Ce qui ne l'est pas** : la carte SD. Les récitations, adhans et azkar restent
 en place — c'est ce que le client a acheté.
 
-**Le verdict vient d'une relecture, pas de la réponse à l'ordre.** L'outil lit
-l'état de la carte (Wi-Fi mémorisé, mosquée, position, jeton) avant, envoie
-l'ordre, attend le redémarrage, **rouvre le câble et relit**. Il n'affiche
-« carte vierge » que si cette seconde lecture ne trouve plus rien et voit un
-jeton regénéré. Si le pilote Wi-Fi n'est pas démarré après le reboot, il le dit
-et refuse de conclure : « effacé » serait alors une promesse, pas une mesure.
+**Deux chemins, parce que le boîtier se ferme.** Une carte nue se remet à
+zéro par le câble. Mais c'est le boîtier *monté*, appairé sur le Wi-Fi de
+l'atelier pour ses contrôles, qu'il faut nettoyer — et lui n'a plus de câble
+accessible. Il se remet donc à zéro **par le réseau** : « Chercher la carte »,
+puis le même bouton.
 
-**Câble uniquement, volontairement.** Par le réseau, une remise à zéro
-pourrait atteindre la carte d'un client. Le verbe `t:usine` n'existe que sur
-le port série, comme toutes les commandes du banc : être au bout du câble est
-la preuve d'accès physique. L'interface grise le bouton dès que la carte est
-vue par le réseau.
+**Le verdict vient d'une mesure, pas de la réponse à l'ordre** — et la mesure
+dépend du chemin :
+
+- *Par le câble*, l'outil lit l'état (Wi-Fi mémorisé, mosquée, position,
+  jeton), envoie l'ordre, attend le reboot, **rouvre le port et relit**. Il ne
+  dit « carte vierge » que si cette relecture ne trouve plus rien et voit un
+  jeton regénéré. Pilote Wi-Fi non démarré après reboot ? Il le dit et refuse
+  de conclure.
+- *Par le réseau*, on ne peut plus relire : sans identifiants, la carte n'est
+  plus sur le réseau — **c'est précisément la preuve**. L'outil lit l'état
+  avant, envoie l'ordre, puis guette la carte pendant **45 s** — assez pour
+  qu'un reboot avec des identifiants conservés l'ait ramenée. Si elle revient,
+  l'outil dit « revenue au bout de N s : rien n'a été effacé ». Si elle reste
+  muette, elle est repartie en appairage BLE.
+
+**Par le réseau, deux verrous.** Le firmware exige le **jeton** de la carte,
+et en plus **son propre identifiant** en confirmation dans l'ordre : un appel
+égaré, ou visé sur la mauvaise adresse, ne peut rien effacer. L'interface grise
+le bouton tant qu'elle n'a pas le jeton — il n'est publié que dans les 10 min
+qui suivent le démarrage : rebranche la carte et recherche-la aussitôt.
 
 Ordre des opérations : **tester d'abord, remettre à zéro ensuite**. Les
 contrôles LED et audio ont besoin du jeton ; après la remise à zéro la carte en

@@ -119,6 +119,15 @@ class Box:
         with self._ouvrir(req) as r:
             return r.read().decode('utf-8', 'replace')
 
+    def etat_usine(self):
+        """Ce qui distingue une carte configuree d'une carte neuve. Jeton requis."""
+        return self.get('/api/factory_status')
+
+    def usine(self, device_id):
+        """Ordre de remise a zero par le reseau. Le firmware exige, en plus du
+        jeton, l'identifiant de LA carte : un appel egare ne peut rien effacer."""
+        return json.loads(self.post('/api/factory_reset', {'confirm': device_id}))
+
     def _ouvrir(self, req):
         try:
             return urllib.request.urlopen(req, timeout=self.timeout)
@@ -710,7 +719,7 @@ def _configuree(etat):
     return bool(etat.get('saved_ssid') or etat.get('mq_uuid') or etat.get('lat'))
 
 
-def remise_a_zero(box, sortie=info):
+def remise_a_zero(box, sortie=info, infos=None):
     """Remet la carte comme au premier allumage, et le PROUVE.
 
     Au banc, chaque carte est appairee sur le Wi-Fi de l'atelier pour etre
@@ -720,14 +729,21 @@ def remise_a_zero(box, sortie=info):
     cable et on relit l'etat : le verdict vient de cette relecture, jamais de
     la reponse a l'ordre d'effacement.
 
-    Reserve au cable. Par le reseau, une remise a zero pourrait atteindre la
-    carte d'un client — le banc ne l'offre donc tout simplement pas.
+    Deux transports, deux preuves :
+    - par le CABLE, on rouvre le port apres le reboot et on RELIT l'etat ;
+    - par le RESEAU (boitier ferme, deja monte et appaire sur le Wi-Fi de
+      l'atelier), la carte perd ses identifiants et QUITTE le reseau : on
+      guette son silence assez longtemps pour qu'un reboot avec Wi-Fi
+      conserve l'ait ramenee. Si elle revient, rien n'a ete efface.
+    Par le reseau le firmware exige le jeton ET l'identifiant de la carte :
+    on ne peut pas viser une autre carte par erreur.
 
-    Rend (reussi, message, box, infos) : la carte a redemarre, l'appelant doit
-    reprendre le NOUVEAU couple box/infos, l'ancien descripteur est mort.
+    Rend (reussi, message, box, infos). Par le cable, box/infos sont le
+    NOUVEAU couple (l'ancien descripteur est mort). Par le reseau ils valent
+    None : la carte n'est plus joignable, c'est le but.
     """
     if not isinstance(box, BoxSerie):
-        return False, 'remise a zero possible par le cable uniquement', box, None
+        return _remise_a_zero_reseau(box, infos or {}, sortie)
     port = box.hote
     avant = box.etat_usine()
     sortie('Avant : Wi-Fi « %s », mosquee %s, position %s.'
@@ -765,6 +781,63 @@ def remise_a_zero(box, sortie=info):
     return (True, 'carte vierge — aucun Wi-Fi, aucune mosquee, aucune position ; '
             'jeton regenere (firmware %s)' % (infos2 or {}).get('version', '?'),
             box2, infos2)
+
+
+def _remise_a_zero_reseau(box, infos, sortie):
+    device_id = (infos or {}).get('device_id') or ''
+    if not device_id:
+        try:
+            device_id = box.get('/api/device/info').get('device_id', '')
+        except Exception as e:
+            return False, 'identifiant de la carte illisible (%s)' % e, box, infos
+    if not box.token:
+        return (False, 'jeton absent : la remise a zero par le reseau exige le jeton '
+                '(debranche/rebranche la carte et recherche-la dans les 10 min, '
+                'ou colle le jeton)', box, infos)
+    avant = box.etat_usine()
+    if avant.get('device_id') and avant['device_id'] != device_id:
+        return (False, 'la carte a %s repond avec un autre identifiant (%s) — '
+                'mauvaise adresse ?' % (box.hote, avant['device_id']), box, infos)
+    sortie('Avant : Wi-Fi « %s », mosquee %s, position %s.'
+           % (avant.get('saved_ssid') or '—',
+              'posee' if avant.get('mq_uuid') else '—',
+              'posee' if avant.get('lat') else '—'))
+    if not avant.get('saved_ssid'):
+        sortie('La carte ne memorise aucun Wi-Fi et pourtant elle est sur le reseau : '
+               'la preuve par le silence ne vaudra rien ici — on continue quand meme.')
+    try:
+        rep = box.usine(device_id)
+    except urllib.error.HTTPError as e:
+        return False, 'la carte refuse l\'ordre (HTTP %s)' % e.code, box, infos
+    except Exception as e:
+        # La carte peut rebooter avant que sa reponse ne traverse : on juge
+        # sur son silence, pas sur cette exception.
+        sortie('Pas de reponse a l\'ordre (%s) — on juge sur le reseau.' % e)
+        rep = {}
+    else:
+        nvs = rep.get('nvs', {})
+        sortie('Ordre recu : ok=%s, nvs deinit/erase/init = %s/%s/%s.'
+               % (rep.get('ok'), nvs.get('deinit'), nvs.get('erase'), nvs.get('init')))
+    # Un reboot dure ~15 s, une reconnexion Wi-Fi ~10 s de plus. Si la carte
+    # repond encore au bout de 45 s, ses identifiants ont survecu.
+    sortie('La carte redemarre. On guette son retour sur le reseau pendant 45 s…')
+    sonde = Box(box.hote, token=box.token, timeout=3)
+    fin = time.time() + 45
+    time.sleep(8)                      # le temps que le reboot coupe reellement
+    while time.time() < fin:
+        try:
+            d = sonde.get('/api/device/info')
+            if d.get('device_id') == device_id:
+                return (False, 'la carte est REVENUE sur le reseau au bout de %d s : '
+                        'ses identifiants Wi-Fi n\'ont pas ete effaces'
+                        % int(45 - (fin - time.time())), None, None)
+        except Exception:
+            pass
+        time.sleep(3)
+    return (True, 'la carte a quitte le reseau et n\'y est pas revenue en 45 s : '
+            'identifiants Wi-Fi effaces, elle est en appairage BLE (Wi-Fi « %s », '
+            'mosquee et position effacees avec)' % (avant.get('saved_ssid') or '—'),
+            None, None)
 
 
 # ─────────────────────── le monde autour d'un test ──────────────────
@@ -1334,21 +1407,27 @@ def cmd_test(args):
 
 def cmd_usine(args):
     titre('Remise a zero usine')
-    try:
-        box, infos = trouver_box_serie(args.port)
-    except Exception as e:
-        ko(str(e))
-        return 1
-    if not box:
-        ko('Aucune carte Espressif sur USB.')
-        return 1
+    if args.hote or args.jeton:
+        box, infos = trouver_box(args.hote, args.jeton)
+        if not box:
+            ko('Carte introuvable sur %s.' % (args.hote or ' / '.join(HOTES)))
+            return 1
+    else:
+        try:
+            box, infos = trouver_box_serie(args.port)
+        except Exception as e:
+            ko(str(e))
+            return 1
+        if not box:
+            ko('Aucune carte Espressif sur USB. Pour un boitier ferme, passe --hote <ip>.')
+            return 1
     ok('Carte %s (firmware %s)' % (box.hote, (infos or {}).get('version', '?')))
     if not args.oui and not demande('Effacer Wi-Fi, mosquee, position et jeton de cette carte'):
         info('Rien fait.')
         return 0
-    reussi, message, box, _ = remise_a_zero(box)
+    reussi, message, box, _ = remise_a_zero(box, infos=infos)
     (ok if reussi else ko)(message)
-    if box:
+    if isinstance(box, BoxSerie):
         box.fermer()
     return 0 if reussi else 2
 
@@ -1390,6 +1469,8 @@ def main():
 
     u = sp.add_parser('usine', help='remet une carte comme au premier allumage (cable USB)')
     u.add_argument('--port', help='port serie (auto-detecte sinon)')
+    u.add_argument('--hote', help='adresse de la carte : boitier ferme, deja sur le Wi-Fi')
+    u.add_argument('--jeton', help="jeton d'API, si la carte ne le publie plus")
     u.add_argument('--oui', action='store_true', help='ne demande pas confirmation')
     u.set_defaults(fn=cmd_usine)
 

@@ -300,19 +300,23 @@ class Session:
             return False, 'Une autre operation est en cours.'
         if not self.box:
             return False, 'Aucune carte connectee.'
-        if not isinstance(self.box, bt.BoxSerie):
-            return False, ('Remise a zero par le cable uniquement : par le reseau, '
-                           'on pourrait atteindre la carte d\'un client.')
+        par_cable = isinstance(self.box, bt.BoxSerie)
 
         def travail():
             with self.verrou:
                 self.en_cours = 'usine'
                 self.usine = None
             try:
-                reussi, message, box, infos = bt.remise_a_zero(self.box, sortie=self.noter)
+                reussi, message, box, infos = bt.remise_a_zero(self.box, sortie=self.noter,
+                                                               infos=self.infos)
                 with self.verrou:
-                    if box is not None:
-                        self.box, self.infos = box, infos or self.infos
+                    if par_cable:
+                        if box is not None:
+                            self.box, self.infos = box, infos or self.infos
+                    elif reussi:
+                        # Par le reseau, la carte n'est plus joignable : c'est
+                        # la preuve. On ne garde pas une adresse morte.
+                        self.box, self.infos = None, {}
                     self.usine = {'ok': reussi, 'detail': message,
                                   'horo': datetime.now().strftime('%H:%M:%S')}
                 self.noter(('OK  ' if reussi else 'ECHEC ') + 'Remise a zero — ' + message)
@@ -625,7 +629,7 @@ pre{background:var(--carte);border:1px solid var(--trait);border-radius:10px;pad
     <span style="flex:1"></span>
     <button id="b-tout" class="fort">Tout tester</button>
     <button id="b-auto">Contrôles automatiques</button>
-    <button id="b-usine" class="danger" title="Efface Wi-Fi, mosquée, position et jeton : la carte redémarre comme au premier allumage. Câble uniquement.">Remise à zéro usine</button>
+    <button id="b-usine" class="danger" title="Efface Wi-Fi, mosquée, position et jeton : la carte redémarre comme au premier allumage. Par le câble, ou par le réseau pour un boîtier fermé.">Remise à zéro usine</button>
     <button id="b-stop" class="danger cache">Arrêter</button>
   </div>
   <p class="aparte" id="usine-msg"></p>
@@ -802,15 +806,16 @@ function peindre(e){
     el.disabled = e.occupe || e.flash;
   for (const id of ['#b-tout','#b-auto','#b-flash','#b-chercher'])
     $(id).disabled = pris || (id !== '#b-chercher' && id !== '#b-flash' && !e.carte);
-  // Remise a zero : seulement par le cable — le reseau pourrait viser un client.
-  $('#b-usine').disabled = pris || !(e.carte && e.carte.usb);
+  // Remise a zero : cable (preuve par relecture) ou reseau (preuve : la
+  // carte quitte le reseau). Par le reseau il faut le jeton.
+  $('#b-usine').disabled = pris || !e.carte || (!e.carte.usb && !e.carte.jeton);
   const um = $('#usine-msg');
   if (e.en_cours === 'usine') um.textContent = 'Remise à zéro en cours — la carte redémarre…';
   else if (e.usine) um.textContent = (e.usine.ok ? '✓ Remise à zéro faite à ' : '✗ Remise à zéro ÉCHOUÉE à ')
                                      + e.usine.horo + ' — ' + e.usine.detail;
-  else if (e.carte) um.textContent = e.carte.usb
+  else if (e.carte) um.textContent = (e.carte.usb || e.carte.jeton)
     ? 'Carte non remise à zéro : elle partirait avec le Wi-Fi de l\'atelier.'
-    : 'Remise à zéro possible par le câble uniquement.';
+    : 'Remise à zéro par le réseau : il faut le jeton (rebranche la carte et recherche-la dans les 10 min).';
   else um.textContent = '';
   $('#b-stop').className = e.occupe && !e.flash ? 'danger' : 'danger cache';
 
@@ -927,7 +932,8 @@ $('#b-stop').onclick = () => poste('/api/arreter').then(rafraichir);
 $('#b-usine').onclick = () => {
   if (!confirm('Remettre cette carte à zéro ?\n\nWi-Fi, mosquée, position et jeton seront effacés, '
              + 'la carte redémarrera comme au premier allumage. À faire APRÈS les contrôles, '
-             + 'juste avant l\'emballage.')) return;
+             + 'juste avant l\'emballage.'
+             + (ETAT.carte && !ETAT.carte.usb ? '\n\nPar le réseau : la carte va quitter ton Wi-Fi, c\'est normal — le banc guette son silence pendant 45 s.' : ''))) return;
   poste('/api/usine').then(r => { $('#message').textContent = r.message; rafraichir(); });
 };
 $('#b-rapport').onclick = () => poste('/api/rapport', {serie: $('#serie').value})

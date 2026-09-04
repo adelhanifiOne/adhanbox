@@ -467,6 +467,8 @@ void handleStopPlay();
 bool tryReinitSD();
 void playTrack(int track);
 void handleSetVolume();
+void handleFactoryStatus();   // [USINE] ce que la carte garde d'un atelier ou d'un client
+void handleFactoryReset();    // [USINE] remise a zero par le reseau, jeton + confirmation
 void handleGetVolume();
 void handleSetBrightness();
 void handleGetBrightness();
@@ -2724,6 +2726,8 @@ void setupServerRoutes() {
   server.on("/api/audio/play", HTTP_GET, handlePlayFile);
   server.on("/api/led/status", HTTP_GET, handleLedStatus);       // [ETAT REEL] etat LED complet
   server.on("/api/device/info", HTTP_GET, handleDeviceInfo);
+  server.on("/api/factory_status", HTTP_GET, handleFactoryStatus);   // [USINE]
+  server.on("/api/factory_reset", HTTP_POST, handleFactoryReset);    // [USINE]
   server.on("/ota/upload", HTTP_POST, handleOtaUploadComplete, handleOtaUpload);
   server.on("/update", HTTP_GET, handleUpdatePage);
 #if ENABLE_BLE
@@ -4325,6 +4329,95 @@ void setup() {
 //
 // Ces commandes ne passent PAS par requireApiKey : etre au bout du cable EST
 // la preuve d'acces physique. Elles n'ouvrent donc rien sur le reseau.
+// ── Remise a zero usine ─────────────────────────────────────────────────────
+// Partage entre le cable (t:usine) et le reseau (/api/factory_reset) : une
+// seule sequence d'effacement, pour qu'il n'existe pas deux "usine" qui
+// divergent. Voir la doc du banc, section « Remise a zero usine ».
+static void usineEtatJson(char *buf, size_t n) {
+  wifi_config_t wc;
+  bool wifiInit = (esp_wifi_get_config(WIFI_IF_STA, &wc) == ESP_OK);
+  String savedSsid = wifiInit ? String((const char *)wc.sta.ssid) : String("");
+  prefs.begin("adhancfg", true);
+  String mq  = prefs.getString("mq_uuid", "");
+  String lat = prefs.getString("lat", "");
+  bool hasTok = prefs.getString("api_token", "").length() > 0;
+  prefs.end();
+  snprintf(buf, n,
+           "{\"wifi_init\":%s,\"saved_ssid\":\"%s\",\"mq_uuid\":\"%s\",\"lat\":\"%s\",\"api_token\":%s,\"device_id\":\"%s\"}",
+           wifiInit ? "true" : "false", savedSsid.c_str(), mq.c_str(), lat.c_str(),
+           hasTok ? "true" : "false", deviceIdHex().c_str());
+}
+
+// Efface tout ce qui distingue cette carte d'une carte neuve, et rend le
+// compte rendu JSON. Ne redemarre PAS : l'appelant repond d'abord, puis reboot.
+static void usineEffacer(char *buf, size_t n) {
+  stopPlay();
+#if ENABLE_BLE
+  if (_bleActive) stopBLEProvisioning();
+#endif
+  // 1. Identifiants Wi-Fi : par l'API du pilote, qui sait ou il les range.
+  WiFi.disconnect(true, true);      // wifioff + eraseap
+  delay(100);
+  WiFi.mode(WIFI_OFF);              // le pilote ne les reecrira pas en s'arretant
+  // 2. Nos deux espaces de noms, explicitement.
+  prefs.begin("adhancfg", false); prefs.clear(); prefs.end();
+  prefs.begin("v2cfg", false);    prefs.clear(); prefs.end();
+  // 3. Coup de balai sur toute la NVS : ce que le pilote Wi-Fi, le BLE ou une
+  //    future version y auraient laisse. Le jeton d'API et le mot de passe OTA
+  //    sont regeneres au prochain demarrage (voir setup()).
+  esp_err_t e1 = nvs_flash_deinit();
+  esp_err_t e2 = nvs_flash_erase();
+  esp_err_t e3 = nvs_flash_init();
+  g_pairBootMagic = 0;              // pas de "reboot en appairage" fantome
+  snprintf(buf, n,
+           "{\"ok\":%s,\"nvs\":{\"deinit\":%d,\"erase\":%d,\"init\":%d},\"reboot\":true}",
+           (e2 == ESP_OK) ? "true" : "false", (int)e1, (int)e2, (int)e3);
+}
+
+// GET /api/factory_status — jeton requis. Lu par le banc AVANT la remise a
+// zero par le reseau (apres, la carte n'est plus sur le reseau : c'est
+// precisement la preuve).
+void handleFactoryStatus() {
+  if (!requireApiKey()) return;
+  char buf[320];
+  usineEtatJson(buf, sizeof(buf));
+  server.send(200, "application/json", buf);
+}
+
+// POST /api/factory_reset {"confirm":"<device_id>"} — jeton requis ET
+// l'identifiant de LA carte en confirmation : un appel egare, ou vise sur la
+// mauvaise adresse, ne peut pas effacer une carte par erreur. Le boitier
+// ferme n'a plus de cable accessible ; c'est cette route que le banc utilise
+// pour une carte deja montee et appairee sur le Wi-Fi de l'atelier.
+void handleFactoryReset() {
+  if (!requireApiKey()) return;
+  if (server.method() != HTTP_POST) {
+    server.send(405, "text/plain", "Method not allowed");
+    return;
+  }
+  String body = getRequestBody();
+  String confirm;
+  int k = body.indexOf("\"confirm\"");
+  if (k >= 0) {
+    int q1 = body.indexOf('"', body.indexOf(':', k) + 1);
+    int q2 = (q1 >= 0) ? body.indexOf('"', q1 + 1) : -1;
+    if (q1 >= 0 && q2 > q1) confirm = body.substring(q1 + 1, q2);
+  }
+  if (confirm != deviceIdHex()) {
+    server.send(400, "application/json",
+                "{\"error\":\"confirm doit etre l'identifiant de cette carte\"}");
+    return;
+  }
+  char buf[160];
+  usineEffacer(buf, sizeof(buf));
+  server.send(200, "application/json", buf);
+  server.client().flush();          // la reponse doit partir AVANT le reboot
+  Serial.printf("[USINE] remise a zero par le reseau depuis %s -> %s\n",
+                server.client().remoteIP().toString().c_str(), buf);
+  delay(400);
+  ESP.restart();
+}
+
 static void bancRep(const String &json) {
   Serial.print(F("<BANC>"));
   Serial.println(json);
@@ -4493,53 +4586,16 @@ static void bancCommande(String c) {
     bancRep(buf);
 
   } else if (verbe == "usinestatus") {
-    // Ce qu'un client remarquerait si la carte partait telle quelle : le
-    // Wi-Fi memorise, la mosquee, la position. Le banc lit cet etat AVANT et
-    // APRES la remise a zero : le resultat affiche est une mesure, pas une
-    // promesse.
-    wifi_config_t wc;
-    bool wifiInit = (esp_wifi_get_config(WIFI_IF_STA, &wc) == ESP_OK);
-    String savedSsid = wifiInit ? String((const char *)wc.sta.ssid) : String("");
-    prefs.begin("adhancfg", true);
-    String mq  = prefs.getString("mq_uuid", "");
-    String lat = prefs.getString("lat", "");
-    bool hasTok = prefs.getString("api_token", "").length() > 0;
-    prefs.end();
-    snprintf(buf, sizeof(buf),
-             "{\"wifi_init\":%s,\"saved_ssid\":\"%s\",\"mq_uuid\":\"%s\",\"lat\":\"%s\",\"api_token\":%s}",
-             wifiInit ? "true" : "false", savedSsid.c_str(), mq.c_str(), lat.c_str(),
-             hasTok ? "true" : "false");
-    bancRep(buf);
+    // Ce qu'un client remarquerait si la carte partait telle quelle. Le banc
+    // le lit AVANT et APRES la remise a zero : le resultat est une mesure.
+    char big[320];
+    usineEtatJson(big, sizeof(big));
+    bancRep(big);
 
   } else if (verbe == "usine") {
-    // Remise a zero usine : la carte redemarre comme au premier allumage.
-    // Au banc, chaque carte est appairee sur le Wi-Fi de l'atelier pour etre
-    // testee ; sans ce nettoyage, le client recevrait une carte qui cherche
-    // un reseau qui n'existe pas chez lui, avec un jeton deja emis.
-    //
-    // Reserve au cable (comme tout bancCommande) : une remise a zero par le
-    // reseau pourrait atteindre la carte d'un client.
-    stopPlay();
-#if ENABLE_BLE
-    if (_bleActive) stopBLEProvisioning();
-#endif
-    // 1. Identifiants Wi-Fi : par l'API du pilote, qui sait ou il les range.
-    WiFi.disconnect(true, true);      // wifioff + eraseap
-    delay(100);
-    WiFi.mode(WIFI_OFF);              // le pilote ne les reecrira pas en s'arretant
-    // 2. Nos deux espaces de noms, explicitement.
-    prefs.begin("adhancfg", false); prefs.clear(); prefs.end();
-    prefs.begin("v2cfg", false);    prefs.clear(); prefs.end();
-    // 3. Coup de balai sur toute la NVS : ce que le pilote Wi-Fi, le BLE ou
-    //    une future version y auraient laisse. Le jeton d'API et le mot de
-    //    passe OTA sont regeneres au prochain demarrage (voir setup()).
-    esp_err_t e1 = nvs_flash_deinit();
-    esp_err_t e2 = nvs_flash_erase();
-    esp_err_t e3 = nvs_flash_init();
-    g_pairBootMagic = 0;              // pas de "reboot en appairage" fantome
-    snprintf(buf, sizeof(buf),
-             "{\"ok\":%s,\"nvs\":{\"deinit\":%d,\"erase\":%d,\"init\":%d},\"reboot\":true}",
-             (e2 == ESP_OK) ? "true" : "false", (int)e1, (int)e2, (int)e3);
+    // Remise a zero usine par le cable : etre au bout du cable EST la preuve
+    // d'acces physique, aucune confirmation supplementaire.
+    usineEffacer(buf, sizeof(buf));
     bancRep(buf);
     Serial.flush();                   // la reponse doit partir AVANT le reboot
     delay(300);
