@@ -39,7 +39,9 @@ Wi-Fi.**
 2. **Tester par le câble** — le second bouton de la même ligne.
 3. **Tout tester** — l'outil s'arrête aux questions et aux appuis.
 4. **N° de série** puis **Enregistrer le rapport**.
-5. **Carte suivante** — remet les compteurs à zéro.
+5. **Remise à zéro usine** — la carte repart comme au premier allumage
+   (voir plus bas). À faire **après** les contrôles, juste avant l'emballage.
+6. **Carte suivante** — remet les compteurs à zéro.
 
 Le bloc « Chercher la carte » en haut reste là pour un boîtier **déjà installé**
 sur le réseau — un exemplaire d'atelier, ou celui d'un client à dépanner.
@@ -56,6 +58,7 @@ s'utilise aussi seul.
 | `flash` | téléverse le firmware par USB (port auto-détecté) |
 | `test` | teste une carte déjà flashée, par le réseau |
 | `serie` | enchaîne les deux, avec l'attente de redémarrage |
+| `usine` | remet une carte comme au premier allumage, par le câble (`--oui` sans confirmation) |
 
 Options : `--port` si plusieurs cartes sont branchées, `--recompiler` pour
 forcer la compilation, `--hote <ip>` si la carte n'est pas trouvée toute seule,
@@ -99,7 +102,12 @@ Trois verdicts, et la nuance compte :
 | `NON CONFORME` | au moins un échec — **ne pas expédier** |
 | `PARTIEL` | tout est passé, mais tout n'a pas été joué |
 
-`PARTIEL` liste nommément ce qui n'a pas été fait. Un rapport ne prétend jamais
+`PARTIEL` liste nommément ce qui n'a pas été fait. Le rapport porte aussi une
+clé `remise_a_zero` : `{"faite": false}` si la carte n'a pas été nettoyée,
+sinon l'heure et ce que la relecture a constaté. Ce n'est pas un contrôle, le
+verdict n'en dépend pas — mais l'archive dit si la carte est partie vierge.
+
+Un rapport ne prétend jamais
 plus que ce qui a vraiment été mesuré — c'est toute la différence entre une
 preuve et une impression. Pour la même raison, l'outil efface les résultats dès
 qu'il voit une autre carte ou qu'un flash a réussi, et un contrôle interrompu
@@ -160,6 +168,8 @@ sons pendant le contrôle, c'est normal.
 ## Codes de sortie
 
 `0` conforme · `1` carte introuvable ou flash échoué · `2` non conforme.
+Pour `usine` : `0` carte vierge constatée · `1` carte introuvable · `2` la
+relecture montre qu'il reste quelque chose.
 De quoi enchaîner dans un script si tu automatises davantage.
 
 ## Les fichiers fantômes de macOS
@@ -284,6 +294,41 @@ réseau. Par le câble, tout est accessible en permanence.
 Pas de `pyserial` : `stty` configure le port, `select` borne les attentes. Le
 banc garde sa propriété la plus utile — il tourne sur n'importe quel Mac, sans
 préparation.
+
+## Remise à zéro usine
+
+Au banc, chaque carte est appairée sur le Wi-Fi de l'atelier pour être testée.
+Sans nettoyage, le client recevrait une carte qui cherche un réseau qui
+n'existe pas chez lui, avec une mosquée, une position et un jeton déjà posés.
+Le bouton **Remise à zéro usine** (ou `python3 banc_test.py usine`) la remet
+comme au premier allumage.
+
+**Ce qui est effacé** : les identifiants Wi-Fi, la mosquée et ses horaires, la
+position, le volume, la luminosité, le scénario LED, les azkar programmés, le
+jeton d'API et le mot de passe OTA. Le firmware efface ses deux espaces de
+réglages puis **toute la NVS**, et redémarre ; au démarrage suivant il se
+comporte exactement comme une carte neuve — il regénère un jeton et un mot de
+passe OTA, et part en appairage BLE.
+
+**Ce qui ne l'est pas** : la carte SD. Les récitations, adhans et azkar restent
+en place — c'est ce que le client a acheté.
+
+**Le verdict vient d'une relecture, pas de la réponse à l'ordre.** L'outil lit
+l'état de la carte (Wi-Fi mémorisé, mosquée, position, jeton) avant, envoie
+l'ordre, attend le redémarrage, **rouvre le câble et relit**. Il n'affiche
+« carte vierge » que si cette seconde lecture ne trouve plus rien et voit un
+jeton regénéré. Si le pilote Wi-Fi n'est pas démarré après le reboot, il le dit
+et refuse de conclure : « effacé » serait alors une promesse, pas une mesure.
+
+**Câble uniquement, volontairement.** Par le réseau, une remise à zéro
+pourrait atteindre la carte d'un client. Le verbe `t:usine` n'existe que sur
+le port série, comme toutes les commandes du banc : être au bout du câble est
+la preuve d'accès physique. L'interface grise le bouton dès que la carte est
+vue par le réseau.
+
+Ordre des opérations : **tester d'abord, remettre à zéro ensuite**. Les
+contrôles LED et audio ont besoin du jeton ; après la remise à zéro la carte en
+a un nouveau, que le banc ne connaît pas encore.
 
 ## « Présent » ne veut pas dire « utilisable »
 
