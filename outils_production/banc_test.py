@@ -123,6 +123,28 @@ class Box:
         """Ce qui distingue une carte configuree d'une carte neuve. Jeton requis."""
         return self.get('/api/factory_status')
 
+    def version_firmware(self):
+        """Sans jeton : c'est la route que l'app interroge pour proposer une MAJ."""
+        return str(self.get('/api/firmware/version').get('version', ''))
+
+    def pousser_firmware(self, chemin_signe):
+        """POST /ota/upload — exactement le contrat de l'app (uploadFirmware) :
+        `size` = taille du .bin SIGNE (firmware + trailer 512 o), champ `update`.
+        Le firmware V3 (UPDATE_SIGN) refuse tout binaire non signe."""
+        corps = open(chemin_signe, 'rb').read()
+        limite = b'----AdhanBoxBanc' + os.urandom(8).hex().encode()
+        data = (b'--' + limite + b'\r\n'
+                b'Content-Disposition: form-data; name="update"; filename="update.bin"\r\n'
+                b'Content-Type: application/octet-stream\r\n\r\n' + corps + b'\r\n'
+                b'--' + limite + b'--\r\n')
+        url = self._url('/ota/upload', {'token': self.token or '', 'size': len(corps)})
+        req = urllib.request.Request(url, data=data, headers={
+            'Content-Type': 'multipart/form-data; boundary=' + limite.decode()})
+        if self.token:
+            req.add_header('X-API-Key', self.token)
+        with urllib.request.urlopen(req, timeout=300) as r:   # 1,7 Mo a 1 Mbit/s : minutes
+            return json.loads(r.read().decode('utf-8', 'replace') or '{}')
+
     def usine(self, device_id):
         """Ordre de remise a zero par le reseau. Le firmware exige, en plus du
         jeton, l'identifiant de LA carte : un appel egare ne peut rien effacer."""
@@ -273,6 +295,143 @@ def _courir(cmd, sortie):
     return p.wait()
 
 
+BUILD = os.path.join(RACINE, 'build_temp_v3')
+BINAIRE = os.path.join(BUILD, 'adhanbox_v3.ino.bin')
+BINAIRE_SIGNE = os.path.join(BUILD, 'adhanbox_v3.ino.signed.bin')
+CLE_PRIVEE = os.path.join(RACINE, 'keys', 'ota_private.pem')
+
+
+def version_source():
+    """La version inscrite dans le .ino : c'est elle que la carte doit annoncer
+    apres la mise a jour. Lue a la source, jamais supposee."""
+    with open(os.path.join(RACINE, SKETCH, 'adhanbox_v3.ino'), encoding='utf-8') as f:
+        for ligne in f:
+            if ligne.startswith('//Version:'):
+                return ligne.split(':', 1)[1].split()[0]
+    return ''
+
+
+def version_binaire(chemin):
+    """La version que le .bin annoncera (chaine JSON de /api/firmware/version).
+    Un binaire compile hier ne porte pas forcement la source d'aujourd'hui."""
+    try:
+        with open(chemin, 'rb') as f:
+            m = re.search(rb'"version":"([0-9]+\.[0-9]+\.[0-9]+)"', f.read())
+        return m.group(1).decode() if m else ''
+    except OSError:
+        return ''
+
+
+def compiler(recompiler=False, sortie=info):
+    """Compile si besoin. Retourne (succes, message).
+
+    « Si besoin » = pas de binaire, OU un binaire d'une autre version que la
+    source : reutiliser un .bin perime enverrait un firmware deja installe, et
+    la relecture conclurait a un rollback qui n'a jamais eu lieu."""
+    cli = trouver_cli()
+    if not cli:
+        return False, 'arduino-cli introuvable (brew install arduino-cli).'
+    attendue = version_source()
+    if not recompiler and os.path.exists(BINAIRE) and attendue \
+            and version_binaire(BINAIRE) != attendue:
+        sortie('Binaire existant en %s, source en %s : recompilation.'
+               % (version_binaire(BINAIRE) or '?', attendue))
+        recompiler = True
+    if recompiler or not os.path.exists(BINAIRE):
+        sortie('Compilation du firmware…')
+        lib = os.path.expanduser('~/Documents/Arduino/libraries')
+        if _courir([cli, 'compile', '--fqbn', FQBN, '--libraries', lib,
+                    '--output-dir', BUILD, SKETCH], sortie) != 0:
+            return False, 'Compilation echouee.'
+    else:
+        sortie('Binaire deja compile, reutilise : %s' % os.path.relpath(BINAIRE, RACINE))
+    return True, ''
+
+
+def signer(sortie=info):
+    """Signe le .bin dans un fichier A PART : le televersement par le cable
+    (esptool) continue d'utiliser le .bin nu. Sans la cle privee, la carte
+    refusera le binaire — autant le dire avant d'envoyer 1,7 Mo."""
+    if not os.path.exists(CLE_PRIVEE):
+        return False, ('cle privee absente (%s) : la carte refuse tout binaire non signe'
+                       % os.path.relpath(CLE_PRIVEE, RACINE))
+    sortie('Signature OTA du binaire…')
+    if _courir([sys.executable, os.path.join(RACINE, 'sign_firmware.py'),
+                BINAIRE, BINAIRE_SIGNE], sortie) != 0:
+        return False, 'Signature echouee.'
+    return True, ''
+
+
+def _version_tuple(v):
+    try:
+        return tuple(int(x) for x in str(v).split('.'))
+    except ValueError:
+        return (0,)
+
+
+def mise_a_jour_reseau(box, infos=None, recompiler=False, sortie=info):
+    """Met a jour un boitier FERME, par le reseau, et le PROUVE.
+
+    Compile, signe, pousse sur /ota/upload comme le fait l'app, puis attend le
+    redemarrage et relit /api/firmware/version : le verdict est la version que
+    la carte annonce elle-meme, pas la reponse a l'envoi.
+
+    Ne touche PAS au manifeste public firmware_version_v3.json : ce serait
+    proposer la version a tous les clients. Ici on ne met a jour que CETTE
+    carte, au banc.
+    """
+    if isinstance(box, BoxSerie):
+        return False, 'par le cable, utilise « Flasher le firmware »'
+    if not box.token:
+        return False, ('jeton absent : la mise a jour exige le jeton (rebranche la carte '
+                       'et recherche-la dans les 10 min, ou colle le jeton)')
+    cible = version_source()
+    if not cible:
+        return False, 'version introuvable dans le .ino'
+    try:
+        actuelle = box.version_firmware()
+    except Exception as e:
+        return False, 'version de la carte illisible (%s)' % e
+    sortie('Carte en %s, source en %s.' % (actuelle, cible))
+    if _version_tuple(actuelle) >= _version_tuple(cible):
+        return True, 'deja en %s : rien a faire' % actuelle
+    fait, message = compiler(recompiler, sortie)
+    if not fait:
+        return False, message
+    fait, message = signer(sortie)
+    if not fait:
+        return False, message
+    taille = os.path.getsize(BINAIRE_SIGNE)
+    sortie('Envoi de %.2f Mo sur %s (plusieurs minutes en Wi-Fi)…' % (taille / 1e6, box.hote))
+    try:
+        rep = box.pousser_firmware(BINAIRE_SIGNE)
+    except urllib.error.HTTPError as e:
+        return False, 'la carte refuse le binaire (HTTP %s) — signature ?' % e.code
+    except Exception as e:
+        return False, 'envoi interrompu (%s)' % e
+    if not rep.get('ok'):
+        return False, 'la carte signale un echec : %s' % rep
+    sortie('Binaire accepte, la carte redemarre. On attend qu\'elle annonce sa version…')
+    sonde = Box(box.hote, token=box.token, timeout=3)
+    fin = time.time() + 90
+    time.sleep(10)
+    vue = None
+    while time.time() < fin:
+        try:
+            vue = sonde.version_firmware()
+            if vue:
+                break
+        except Exception:
+            pass
+        time.sleep(3)
+    if vue is None:
+        return False, 'la carte n\'est pas revenue en 90 s : verifie-la a la main'
+    if _version_tuple(vue) < _version_tuple(cible):
+        return False, ('la carte annonce encore %s apres redemarrage : binaire refuse ou '
+                       'rollback' % vue)
+    return True, 'carte relue en %s (etait %s)' % (vue, actuelle)
+
+
 def flasher(port=None, recompiler=False, sortie=info):
     """Compile si besoin, puis televerse. Retourne (succes, message)."""
     cli = trouver_cli()
@@ -289,16 +448,10 @@ def flasher(port=None, recompiler=False, sortie=info):
         port = dispo[0]
     sortie('Carte sur %s' % port)
 
-    build = os.path.join(RACINE, 'build_temp_v3')
-    binaire = os.path.join(build, 'adhanbox_v3.ino.bin')
-    if recompiler or not os.path.exists(binaire):
-        sortie('Compilation du firmware…')
-        lib = os.path.expanduser('~/Documents/Arduino/libraries')
-        if _courir([cli, 'compile', '--fqbn', FQBN, '--libraries', lib,
-                    '--output-dir', build, SKETCH], sortie) != 0:
-            return False, 'Compilation echouee.'
-    else:
-        sortie('Binaire deja compile, reutilise : %s' % os.path.relpath(binaire, RACINE))
+    build = BUILD
+    fait, message = compiler(recompiler, sortie)
+    if not fait:
+        return False, message
 
     sortie('Televersement…')
     trace = []
@@ -794,7 +947,19 @@ def _remise_a_zero_reseau(box, infos, sortie):
         return (False, 'jeton absent : la remise a zero par le reseau exige le jeton '
                 '(debranche/rebranche la carte et recherche-la dans les 10 min, '
                 'ou colle le jeton)', box, infos)
-    avant = box.etat_usine()
+    # La route n'existe que depuis la 3.0.7. Sur une carte plus ancienne, on
+    # recevrait un 404 muet : autant dire ce qu'il faut faire.
+    version = str((infos or {}).get('version', ''))
+    trop_vieux = ('firmware %s : la remise a zero par le reseau existe depuis la 3.0.7 — '
+                  'fais d\'abord « Mettre a jour par le reseau »' % (version or '?'))
+    if version and _version_tuple(version) < (3, 0, 7):
+        return False, trop_vieux, box, infos
+    try:
+        avant = box.etat_usine()
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return False, trop_vieux, box, infos
+        raise
     if avant.get('device_id') and avant['device_id'] != device_id:
         return (False, 'la carte a %s repond avec un autre identifiant (%s) — '
                 'mauvaise adresse ?' % (box.hote, avant['device_id']), box, infos)
@@ -1432,6 +1597,18 @@ def cmd_usine(args):
     return 0 if reussi else 2
 
 
+def cmd_maj(args):
+    titre('Mise a jour par le reseau')
+    box, infos = trouver_box(args.hote, args.jeton)
+    if not box:
+        ko('Carte introuvable sur %s.' % (args.hote or ' / '.join(HOTES)))
+        return 1
+    ok('Carte %s (firmware %s)' % (box.hote, (infos or {}).get('version', '?')))
+    reussi, message = mise_a_jour_reseau(box, infos, args.recompiler)
+    (ok if reussi else ko)(message)
+    return 0 if reussi else 2
+
+
 def cmd_serie(args):
     r = cmd_flash(args)
     if r != 0:
@@ -1466,6 +1643,12 @@ def main():
     s.add_argument('--recompiler', action='store_true')
     s.add_argument('--sans-operateur', action='store_true')
     s.set_defaults(fn=cmd_serie)
+
+    m = sp.add_parser('maj', help='met a jour un boitier ferme par le reseau (OTA signe)')
+    m.add_argument('--hote', help='adresse de la carte (defaut : adhanbox.local puis 192.168.4.1)')
+    m.add_argument('--jeton', help="jeton d'API, si la carte ne le publie plus")
+    m.add_argument('--recompiler', action='store_true', help='force la compilation')
+    m.set_defaults(fn=cmd_maj)
 
     u = sp.add_parser('usine', help='remet une carte comme au premier allumage (cable USB)')
     u.add_argument('--port', help='port serie (auto-detecte sinon)')

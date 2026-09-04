@@ -58,6 +58,7 @@ s'utilise aussi seul.
 | `flash` | téléverse le firmware par USB (port auto-détecté) |
 | `test` | teste une carte déjà flashée, par le réseau |
 | `serie` | enchaîne les deux, avec l'attente de redémarrage |
+| `maj` | met à jour un boîtier **fermé** par le réseau : compile, signe, pousse (`--hote <ip>`) |
 | `usine` | remet une carte comme au premier allumage — par le câble, ou `--hote <ip>` pour un boîtier fermé (`--oui` sans confirmation) |
 
 Options : `--port` si plusieurs cartes sont branchées, `--recompiler` pour
@@ -294,6 +295,29 @@ réseau. Par le câble, tout est accessible en permanence.
 Pas de `pyserial` : `stty` configure le port, `select` borne les attentes. Le
 banc garde sa propriété la plus utile — il tourne sur n'importe quel Mac, sans
 préparation.
+
+## Mettre à jour un boîtier fermé
+
+Un boîtier monté n'a plus de câble accessible. Il se met à jour **par le
+réseau**, exactement comme le fait l'app : « Chercher la carte », puis
+**Mettre à jour par le réseau**. Le banc compile la source, **signe** le
+binaire avec `keys/ota_private.pem` — le firmware V3 refuse tout binaire non
+signé — et le pousse sur `/ota/upload` avec le jeton. La carte redémarre.
+
+**Le verdict est la version que la carte annonce elle-même** après le
+redémarrage, relue sur `/api/firmware/version`. Si elle annonce encore
+l'ancienne, le binaire a été refusé ou annulé, et l'outil le dit.
+
+Deux garde-fous. Le banc **recompile** si le `.bin` déjà présent ne porte pas
+la version de la source — sinon il enverrait un firmware déjà installé et
+conclurait à un rollback imaginaire. Et il **ne touche jamais** au manifeste
+public `firmware_version_v3.json` : ce serait proposer la version à tous les
+clients. Ici, on ne met à jour que cette carte, au banc. La publication reste
+le rôle de `deploy_firmware_v3.py`.
+
+C'est aussi le prérequis de la remise à zéro par le réseau : elle existe
+depuis la **3.0.7**. Sur une carte plus ancienne, l'outil le dit au lieu de
+renvoyer un 404.
 
 ## Remise à zéro usine
 

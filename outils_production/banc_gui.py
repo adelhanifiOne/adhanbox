@@ -59,6 +59,7 @@ class Session:
         self.copie = None            # avancement de la preparation de carte SD
         self.dernier_rapport = None
         self.usine = None            # {ok, detail, horo} : remise a zero de CETTE carte
+        self.maj = None              # {ok, detail, horo} : mise a jour par le reseau
 
     # — journal —
     def noter(self, ligne):
@@ -79,6 +80,7 @@ class Session:
             self.resultats = {}
             self.dernier_rapport = None
             self.usine = None
+            self.maj = None
 
     # — connexion —
     def connecter_usb(self, port):
@@ -153,6 +155,7 @@ class Session:
                 'journal': self.journal[-120:],
                 'rapport': self.dernier_rapport,
                 'usine': self.usine,
+                'maj': self.maj,
             }
 
     # — lancement —
@@ -322,10 +325,13 @@ class Session:
                 self.noter(('OK  ' if reussi else 'ECHEC ') + 'Remise a zero — ' + message)
             except Exception as e:
                 with self.verrou:
-                    self.box, self.infos = None, {}
+                    if par_cable:
+                        # Le port est mort avec le reboot : il faudra rouvrir.
+                        self.box, self.infos = None, {}
                     self.usine = {'ok': False, 'detail': str(e),
                                   'horo': datetime.now().strftime('%H:%M:%S')}
-                self.noter('ECHEC remise a zero : %s — reclique sur « Tester par le cable ».' % e)
+                self.noter('ECHEC remise a zero : %s%s' % (
+                    e, ' — reclique sur « Tester par le cable ».' if par_cable else ''))
             finally:
                 with self.verrou:
                     self.en_cours = None
@@ -334,6 +340,47 @@ class Session:
         self.travail = threading.Thread(target=travail, daemon=True)
         self.travail.start()
         return True, 'Remise a zero en cours — la carte va redemarrer.'
+
+    # — mise a jour par le reseau (boitier ferme) —
+    def mettre_a_jour(self, recompiler=False):
+        if self.occupe():
+            return False, 'Une autre operation est en cours.'
+        if not self.box:
+            return False, 'Aucune carte connectee.'
+        if isinstance(self.box, bt.BoxSerie):
+            return False, 'Par le cable, utilise « Flasher le firmware ».'
+
+        def travail():
+            with self.verrou:
+                self.en_cours = 'maj'
+                self.maj = None
+            try:
+                reussi, message = bt.mise_a_jour_reseau(self.box, self.infos, recompiler,
+                                                        sortie=self.noter)
+                if reussi:
+                    # Le firmware a change : ce qui a ete mesure avant ne vaut plus.
+                    self.vider()
+                    try:
+                        self.infos = dict(self.infos, version=self.box.version_firmware())
+                    except Exception:
+                        pass
+                with self.verrou:
+                    self.maj = {'ok': reussi, 'detail': message,
+                                'horo': datetime.now().strftime('%H:%M:%S')}
+                self.noter(('OK  ' if reussi else 'ECHEC ') + 'Mise a jour — ' + message)
+            except Exception as e:
+                with self.verrou:
+                    self.maj = {'ok': False, 'detail': str(e),
+                                'horo': datetime.now().strftime('%H:%M:%S')}
+                self.noter('ECHEC mise a jour : %s' % e)
+            finally:
+                with self.verrou:
+                    self.en_cours = None
+
+        self.arret.clear()
+        self.travail = threading.Thread(target=travail, daemon=True)
+        self.travail.start()
+        return True, 'Mise a jour lancee — suis le journal, ca prend quelques minutes.'
 
     # — carte SD —
     def preparer(self, volume):
@@ -513,6 +560,9 @@ class Poignee(BaseHTTPRequestHandler):
         if self.path == '/api/reparer':
             lance, message = SESSION.reparer(c.get('clef', ''))
             return self._envoyer({'ok': lance, 'message': message})
+        if self.path == '/api/maj':
+            lance, message = SESSION.mettre_a_jour(bool(c.get('recompiler')))
+            return self._envoyer({'ok': lance, 'message': message})
         if self.path == '/api/usine':
             lance, message = SESSION.remise_a_zero()
             return self._envoyer({'ok': lance, 'message': message})
@@ -629,9 +679,11 @@ pre{background:var(--carte);border:1px solid var(--trait);border-radius:10px;pad
     <span style="flex:1"></span>
     <button id="b-tout" class="fort">Tout tester</button>
     <button id="b-auto">Contrôles automatiques</button>
+    <button id="b-maj" title="Boîtier fermé, sur le Wi-Fi : compile, signe et pousse le firmware par le réseau, comme le fait l'app.">Mettre à jour par le réseau</button>
     <button id="b-usine" class="danger" title="Efface Wi-Fi, mosquée, position et jeton : la carte redémarre comme au premier allumage. Par le câble, ou par le réseau pour un boîtier fermé.">Remise à zéro usine</button>
     <button id="b-stop" class="danger cache">Arrêter</button>
   </div>
+  <p class="aparte" id="maj-msg"></p>
   <p class="aparte" id="usine-msg"></p>
   <p class="aparte" id="message"></p>
 </div>
@@ -809,6 +861,12 @@ function peindre(e){
   // Remise a zero : cable (preuve par relecture) ou reseau (preuve : la
   // carte quitte le reseau). Par le reseau il faut le jeton.
   $('#b-usine').disabled = pris || !e.carte || (!e.carte.usb && !e.carte.jeton);
+  // Mise a jour par le reseau : boitier ferme, donc jamais par le cable, et il faut le jeton.
+  $('#b-maj').disabled = pris || !e.carte || e.carte.usb || !e.carte.jeton;
+  const mm = $('#maj-msg');
+  if (e.en_cours === 'maj') mm.textContent = 'Mise à jour en cours — plusieurs minutes, suis le journal.';
+  else if (e.maj) mm.textContent = (e.maj.ok ? '✓ Mise à jour ' : '✗ Mise à jour ÉCHOUÉE ') + e.maj.horo + ' — ' + e.maj.detail;
+  else mm.textContent = '';
   const um = $('#usine-msg');
   if (e.en_cours === 'usine') um.textContent = 'Remise à zéro en cours — la carte redémarre…';
   else if (e.usine) um.textContent = (e.usine.ok ? '✓ Remise à zéro faite à ' : '✗ Remise à zéro ÉCHOUÉE à ')
@@ -929,6 +987,11 @@ $('#b-flash').onclick = () => {
 $('#b-tout').onclick = () => lancer(CAT.tests.map(t => t.clef));
 $('#b-auto').onclick = () => lancer(CAT.tests.filter(t=>t.groupe==='auto').map(t=>t.clef));
 $('#b-stop').onclick = () => poste('/api/arreter').then(rafraichir);
+$('#b-maj').onclick = () => {
+  if (!confirm('Mettre à jour cette carte par le réseau ?\n\nLe firmware est compilé, signé et envoyé '
+             + 'comme le fait l\'app. La carte redémarre ; le banc relit ensuite la version qu\'elle annonce.')) return;
+  poste('/api/maj', {}).then(r => { $('#message').textContent = r.message; rafraichir(); });
+};
 $('#b-usine').onclick = () => {
   if (!confirm('Remettre cette carte à zéro ?\n\nWi-Fi, mosquée, position et jeton seront effacés, '
              + 'la carte redémarrera comme au premier allumage. À faire APRÈS les contrôles, '
