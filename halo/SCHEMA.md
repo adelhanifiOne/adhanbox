@@ -14,6 +14,10 @@ Fichiers du dossier :
 | `gen_kicad_sch.py` | Générateur du `.kicad_sch`, à relancer après toute modification de placement ou de net |
 | `Halo.kicad_pcb` | PCB KiCad 10 : disque D85 + languette USB-C, composants placés, anneau LED routé, centre en chevelu |
 | `gen_kicad_pcb.py` | Générateur du `.kicad_pcb`, importe la liste des composants et des nets de `gen_kicad_sch.py` |
+| `gen_coque_pied.py` | Coque et pied en CadQuery, avec contrôles de collision ; écrit `3d/` |
+| `3d/Halo_coque.step` `.stl` | Coque arrière translucide, à imprimer fond sur le plateau |
+| `3d/Halo_pied.step` `.stl` | Pied incliné à 65°, à imprimer à plat |
+| `3d/Halo_pcb.step` `Halo_assemblage.step` | PCB nu et assemblage complet, pour Fusion |
 | `Halo_schema.svg` | Schéma de principe dessiné, un bloc par feuille ci-dessous |
 | `SCHEMA.md` | Ce document : connexions nette par nette, GPIO, budget, placement |
 
@@ -305,12 +309,54 @@ Placé mais non routé, à faire dans KiCad :
 
 ### 6.4 Mécanique
 
-- Coque arrière imprimée en PETG blanc translucide, 1,6 mm d'épaisseur, qui
-  dépasse le disque de 5 mm sur tout le tour. Cette lèvre est le diffuseur : la
-  lumière des LEDs tournées vers l'arrière sort par la tranche et dessine
-  l'anneau autour du téléphone vu de face.
-- Pied imprimé en PETG noir, angle 65°, rainure pour le câble. Il englobe la
-  languette USB-C.
+Réalisée dans `gen_coque_pied.py`, fichiers dans `3d/`. Même principe que
+`fusion_scripts/` : la conception est un script rejouable, les valeurs de
+contrôle sont mesurées à l'exécution.
+
+**Coque arrière**, PETG translucide blanc, 22 g de matière pleine
+
+- Bol de diamètre extérieur 98,2 mm, paroi 1,6 mm, fond 1,6 mm, hauteur 11,2 mm.
+  Le rayon intérieur est de 47,5 mm pour un PCB de 42,5 mm : les 5 mm de jour
+  tout autour du PCB sont la surface lumineuse vue de face. Les LEDs éclairent
+  le fond du bol, la lumière ressort par ce jour et par la paroi.
+- Le bord avant dépasse le PCB de 1,6 mm. Le téléphone s'appuie sur la face
+  avant du PCB, masque noir.
+- Le PCB repose par sa face arrière sur 4 plots de diamètre 6 mm à r = 30 mm,
+  chacun avec un pion de 1,8 mm dans les trous H1 à H4. Il est retenu par
+  4 crochets de 0,6 mm portés par des nervures à 45°, 135°, 225°, 315° : on le
+  clipse, pas de vis en face avant.
+- Fente de 16,6 mm en bas de la paroi pour la languette et le connecteur USB-C.
+- Fond : 2 trous de 2,2 mm au droit de RESET et BOOT, une membrane de 10 mm
+  amincie à 0,6 mm avec un téton de 3 mm sur le bouton utilisateur, un trou de
+  3 mm sur le capteur de lumière.
+- Impression fond sur le plateau, ouverture en l'air, sans support. Les
+  crochets ont 0,6 mm de porte-à-faux.
+
+**Pied**, PETG noir, 81 cm³ de volume, environ 40 g à 15 % de remplissage
+
+- Bloc 70 x 52 x 24 mm à chanfreins de 4 mm, butée avant de 3 mm pour le bas
+  du téléphone.
+- Fente à la forme exacte de la coque inclinée à 65°, jeu 0,3 mm. La coque s'y
+  emboîte sur 8,6 mm de profondeur. Hauteur totale du produit : 109 mm.
+- Poche pour la languette USB-C et une **prise USB-C coudée**. C'est un choix
+  important : avec une prise droite, le pied ferait 35 mm de haut. Le câble
+  fourni doit donc être coudé, voir la BOM produit.
+- Rainure de câble de 7 x 7 mm de la prise vers la face droite du pied.
+- 4 logements de diamètre 10 mm dessous pour les pads silicone.
+- Impression à plat, sans support : la rainure est un pont de 7 mm.
+
+**Valeurs de contrôle** mesurées à l'exécution du script
+
+| contrôle | valeur |
+|---|---|
+| intersection coque / PCB | 0 mm³ |
+| intersection coque / composants | 0 mm³ |
+| intersection coque / pied | 0 mm³ |
+| coque en place, Z | 15,4 à 109,2 mm |
+| emboîtement dans le pied | 8,6 mm |
+| bas de la prise coudée au-dessus du plancher | 4,2 mm |
+| rainure de câble | Y = -15,1, Z = 11,2 |
+
 - Anneau aimanté MagSafe adhésif collé en face avant, centré à 20 mm sous le
   centre du disque pour que l'appareil photo de l'iPhone ne dépasse pas.
 
