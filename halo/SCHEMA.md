@@ -10,6 +10,7 @@ Fichiers du dossier :
 |---|---|
 | `Halo_BOM.csv` | BOM PCB au format JLCPCB (mêmes colonnes que `AdhanBoxPCBV3_BOM.csv`) |
 | `Halo_BOM_produit.csv` | BOM complète du produit fini : coque, pied, câble, boîte |
+| `Halo.kicad_pro` | Projet KiCad : à ouvrir en premier, il relie le schéma et le PCB |
 | `Halo.kicad_sch` | Schéma KiCad 10, même structure que la V3 : symboles + labels globaux, prêt pour le PCB |
 | `gen_kicad_sch.py` | Générateur du `.kicad_sch`, à relancer après toute modification de placement ou de net |
 | `Halo.kicad_pcb` | PCB KiCad 10 : disque D85 + languette USB-C, composants placés, anneau LED routé, centre en chevelu |
@@ -371,8 +372,8 @@ et PWR_FLAG sont copiés tels quels depuis la V3. Les symboles propres au Halo
 `Halo:74AHCT1G125`, `Halo:Polyfuse`, `Halo:Q_Photo_NPN`) sont embarqués dans
 le fichier, comme le RX8025T de la V3 : pas de bibliothèque externe à installer.
 
-Pour ouvrir : créer un projet `Halo.kicad_pro` dans le dossier `halo/`, ou
-ouvrir directement le `.kicad_sch` en autonome. Lancer l'ERC en premier.
+Pour ouvrir : double-cliquer sur `Halo.kicad_pro`, le projet relie le schéma
+et le PCB. Lancer l'ERC en premier.
 
 `Halo.kicad_pcb` est généré par `gen_kicad_pcb.py`. Les empreintes 0805,
 électrolytique 6,3 mm, SOT-223, TL3342, USB-C HRO, test point, pin header
