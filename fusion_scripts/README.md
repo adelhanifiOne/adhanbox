@@ -107,6 +107,33 @@ Si une impression montre encore un défaut, descendre `R_INT` dans le script.
 
 Le script est **rejouable** : au second passage il annonce « déjà présent ».
 
+## `encoche_fils_led.py`
+
+Le trou carré de la dalle du support LED (35 × 35 mm, lamage 39,4 mm où la
+carte LED se pose) n'avait **aucun passage pour les fils** : ils étaient pincés
+entre la carte et la dalle. Le script ouvre une encoche de **20 × 6 mm**,
+traversante, sur le côté du carré qui regarde le **port USB-C de la coque** —
+la carte principale et ses connecteurs sont dessous, les fils descendent droit.
+
+Rien n'est codé en dur : le carré est mesuré sur la face du dessous, le côté
+est choisi en lisant la coque (le perçage rond Ø13 du port USB-C), et
+l'encoche est posée depuis l'arête du carré. **Rejouable** : si
+`Encoche_fils_LED` existe déjà, il ne fait rien.
+
+**Valeurs de contrôle** (05/09/2026, coordonnées locales du support)
+
+| contrôle | valeur |
+|---|---|
+| carré mesuré | X 26,50 → 61,50 · Y 32,00 → 67,00 |
+| côté retenu | +X (USB-C de la coque en X = 93,5 monde) |
+| encoche | X 61,50 → 67,50 · Y 39,50 → 59,50 · Z 0 → 5 traversante |
+| marge au bord de carte (lamage à X = 63,70) | 3,8 mm : les fils passent sous la carte |
+| ouverture du dessous après coupe | X 26,50 → 67,50, 8 arêtes |
+
+Le fond de 6 mm est un choix : assez pour trois fils en nappe, loin des plots
+d'aimant (X ≈ 78,5) et des vis (X = 83). Changer `FOND` ou `LARGEUR` en tête
+du script si un connecteur plus gros doit passer.
+
 ## Et surtout
 
 **Enregistrer le document Fusion après exécution.** C'est la seule chose que
