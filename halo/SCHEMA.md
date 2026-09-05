@@ -10,6 +10,8 @@ Fichiers du dossier :
 |---|---|
 | `Halo_BOM.csv` | BOM PCB au format JLCPCB (mêmes colonnes que `AdhanBoxPCBV3_BOM.csv`) |
 | `Halo_BOM_produit.csv` | BOM complète du produit fini : coque, pied, câble, boîte |
+| `Halo.kicad_sch` | Schéma KiCad 10, même structure que la V3 : symboles + labels globaux, prêt pour le PCB |
+| `gen_kicad_sch.py` | Générateur du `.kicad_sch`, à relancer après toute modification de placement ou de net |
 | `Halo_schema.svg` | Schéma de principe dessiné, un bloc par feuille ci-dessous |
 | `SCHEMA.md` | Ce document : connexions nette par nette, GPIO, budget, placement |
 
@@ -90,21 +92,26 @@ crête, 0,15 W en moyenne. Le SOT-223 avec sa languette sur un plan de cuivre de
 
 ### 3.3 Module ESP32-C3-MINI-1
 
+Numéros de broches du module MINI-1 (53 broches), d'après la table "Pin
+Definitions" de la datasheet Espressif. À contre-vérifier sur la datasheet
+avant de router, le WROOM-02 a une numérotation différente.
+
 | Broche module | Nom | Net | Remarque |
 |---|---|---|---|
 | 3 | 3V3 | 3V3 | C5 10uF + C4 100nF entre 3V3 et GND, à 2 mm du module |
-| 1, 2, 14, 36 à 53 | GND | GND | toutes les masses, y compris le pad thermique |
+| 1, 2, 11, 14, 36 à 53 | GND | GND | toutes les masses, y compris le pad thermique |
 | 8 | EN | EN | R1 10k vers 3V3, C6 1uF vers GND, SW1 vers GND |
 | 5 | IO2 | STRAP_IO2 | R4 10k vers 3V3. Doit être haut au boot, ne rien y brancher d'autre |
-| 12 | IO8 | STRAP_IO8 | R3 10k vers 3V3. Doit être haut au boot pour le mode téléchargement |
+| 22 | IO8 | STRAP_IO8 | R3 10k vers 3V3. Doit être haut au boot pour le mode téléchargement |
 | 23 | IO9 | BOOT | R2 10k vers 3V3, SW2 vers GND. Bas au boot = mode téléchargement |
-| 21 | IO18 | USB_DM | USB natif, direct, pas de résistance série |
-| 22 | IO19 | USB_DP | USB natif |
+| 26 | IO18 | USB_DM | USB natif, direct, pas de résistance série |
+| 27 | IO19 | USB_DP | USB natif |
 | 16 | IO10 | LED_DATA_3V3 | vers U3 entrée. Pas de fonction de strapping sur IO10 |
 | 6 | IO3 | BTN_USER | SW3 vers GND, pull-up interne activée dans le firmware |
-| 7 | IO4 | ALS | capteur de lumière, entrée ADC1_CH4 |
-| 4 | IO0 | NC | libre, réservé |
-| 9 à 11, 13, 15, 17 à 20 | IO1, IO5 à IO7, IO20, IO21 | NC | libres. IO20/IO21 = UART0, à sortir sur TP si on veut les logs série |
+| 18 | IO4 | ALS | capteur de lumière, entrée ADC1_CH4 |
+| 12, 13, 19, 20, 21 | IO0, IO1, IO5, IO6, IO7 | NC | libres, croix de non-connexion dans le schéma |
+| 30, 31 | IO20 RXD0, IO21 TXD0 | NC | UART0, à sortir sur TP si on veut les logs série |
+| 4, 7, 9, 10, 15, 17, 24, 25, 28, 29, 32 à 35 | NC | | non connectés en interne |
 | TP4 (DNP) | | EN | |
 
 Broches de strapping du C3 à ne pas oublier : IO2, IO8, IO9. Les trois sont
@@ -280,25 +287,28 @@ tour en deux anneaux de cuivre de 2 mm de large, r = 34 mm et r = 42 mm.
 - Anneau aimanté MagSafe adhésif collé en face avant, centré à 20 mm sous le
   centre du disque pour que l'appareil photo de l'iPhone ne dépasse pas.
 
-## 7. Reprise dans KiCad
+## 7. Le fichier KiCad
 
-Symboles à copier depuis `AdhanBoxPCBV3.kicad_sch`, ils sont déjà dans la
-bibliothèque du projet :
-`AdhanBoxV3:AMS1117-3.3`, `Connector:USB_C_Receptacle_USB2.0_16P`,
-`Switch:SW_Push`, `Device:C`, `Device:R`, `Connector:TestPoint`,
-`Connector_Generic:Conn_01x02`, `power:PWR_FLAG`.
+`Halo.kicad_sch` est généré par `gen_kicad_sch.py`, avec la même structure que
+`AdhanBoxPCBV3.kicad_sch` : une feuille A3, symboles placés, un label global
+sur chaque broche utilisée, croix de non-connexion sur les broches libres,
+aucun fil. Les symboles R, C, SW_Push, USB-C, AMS1117, TestPoint, Conn_01x02
+et PWR_FLAG sont copiés tels quels depuis la V3. Les symboles propres au Halo
+(`Halo:ESP32-C3-MINI-1`, `Halo:WS2812B`, `Halo:USBLC6-2SC6`,
+`Halo:74AHCT1G125`, `Halo:Polyfuse`, `Halo:Q_Photo_NPN`) sont embarqués dans
+le fichier, comme le RX8025T de la V3 : pas de bibliothèque externe à installer.
 
-À ajouter depuis les bibliothèques standard KiCad :
-`RF_Module:ESP32-C3-MINI-1`, `LED:WS2812B` (le symbole 5050 convient au 2020,
-seule l'empreinte change), `Power_Protection:USBLC6-2SC6`,
-`74xGxx:74AHCT1G125`, `Device:Polyfuse`, `Device:Q_Photo_NPN`.
+Pour ouvrir : créer un projet `Halo.kicad_pro` dans le dossier `halo/`, ou
+ouvrir directement le `.kicad_sch` en autonome. Lancer l'ERC en premier.
 
-Empreinte du WS2812B-2020 : importer depuis LCSC, réf C965555, via le plugin
-"LCSC to KiCad", ou dessiner 4 pastilles 0,9 x 0,7 mm sur un corps 2 x 2 mm.
+Empreintes : toutes standard KiCad sauf `Halo:LED_WS2812B-2020_PLCC4_2.0x2.0mm`
+pour les LEDs, à importer depuis LCSC (réf C965555) via le plugin "LCSC to
+KiCad", ou à dessiner : 4 pastilles 0,9 x 0,7 mm sur un corps 2 x 2 mm. Le
+module utilise `RF_Module:ESP32-C3-MINI-1` de la bibliothèque standard.
 
-Ordre conseillé : feuille 1 alimentation et USB (3.1 + 3.2), feuille 2 module
-et boutons (3.3 + 3.4 + 3.6), feuille 3 LEDs (3.5), avec un label hiérarchique
-`LED_DATA_3V3` entre les feuilles 2 et 3.
+Pour modifier le schéma : éditer la liste `parts` du générateur (référence,
+symbole, valeur, empreinte, position, nets par broche), relancer le script.
+Les UUID sont déterministes, le diff git reste lisible.
 
 ## 8. À confirmer avant de commander
 
