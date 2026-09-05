@@ -264,125 +264,130 @@ for i in range(1, 25):
 # --------------------------------------------------------------------------
 # Emission
 # --------------------------------------------------------------------------
-def fmt(v):
-    v = round(v, 4)
-    return str(int(v)) if v == int(v) else repr(v)
+def main():
+    def fmt(v):
+        v = round(v, 4)
+        return str(int(v)) if v == int(v) else repr(v)
 
-JUSTIFY = {0: "left", 90: "left", 180: "right", 270: "right"}
-sym_out, lbl_out, nc_out = [], [], []
+    JUSTIFY = {0: "left", 90: "left", 180: "right", 270: "right"}
+    sym_out, lbl_out, nc_out = [], [], []
 
-for p in parts:
-    pins = lib_pins(p["lib"])
-    X, Y = p["x"], p["y"]
-    lines = [
-        "\t(symbol",
-        f'\t\t(lib_id "{p["lib"]}")',
-        f"\t\t(at {fmt(X)} {fmt(Y)} 0)",
-        "\t\t(unit 1)",
-        "\t\t(exclude_from_sim no)",
-        f'\t\t(in_bom {"yes" if p["in_bom"] else "no"})',
-        "\t\t(on_board yes)",
-        f'\t\t(dnp {"yes" if p["dnp"] else "no"})',
-        "\t\t(fields_autoplaced yes)",
-        f'\t\t(uuid "{uid("sym-" + p["ref"])}")',
-        f'\t\t(property "Reference" "{p["ref"]}"',
-        f"\t\t\t(at {fmt(X)} {fmt(Y - 12)} 0)",
-        f"\t\t\t{FX}",
-        "\t\t)",
-        f'\t\t(property "Value" "{p["value"]}"',
-        f"\t\t\t(at {fmt(X)} {fmt(Y + 12)} 0)",
-        f"\t\t\t{FX}",
-        "\t\t)",
-        f'\t\t(property "Footprint" "{p["fp"]}"',
-        f"\t\t\t(at {fmt(X)} {fmt(Y)} 0)",
-        f"\t\t\t{FXH}",
-        "\t\t)",
-        '\t\t(property "Datasheet" "~"',
-        f"\t\t\t(at {fmt(X)} {fmt(Y)} 0)",
-        f"\t\t\t{FXH}",
-        "\t\t)",
-        '\t\t(property "Description" ""',
-        f"\t\t\t(at {fmt(X)} {fmt(Y)} 0)",
-        f"\t\t\t{FXH}",
-        "\t\t)",
-    ]
-    for num in pins:
-        lines += [f'\t\t(pin "{num}"', f'\t\t\t(uuid "{uid("pin-" + p["ref"] + "-" + num)}")', "\t\t)"]
-    lines += [
-        "\t\t(instances",
-        f'\t\t\t(project "{PROJECT}"',
-        f'\t\t\t\t(path "/{ROOT_UUID}"',
-        f'\t\t\t\t\t(reference "{p["ref"]}")',
-        "\t\t\t\t\t(unit 1)",
-        "\t\t\t\t)",
-        "\t\t\t)",
-        "\t\t)",
-        "\t)",
-    ]
-    sym_out.append("\n".join(lines))
+    for p in parts:
+        pins = lib_pins(p["lib"])
+        X, Y = p["x"], p["y"]
+        lines = [
+            "\t(symbol",
+            f'\t\t(lib_id "{p["lib"]}")',
+            f"\t\t(at {fmt(X)} {fmt(Y)} 0)",
+            "\t\t(unit 1)",
+            "\t\t(exclude_from_sim no)",
+            f'\t\t(in_bom {"yes" if p["in_bom"] else "no"})',
+            "\t\t(on_board yes)",
+            f'\t\t(dnp {"yes" if p["dnp"] else "no"})',
+            "\t\t(fields_autoplaced yes)",
+            f'\t\t(uuid "{uid("sym-" + p["ref"])}")',
+            f'\t\t(property "Reference" "{p["ref"]}"',
+            f"\t\t\t(at {fmt(X)} {fmt(Y - 12)} 0)",
+            f"\t\t\t{FX}",
+            "\t\t)",
+            f'\t\t(property "Value" "{p["value"]}"',
+            f"\t\t\t(at {fmt(X)} {fmt(Y + 12)} 0)",
+            f"\t\t\t{FX}",
+            "\t\t)",
+            f'\t\t(property "Footprint" "{p["fp"]}"',
+            f"\t\t\t(at {fmt(X)} {fmt(Y)} 0)",
+            f"\t\t\t{FXH}",
+            "\t\t)",
+            '\t\t(property "Datasheet" "~"',
+            f"\t\t\t(at {fmt(X)} {fmt(Y)} 0)",
+            f"\t\t\t{FXH}",
+            "\t\t)",
+            '\t\t(property "Description" ""',
+            f"\t\t\t(at {fmt(X)} {fmt(Y)} 0)",
+            f"\t\t\t{FXH}",
+            "\t\t)",
+        ]
+        for num in pins:
+            lines += [f'\t\t(pin "{num}"', f'\t\t\t(uuid "{uid("pin-" + p["ref"] + "-" + num)}")', "\t\t)"]
+        lines += [
+            "\t\t(instances",
+            f'\t\t\t(project "{PROJECT}"',
+            f'\t\t\t\t(path "/{ROOT_UUID}"',
+            f'\t\t\t\t\t(reference "{p["ref"]}")',
+            "\t\t\t\t\t(unit 1)",
+            "\t\t\t\t)",
+            "\t\t\t)",
+            "\t\t)",
+            "\t)",
+        ]
+        sym_out.append("\n".join(lines))
 
-    done_pos = set()
-    for num, net in p["nets"].items():
-        if num not in pins:
-            raise KeyError(f"{p['ref']} : broche {num} absente du symbole {p['lib']}")
-        px, py, ang = pins[num]
-        sx, sy = X + px, Y - py          # y du symbole vers le haut, y de la feuille vers le bas
-        if (sx, sy) in done_pos:
-            continue                     # broches empilees (VBUS x4, GND...) : un seul label
-        done_pos.add((sx, sy))
-        if net == "NC":
-            nc_out.append("\n".join([
-                "\t(no_connect",
-                f"\t\t(at {fmt(sx)} {fmt(sy)})",
-                f'\t\t(uuid "{uid("nc-" + p["ref"] + "-" + num)}")',
+        done_pos = set()
+        for num, net in p["nets"].items():
+            if num not in pins:
+                raise KeyError(f"{p['ref']} : broche {num} absente du symbole {p['lib']}")
+            px, py, ang = pins[num]
+            sx, sy = X + px, Y - py          # y du symbole vers le haut, y de la feuille vers le bas
+            if (sx, sy) in done_pos:
+                continue                     # broches empilees (VBUS x4, GND...) : un seul label
+            done_pos.add((sx, sy))
+            if net == "NC":
+                nc_out.append("\n".join([
+                    "\t(no_connect",
+                    f"\t\t(at {fmt(sx)} {fmt(sy)})",
+                    f'\t\t(uuid "{uid("nc-" + p["ref"] + "-" + num)}")',
+                    "\t)"]))
+                continue
+            la = (ang + 180) % 360
+            lbl_out.append("\n".join([
+                f'\t(global_label "{net}"',
+                "\t\t(shape bidirectional)",
+                f"\t\t(at {fmt(sx)} {fmt(sy)} {la})",
+                f"\t\t(effects (font (size 1.27 1.27)) (justify {JUSTIFY[la]}))",
+                f'\t\t(uuid "{uid("lbl-" + p["ref"] + "-" + num)}")',
                 "\t)"]))
-            continue
-        la = (ang + 180) % 360
-        lbl_out.append("\n".join([
-            f'\t(global_label "{net}"',
-            "\t\t(shape bidirectional)",
-            f"\t\t(at {fmt(sx)} {fmt(sy)} {la})",
-            f"\t\t(effects (font (size 1.27 1.27)) (justify {JUSTIFY[la]}))",
-            f'\t\t(uuid "{uid("lbl-" + p["ref"] + "-" + num)}")',
+
+    texts = [
+        (25.4, 15.24, "Halo v1 : support telephone a anneau lumineux (derive AdhanBox V3)"),
+        (25.4, 38.1, "1. Entree USB-C, protection ESD, fusible, rail 5V et 3V3"),
+        (25.4, 110.49, "2. Module ESP32-C3-MINI-1, strapping (IO2/IO8/IO9), boutons RESET/BOOT/USER, capteur de lumiere"),
+        (25.4, 208.28, "3. Translateur 3V3->5V et anneau de 24 LED WS2812B-2020 en face arriere (chaine LED1..LED24), C10..C33 = une 100nF par LED"),
+    ]
+    txt_out = []
+    for x, y, t in texts:
+        txt_out.append("\n".join([
+            f'\t(text "{t}"',
+            "\t\t(exclude_from_sim no)",
+            f"\t\t(at {fmt(x)} {fmt(y)} 0)",
+            "\t\t(effects (font (size 2.54 2.54) bold) (justify left bottom))",
+            f'\t\t(uuid "{uid("txt-" + t)}")',
             "\t)"]))
 
-texts = [
-    (25.4, 15.24, "Halo v1 : support telephone a anneau lumineux (derive AdhanBox V3)"),
-    (25.4, 38.1, "1. Entree USB-C, protection ESD, fusible, rail 5V et 3V3"),
-    (25.4, 110.49, "2. Module ESP32-C3-MINI-1, strapping (IO2/IO8/IO9), boutons RESET/BOOT/USER, capteur de lumiere"),
-    (25.4, 208.28, "3. Translateur 3V3->5V et anneau de 24 LED WS2812B-2020 en face arriere (chaine LED1..LED24), C10..C33 = une 100nF par LED"),
-]
-txt_out = []
-for x, y, t in texts:
-    txt_out.append("\n".join([
-        f'\t(text "{t}"',
-        "\t\t(exclude_from_sim no)",
-        f"\t\t(at {fmt(x)} {fmt(y)} 0)",
-        "\t\t(effects (font (size 2.54 2.54) bold) (justify left bottom))",
-        f'\t\t(uuid "{uid("txt-" + t)}")',
-        "\t)"]))
+    doc = "\n".join([
+        "(kicad_sch",
+        "\t(version 20260306)",
+        '\t(generator "eeschema")',
+        '\t(generator_version "10.0")',
+        f'\t(uuid "{ROOT_UUID}")',
+        '\t(paper "A3")',
+        "\t(lib_symbols",
+        *lib_symbols.values(),
+        "\t)",
+        *txt_out,
+        *nc_out,
+        *sym_out,
+        *lbl_out,
+        "\t(sheet_instances",
+        '\t\t(path "/"',
+        '\t\t\t(page "1")',
+        "\t\t)",
+        "\t)",
+        ")",
+        "",
+    ])
+    OUT.write_text(doc)
+    print(f"{OUT.relative_to(ROOT)} : {len(parts)} symboles, {len(lbl_out)} labels, {len(nc_out)} NC, {len(doc)} octets")
 
-doc = "\n".join([
-    "(kicad_sch",
-    "\t(version 20260306)",
-    '\t(generator "eeschema")',
-    '\t(generator_version "10.0")',
-    f'\t(uuid "{ROOT_UUID}")',
-    '\t(paper "A3")',
-    "\t(lib_symbols",
-    *lib_symbols.values(),
-    "\t)",
-    *txt_out,
-    *nc_out,
-    *sym_out,
-    *lbl_out,
-    "\t(sheet_instances",
-    '\t\t(path "/"',
-    '\t\t\t(page "1")',
-    "\t\t)",
-    "\t)",
-    ")",
-    "",
-])
-OUT.write_text(doc)
-print(f"{OUT.relative_to(ROOT)} : {len(parts)} symboles, {len(lbl_out)} labels, {len(nc_out)} NC, {len(doc)} octets")
+
+if __name__ == "__main__":
+    main()

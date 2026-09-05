@@ -12,6 +12,8 @@ Fichiers du dossier :
 | `Halo_BOM_produit.csv` | BOM complète du produit fini : coque, pied, câble, boîte |
 | `Halo.kicad_sch` | Schéma KiCad 10, même structure que la V3 : symboles + labels globaux, prêt pour le PCB |
 | `gen_kicad_sch.py` | Générateur du `.kicad_sch`, à relancer après toute modification de placement ou de net |
+| `Halo.kicad_pcb` | PCB KiCad 10 : disque D85 + languette USB-C, composants placés, anneau LED routé, centre en chevelu |
+| `gen_kicad_pcb.py` | Générateur du `.kicad_pcb`, importe la liste des composants et des nets de `gen_kicad_sch.py` |
 | `Halo_schema.svg` | Schéma de principe dessiné, un bloc par feuille ci-dessous |
 | `SCHEMA.md` | Ce document : connexions nette par nette, GPIO, budget, placement |
 
@@ -213,69 +215,93 @@ aucune négociation à faire côté firmware.
 
 ## 6. Placement PCB
 
+Tout ce paragraphe est réalisé dans `Halo.kicad_pcb`, généré par
+`gen_kicad_pcb.py`. Les cotes ci-dessous sont celles du fichier.
+
 ### 6.1 Carte
 
 - Disque de diamètre 85 mm, 2 couches, 1,6 mm, masque noir mat, sérigraphie
   blanche, finition HASL sans plomb. ENIG uniquement si on veut le logo en
   cuivre nu doré sur la face avant.
-- Assemblage JLCPCB sur une seule face, la face arrière. La face avant ne
-  porte aucun composant : c'est la surface visible derrière le téléphone,
-  masque noir + logo en sérigraphie ou en cuivre exposé.
-- Plan de masse sur les deux faces, cousu de vias, sauf sous l'antenne.
-- 4 trous de fixation diamètre 2,2 mm à 90° sur un cercle de 60 mm pour les
-  vis de la coque arrière.
+- Languette de 14 x 8 mm en bas du disque, cachée dans le pied, qui porte le
+  connecteur USB-C. Sans elle, le connecteur (7,3 mm de profondeur depuis le
+  bord) rentre dans l'anneau de LEDs quel que soit l'angle.
+- Convention de faces : **F.Cu = face arrière du produit** (composants, LEDs,
+  tournée vers le mur), **B.Cu = face avant visible** derrière le téléphone,
+  plan de masse plein et logo "HALO" en sérigraphie miroir. Assemblage JLCPCB
+  sur une seule face, F.Cu.
+- Plan de masse sur les deux faces, avec une encoche sans cuivre de 16 x 8 mm
+  sous l'antenne du module.
+- 4 trous de fixation diamètre 2,2 mm (H1 à H4) à 45°, 135°, 225°, 315° sur
+  un cercle de rayon 30 mm, pour les vis autotaraudeuses M2 de la coque.
 
-### 6.2 Anneau de LEDs, face arrière
+### 6.2 Anneau de LEDs, face F.Cu
 
-24 LEDs sur un cercle de rayon 38 mm, pas 15°, LED1 en haut, sens horaire vu de
-l'arrière. Centre de la carte en (0, 0), Y positif vers le bas comme dans KiCad.
+24 LEDs sur un cercle de rayon 38 mm, pas 15°, LED1 à 262,5° soit en bas à
+gauche, puis sens horaire vu côté composants. Il n'y a pas de LED exactement
+en bas : les deux plus basses, LED1 et LED24, encadrent l'ouverture par où
+passent les pistes de l'USB-C. Le haut du halo tombe entre LED12 et LED13.
+Centre de la carte en (0, 0), Y positif vers le bas comme dans KiCad.
 
 | LED | angle | X (mm) | Y (mm) |
 |---|---|---|---|
-| LED1 | 90° | +0.00 | -38.00 |
-| LED2 | 75° | +9.84 | -36.71 |
-| LED3 | 60° | +19.00 | -32.91 |
-| LED4 | 45° | +26.87 | -26.87 |
-| LED5 | 30° | +32.91 | -19.00 |
-| LED6 | 15° | +36.71 | -9.84 |
-| LED7 | 0° | +38.00 | 0.00 |
-| LED8 | 345° | +36.71 | +9.84 |
-| LED9 | 330° | +32.91 | +19.00 |
-| LED10 | 315° | +26.87 | +26.87 |
-| LED11 | 300° | +19.00 | +32.91 |
-| LED12 | 285° | +9.84 | +36.71 |
-| LED13 | 270° | 0.00 | +38.00 |
-| LED14 | 255° | -9.84 | +36.71 |
-| LED15 | 240° | -19.00 | +32.91 |
-| LED16 | 225° | -26.87 | +26.87 |
-| LED17 | 210° | -32.91 | +19.00 |
-| LED18 | 195° | -36.71 | +9.84 |
-| LED19 | 180° | -38.00 | 0.00 |
-| LED20 | 165° | -36.71 | -9.84 |
-| LED21 | 150° | -32.91 | -19.00 |
-| LED22 | 135° | -26.87 | -26.87 |
-| LED23 | 120° | -19.00 | -32.91 |
-| LED24 | 105° | -9.84 | -36.71 |
+| LED1 | 262,5° | -4,96 | +37,67 |
+| LED2 | 247,5° | -14,54 | +35,11 |
+| LED3 | 232,5° | -23,13 | +30,14 |
+| LED4 | 217,5° | -30,14 | +23,13 |
+| LED5 | 202,5° | -35,11 | +14,54 |
+| LED6 | 187,5° | -37,67 | +4,96 |
+| LED7 | 172,5° | -37,67 | -4,96 |
+| LED8 | 157,5° | -35,11 | -14,54 |
+| LED9 | 142,5° | -30,14 | -23,13 |
+| LED10 | 127,5° | -23,13 | -30,14 |
+| LED11 | 112,5° | -14,54 | -35,11 |
+| LED12 | 97,5° | -4,96 | -37,67 |
+| LED13 | 82,5° | +4,96 | -37,67 |
+| LED14 | 67,5° | +14,54 | -35,11 |
+| LED15 | 52,5° | +23,13 | -30,14 |
+| LED16 | 37,5° | +30,14 | -23,13 |
+| LED17 | 22,5° | +35,11 | -14,54 |
+| LED18 | 7,5° | +37,67 | -4,96 |
+| LED19 | 352,5° | +37,67 | +4,96 |
+| LED20 | 337,5° | +35,11 | +14,54 |
+| LED21 | 322,5° | +30,14 | +23,13 |
+| LED22 | 307,5° | +23,13 | +30,14 |
+| LED23 | 292,5° | +14,54 | +35,11 |
+| LED24 | 277,5° | +4,96 | +37,67 |
 
-Chaque LED tournée pour que DOUT pointe vers la suivante, rotation = angle - 90°.
-Sa capa 100nF juste derrière elle, côté centre. Le rail 5V et la masse font le
-tour en deux anneaux de cuivre de 2 mm de large, r = 34 mm et r = 42 mm.
+Chaque LED est tournée de angle + 90° : son axe Y local pointe vers
+l'extérieur, DOUT vers la LED suivante. Routage déjà fait dans le fichier :
 
-### 6.3 Module, USB-C, boutons
+- Anneau 5V à l'extérieur des LEDs, rayon 40,6 mm, largeur 0,8 mm, ouvert de
+  266° à 274° en bas pour laisser passer les pistes de l'USB-C. Alimenté par
+  F1 à son extrémité droite.
+- Un stub de 0,4 mm de chaque pad VDD vers l'anneau 5V.
+- 23 arcs de data de 0,3 mm, DOUT de la LED n vers DIN de la LED n+1, au
+  rayon 37,4 mm. R7 vers DIN de LED1.
+- Les 24 condensateurs 100nF (C10 à C33) sont radiaux au rayon 39,8 mm, à 5°
+  de leur LED, du côté opposé à l'ouverture du bas. Leur pad 1 chevauche
+  l'anneau 5V, leur pad 2 va à la masse par le plan.
+- Les pads GND des LEDs se raccordent au plan de masse F.Cu par thermiques.
 
-- U1 en haut de la carte, antenne vers le haut, dépassant de la zone couverte
-  par le téléphone. Un iPhone de 71 mm de large posé au centre laisse 7 mm de
-  chaque côté et tout le haut du disque au-dessus de son bord supérieur si le
-  téléphone repose sur le pied avec 15 mm de dépassement du disque. C'est cette
-  bande haute qui accueille l'antenne. Point à vérifier sur le proto : mesurer
-  le RSSI avec et sans téléphone posé. Si la perte dépasse 10 dB, passer au
-  ESP32-C3-MINI-1U avec antenne externe déportée dans la coque.
-- J1 USB-C en bas, au centre, connecteur horizontal sortant vers le bas dans le
-  pied. F1, C7 et D1 à côté.
-- U2 et ses capas entre J1 et U1, sur le plan de masse.
-- SW1 et SW2 accessibles par deux trous de 2 mm dans la coque arrière, en bas
-  à gauche. SW3 en haut à droite, avec un bossage sur la coque.
-- Q1 tout en haut, à côté de l'antenne, avec une fenêtre dans la coque.
+### 6.3 Centre de la carte
+
+Placé mais non routé, à faire dans KiCad :
+
+- U1 en haut, centre à (0, -24), antenne vers le haut. L'antenne est à 5 mm
+  des LEDs les plus proches, LED12 et LED13. Point à vérifier sur le proto :
+  mesurer le RSSI avec et sans téléphone posé. Si la perte dépasse 10 dB,
+  passer au ESP32-C3-MINI-1U avec antenne externe déportée dans la coque.
+- Découplage et pull-ups en deux colonnes à x = ±10,5 mm le long du module.
+  SW1 et SW2 à gauche du module, SW3 à droite, TP4 (EN) à côté de SW2.
+- Q1 et R8 en haut à gauche à (-17, -29), avec une fenêtre dans la coque.
+- J1 USB-C sur la languette à (0, +46,6), ouverture vers le bas. F1, D1, C7
+  juste au-dessus dans le disque. Les pistes VBUS, D+, D-, CC1, CC2 montent
+  par l'ouverture de l'anneau 5V.
+- U2 et ses capas en bas à gauche à (-12, +20). R5, R6 à droite. TP1 à TP3
+  et J2 sur la droite.
+- U3, C8 et R7 en bas, entre LED1 et LED2, pour que la data parte au plus
+  court vers LED1.
 
 ### 6.4 Mécanique
 
@@ -283,7 +309,8 @@ tour en deux anneaux de cuivre de 2 mm de large, r = 34 mm et r = 42 mm.
   dépasse le disque de 5 mm sur tout le tour. Cette lèvre est le diffuseur : la
   lumière des LEDs tournées vers l'arrière sort par la tranche et dessine
   l'anneau autour du téléphone vu de face.
-- Pied imprimé en PETG noir, angle 65°, rainure pour le câble.
+- Pied imprimé en PETG noir, angle 65°, rainure pour le câble. Il englobe la
+  languette USB-C.
 - Anneau aimanté MagSafe adhésif collé en face avant, centré à 20 mm sous le
   centre du disque pour que l'appareil photo de l'iPhone ne dépasse pas.
 
@@ -301,10 +328,23 @@ le fichier, comme le RX8025T de la V3 : pas de bibliothèque externe à installe
 Pour ouvrir : créer un projet `Halo.kicad_pro` dans le dossier `halo/`, ou
 ouvrir directement le `.kicad_sch` en autonome. Lancer l'ERC en premier.
 
-Empreintes : toutes standard KiCad sauf `Halo:LED_WS2812B-2020_PLCC4_2.0x2.0mm`
-pour les LEDs, à importer depuis LCSC (réf C965555) via le plugin "LCSC to
-KiCad", ou à dessiner : 4 pastilles 0,9 x 0,7 mm sur un corps 2 x 2 mm. Le
-module utilise `RF_Module:ESP32-C3-MINI-1` de la bibliothèque standard.
+`Halo.kicad_pcb` est généré par `gen_kicad_pcb.py`. Les empreintes 0805,
+électrolytique 6,3 mm, SOT-223, TL3342, USB-C HRO, test point, pin header
+sont copiées de la V3. Les autres sont dessinées dans le générateur avec des
+cotes nominales : ESP32-C3-MINI-1, SOT-23-5, SOT-23-6, fusible 1206,
+condensateur 0603, WS2812B-2020, phototransistor 0805, trou 2,2 mm.
+
+Avant de sortir les Gerbers, dans pcbnew : Outils > Mettre à jour les
+empreintes depuis la bibliothèque, pour remplacer ces cotes nominales par
+celles des bibliothèques KiCad. Les positions, rotations et nets sont
+conservés. Le WS2812B-2020 n'est pas dans la bibliothèque standard : importer
+la réf LCSC C965555 avec le plugin "LCSC to KiCad", puis vérifier que les
+arcs de data et les stubs VDD tombent toujours sur les bons pads. Vérifier
+aussi le brochage du module contre la datasheet, voir 3.3.
+
+Ordre conseillé ensuite : Mettre à jour le PCB depuis le schéma (les
+références et nets sont déjà cohérents), remplir les zones (B), router le
+centre, lancer le DRC.
 
 Pour modifier le schéma : éditer la liste `parts` du générateur (référence,
 symbole, valeur, empreinte, position, nets par broche), relancer le script.
