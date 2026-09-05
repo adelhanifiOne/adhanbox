@@ -65,7 +65,21 @@ function etapes(courante) {
  * Corps des 3 emails d'étape.
  * @param {'preparation'|'montage'|'expedition'} step
  */
-export function stepEmail(step, { firstName, ref, config, tracking, carrier }) {
+/** Lien de suivi selon le transporteur : le n° seul ne mène nulle part.
+ *  Mondial Relay exige AUSSI le code postal du destinataire (celui du point
+ *  relais) : sans lui, le client tombe sur un formulaire vide. */
+export function trackingUrl(carrier, tracking, { postcode } = {}) {
+  const c = String(carrier || '').toLowerCase();
+  const n = encodeURIComponent(tracking || '');
+  if (/mondial/.test(c)) {
+    const cp = postcode ? `&CodePostal=${encodeURIComponent(postcode)}` : '';
+    return `https://www.mondialrelay.fr/suivi-de-colis?NumeroExpedition=${n}${cp}`;
+  }
+  if (/colissimo|poste/.test(c)) return `https://www.laposte.fr/outils/suivre-vos-envois?code=${n}`;
+  return '';
+}
+
+export function stepEmail(step, { firstName, ref, config, tracking, carrier, relais }) {
   const conf = config
     ? par(`Votre configuration&nbsp;: <b style="color:#0C5B45;">${esc(config)}</b>`)
     : '';
@@ -98,14 +112,25 @@ export function stepEmail(step, { firstName, ref, config, tracking, carrier }) {
   }
 
   // expedition
+  const postcode = relais && relais.address ? (String(relais.address).match(/\b\d{5}\b/) || [])[0] : undefined;
+  const url = trackingUrl(carrier, tracking, { postcode });
   const lien = tracking
-    ? `<p style="margin:16px 0 0;text-align:center;">
-         <a href="https://www.laposte.fr/outils/suivre-vos-envois?code=${encodeURIComponent(tracking)}"
+    ? `${url ? `<p style="margin:16px 0 0;text-align:center;">
+         <a href="${url}"
             style="display:inline-block;background:#0C5B45;color:#fff;text-decoration:none;font-weight:600;font-size:15px;padding:12px 26px;border-radius:999px;">
             Suivre mon colis →</a>
-       </p>
+       </p>` : ''}
        <p style="color:#777;font-size:13px;text-align:center;margin:10px 0 0;">
          ${esc(carrier || 'Colissimo')} · n° ${esc(tracking)}</p>`
+    : '';
+  // Point relais : dire OÙ aller chercher le colis, sinon le client attend
+  // le facteur. Le réseau prévient lui-même quand le colis est en rayon.
+  const retrait = relais && relais.name
+    ? encadre(`<div style="font-size:13px;letter-spacing:1px;color:#B4791A;font-weight:700;margin-bottom:6px;">À RETIRER EN POINT RELAIS</div>
+      <div style="font-size:15px;color:#232323;line-height:1.5;"><b>${esc(relais.name)}</b><br>${esc(relais.address || '')}</div>
+      <p style="color:#666;font-size:13px;line-height:1.5;margin:10px 0 0;">
+        ${esc(carrier || 'Mondial Relay')} vous préviendra par SMS ou email dès que le colis y sera.
+        Présentez une pièce d'identité pour le retirer.</p>`)
     : '';
 
   return {
@@ -115,6 +140,7 @@ export function stepEmail(step, { firstName, ref, config, tracking, carrier }) {
       ${par(`Ça y est&nbsp;: votre AdhanBox est <b>partie</b>. 📦`)}
       ${conf}
       ${encadre(lien || par('Votre numéro de suivi vous sera communiqué dans la journée.'))}
+      ${retrait}
       ${par(`À la réception, branchez-la en USB-C et suivez la notice glissée dans la boîte : l'installation prend moins de cinq minutes.`)}
       ${par(`Si quoi que ce soit vous surprend à l'ouverture, écrivez-moi avant toute chose. J'y répondrai personnellement.`)}
       ${etapes(4)}

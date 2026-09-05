@@ -42,8 +42,16 @@ function page(res, status, title, message, tone, extra = '') {
 }
 
 /** Formulaire minimal pour saisir le numéro de suivi avant d'envoyer. */
-function trackingForm(res, params) {
+function trackingForm(res, params, livraison) {
   const q = (k) => esc(params[k] || '');
+  const relais = livraison && livraison.relais;
+  const mr = relais ? ' selected' : '';
+  const bloc = relais
+    ? `<div style="background:#FBF3E3;border-left:3px solid #B4791A;border-radius:0 8px 8px 0;padding:12px 14px;margin:0 0 20px;font-size:14px;line-height:1.5;">
+        <b>Point relais</b> — ${esc(relais.name)}<br>${esc(relais.address || '')}<br>
+        code <code style="font-size:15px;background:#fff;padding:1px 6px;border-radius:4px;">${esc(relais.code || '')}</code>
+        <span style="color:#666;">· à saisir dans Boxtal</span></div>`
+    : '';
   res.statusCode = 200;
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.end(`<!doctype html><html lang="fr"><head><meta charset="utf-8">
@@ -58,12 +66,16 @@ function trackingForm(res, params) {
     <input type="hidden" name="ref" value="${q('ref')}">
     <input type="hidden" name="step" value="expedition">
     <input type="hidden" name="token" value="${q('token')}">
+    ${bloc}
     <label style="display:block;font-size:13px;color:#555;margin-bottom:6px;">Numéro de suivi</label>
     <input name="tracking" required autofocus autocapitalize="characters" autocomplete="off"
            style="width:100%;box-sizing:border-box;font-size:16px;padding:12px 14px;border:1px solid #D8D2C4;border-radius:10px;margin-bottom:16px;">
     <label style="display:block;font-size:13px;color:#555;margin-bottom:6px;">Transporteur</label>
-    <input name="carrier" value="Colissimo"
-           style="width:100%;box-sizing:border-box;font-size:16px;padding:12px 14px;border:1px solid #D8D2C4;border-radius:10px;margin-bottom:22px;">
+    <select name="carrier"
+            style="width:100%;box-sizing:border-box;font-size:16px;padding:12px 14px;border:1px solid #D8D2C4;border-radius:10px;margin-bottom:22px;background:#fff;">
+      <option value="Colissimo"${mr ? '' : ' selected'}>Colissimo (domicile)</option>
+      <option value="Mondial Relay"${mr}>Mondial Relay (point relais)</option>
+    </select>
     <button type="submit"
             style="width:100%;background:#0C5B45;color:#fff;border:none;font-size:16px;font-weight:600;padding:14px;border-radius:999px;cursor:pointer;">
       Envoyer au client
@@ -108,14 +120,23 @@ export default async function handler(req, res) {
     return page(res, 500, 'Configuration incomplète', 'Clé Stripe ou Resend absente côté serveur.', 'err');
   }
 
-  // Expédition sans numéro de suivi : on demande d'abord.
-  if (step === 'expedition' && !tracking) return trackingForm(res, p);
-
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
   const s = await findSession(stripe, { session, ref });
   if (!s) {
     return page(res, 404, 'Commande introuvable', `Aucune commande ne correspond à «&nbsp;${esc(ref || session)}&nbsp;».`, 'err');
   }
+  // Mode de livraison choisi à la commande (metadata posées par checkout.js).
+  const m = s.metadata || {};
+  const livraison = {
+    relais: m.livraison === 'Point relais' && m.relais_code
+      ? { code: m.relais_code, network: m.relais_reseau || '', name: m.relais_nom || '',
+          address: m.relais_adresse || '' }
+      : null,
+  };
+
+  // Expédition sans numéro de suivi : on demande d'abord — en montrant le
+  // point relais et son code, et en présélectionnant le bon transporteur.
+  if (step === 'expedition' && !tracking) return trackingForm(res, p, livraison);
 
   const d = s.customer_details || {};
   const to = d.email;
@@ -140,7 +161,8 @@ export default async function handler(req, res) {
     // Blob indisponible : on continue plutôt que de bloquer un envoi légitime.
   }
 
-  const { subject, html } = stepEmail(step, { firstName, ref: shortRef, config, tracking, carrier });
+  const { subject, html } = stepEmail(step, { firstName, ref: shortRef, config, tracking, carrier,
+                                             relais: livraison.relais });
   const resend = new Resend(process.env.RESEND_API_KEY);
   const sent = await resend.emails.send({ from: FROM_EMAIL, to, subject, html });
   if (sent.error) {
