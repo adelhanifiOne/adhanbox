@@ -30,3 +30,5 @@ wifi_config.h
 
 # bac a sable de test (contient des cles) — ne jamais versionner
 _maptest_tmp/
+
+__pycache__/
