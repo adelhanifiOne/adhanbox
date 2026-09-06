@@ -2,7 +2,7 @@
 // - Starts an AP when a long-press is detected on CONFIG_BUTTON_PIN
 // - Serves a small webpage that requests navigator.geolocation and POSTs lat/lon
 // - Stores lat/lon/accuracy/timestamp in Preferences (NVS)
-//Version: 3.0.7 (AdhanBox V3 / HW v3)
+//Version: 3.0.8 (AdhanBox V3 / HW v3)
 #include <Arduino.h>
 #include <esp_mac.h>   // esp_read_mac() : MAC eFuse, lisible sans Wi-Fi
 #include <Wire.h>
@@ -1460,7 +1460,7 @@ void handleOtaUploadComplete() {
 // GET /api/firmware/version
 void handleFirmwareVersion() {
   server.send(200, "application/json",
-              "{\"version\":\"3.0.7\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
+              "{\"version\":\"3.0.8\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
 }
 
 // Returns true if the request carries the correct API key (or if token not yet set).
@@ -1547,11 +1547,11 @@ void handleDeviceInfo() {
   char buf[512];
   if (pairingWindow || hasValidToken) {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.7\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
+             "{\"version\":\"3.0.8\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
              OTA_HOSTNAME, deviceIdHex().c_str(), _apiToken.c_str(), _otaPass.c_str());
   } else {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.7\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
+             "{\"version\":\"3.0.8\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
              OTA_HOSTNAME, deviceIdHex().c_str());
   }
   server.send(200, "application/json", buf);
@@ -3756,8 +3756,10 @@ void handleDiag() {
   char buf[256];
   snprintf(buf, sizeof(buf),
     "{\"sd_clock_hz\":%lu,\"sd_read_kBs\":%d,\"need_kBs\":16,"
+    "\"wifi_sleep\":%s,"
     "\"free_heap\":%u,\"psram_size\":%u,\"psram_free\":%u}",
     (unsigned long)audio.sdClock(), kBs,
+    (WiFi.status() == WL_CONNECTED && WiFi.getSleep()) ? "true" : "false",
     (unsigned)ESP.getFreeHeap(),
     (unsigned)ESP.getPsramSize(), (unsigned)ESP.getFreePsram());
   server.send(200, "application/json", buf);
@@ -4433,7 +4435,7 @@ static void bancCommande(String c) {
 
   if (verbe == "info") {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.7\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
+             "{\"version\":\"3.0.8\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
              deviceIdHex().c_str());
     bancRep(buf);
 
@@ -4442,8 +4444,10 @@ static void bancCommande(String c) {
     int kBs = audio.sdBenchKBs("/quran/afs/001.mp3", 256 * 1024);
     snprintf(buf, sizeof(buf),
              "{\"sd_clock_hz\":%lu,\"sd_read_kBs\":%d,\"need_kBs\":16,"
+             "\"wifi_sleep\":%s,"
              "\"free_heap\":%u,\"psram_size\":%u}",
              (unsigned long)audio.sdClock(), kBs,
+             (WiFi.status() == WL_CONNECTED && WiFi.getSleep()) ? "true" : "false",
              (unsigned)ESP.getFreeHeap(), (unsigned)ESP.getPsramSize());
     bancRep(buf);
 
@@ -4615,14 +4619,29 @@ void loop() {
   audio.pump();
   v2Tick();          // [V2] azkar/coran + sync contenu
 
-  // [V2] Desactive le modem-sleep WiFi des la 1ere connexion (tous chemins :
-  // boot, BLE, reconnexion). Le modem-sleep par defaut reveille le WiFi par
-  // intervalles et gele le CPU -> coupures audio I2S periodiques. Une fois.
-  static bool _wifiSleepDisabled = false;
-  if (!_wifiSleepDisabled && WiFi.status() == WL_CONNECTED) {
-    WiFi.setSleep(false);
-    _wifiSleepDisabled = true;
-    Serial.println("[WiFi] modem-sleep desactive (audio I2S stable)");
+  // [V2] Le modem-sleep WiFi reveille le modem par intervalles et GELE le CPU
+  // pendant ce temps -> le decodeur ne remplit plus le DMA I2S -> crepitement.
+  //
+  // ATTENTION, LE PIEGE : esp_wifi_set_ps() est REMIS A SA VALEUR PAR DEFAUT
+  // (WIFI_PS_MIN_MODEM) par chaque appel a WiFi.mode(). Ce fichier en compte
+  // onze : appairage BLE, point d'acces, reconnexions, remise a zero usine.
+  // La version precedente ne desactivait la veille QU'UNE SEULE FOIS, avec un
+  // verrou statique : le boitier demarrait propre, puis la premiere
+  // reconnexion reactivait la veille en silence et le verrou interdisait de la
+  // recorriger. Mesure au banc sur le meme boitier, meme carte SD :
+  //   carte fraichement flashee, jamais reconnectee : 118 ko/s, son propre ;
+  //   apres une reconnexion                        :  85 ko/s, crepitement.
+  // 85/118 = ~30 % de temps CPU perdu, pas du debit disque perdu.
+  //
+  // On RE-VERIFIE donc l'etat une fois par seconde et on le corrige des qu'il
+  // derive, au lieu de faire confiance a un reglage pose une fois pour toutes.
+  static unsigned long _wifiSleepCheck = 0;
+  if (millis() - _wifiSleepCheck >= 1000) {
+    _wifiSleepCheck = millis();
+    if (WiFi.status() == WL_CONNECTED && WiFi.getSleep()) {
+      WiFi.setSleep(false);
+      Serial.println("[WiFi] modem-sleep remis par le pilote -> redesactive");
+    }
   }
 #if ENABLE_BLE
   // Handle BLE provisioning credentials (received in BLE task, processed here)
