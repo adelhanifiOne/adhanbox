@@ -2731,48 +2731,6 @@
 		)
 	)
 	(symbol
-		(lib_id "power:PWR_FLAG")
-		(at 55.88 30.48 0)
-		(unit 1)
-		(exclude_from_sim no)
-		(in_bom no)
-		(on_board yes)
-		(dnp no)
-		(fields_autoplaced yes)
-		(uuid "fe3b4c86-ee4d-55ea-a31d-7a40dec8d8ed")
-		(property "Reference" "#FLG3"
-			(at 55.88 18.48 0)
-			(effects (font (size 1.27 1.27)))
-		)
-		(property "Value" "PWR_FLAG"
-			(at 55.88 42.48 0)
-			(effects (font (size 1.27 1.27)))
-		)
-		(property "Footprint" ""
-			(at 55.88 30.48 0)
-			(effects (font (size 1.27 1.27)) (hide yes))
-		)
-		(property "Datasheet" "~"
-			(at 55.88 30.48 0)
-			(effects (font (size 1.27 1.27)) (hide yes))
-		)
-		(property "Description" ""
-			(at 55.88 30.48 0)
-			(effects (font (size 1.27 1.27)) (hide yes))
-		)
-		(pin "1"
-			(uuid "88547e96-4951-543b-88e1-d0581440e408")
-		)
-		(instances
-			(project "Halo"
-				(path "/5c1ea366-10f2-55bd-b5fc-457e28fdddd0"
-					(reference "#FLG3")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
 		(lib_id "Halo:ESP32-C3-MINI-1")
 		(at 68.58 157.48 0)
 		(unit 1)
@@ -6192,17 +6150,11 @@
 		(effects (font (size 1.27 1.27)) (justify right))
 		(uuid "70ae08bb-bd92-5a26-9ed8-ee057466f5fc")
 	)
-	(global_label "3V3"
+	(global_label "GND"
 		(shape bidirectional)
 		(at 40.64 30.48 270)
 		(effects (font (size 1.27 1.27)) (justify right))
 		(uuid "a5536cac-f19c-5fe9-8a31-d0a54253bc14")
-	)
-	(global_label "GND"
-		(shape bidirectional)
-		(at 55.88 30.48 270)
-		(effects (font (size 1.27 1.27)) (justify right))
-		(uuid "33f65ddd-aeea-5c2e-9497-ce83171abc83")
 	)
 	(global_label "3V3"
 		(shape bidirectional)

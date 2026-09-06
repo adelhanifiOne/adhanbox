@@ -226,8 +226,7 @@ P("TP2", "Connector:TestPoint", "3V3", FP["TP"], 266.7, 66.04, {"1": "3V3"}, dnp
 P("TP3", "Connector:TestPoint", "GND", FP["TP"], 276.86, 66.04, {"1": "GND"}, dnp=True, in_bom=False)
 P("TP4", "Connector:TestPoint", "EN", FP["TP"], 287.02, 66.04, {"1": "EN"}, dnp=True, in_bom=False)
 P("#FLG1", "power:PWR_FLAG", "PWR_FLAG", "", 25.4, 30.48, {"1": "5V"}, in_bom=False)
-P("#FLG2", "power:PWR_FLAG", "PWR_FLAG", "", 40.64, 30.48, {"1": "3V3"}, in_bom=False)
-P("#FLG3", "power:PWR_FLAG", "PWR_FLAG", "", 55.88, 30.48, {"1": "GND"}, in_bom=False)
+P("#FLG2", "power:PWR_FLAG", "PWR_FLAG", "", 40.64, 30.48, {"1": "GND"}, in_bom=False)
 
 # ---- Feuille 2 : module, strapping, boutons, capteur (zone milieu) ----
 P("U1", "Halo:ESP32-C3-MINI-1", "ESP32-C3-MINI-1-N4", "RF_Module:ESP32-C3-MINI-1", 68.58, 157.48,
