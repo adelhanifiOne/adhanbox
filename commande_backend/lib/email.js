@@ -106,6 +106,12 @@ export function stepEmail(step, { firstName, ref, config, tracking, carrier, rel
         ${par(`Votre AdhanBox est <b>assemblée et testée</b>. Elle a passé le contrôle : audio, lumière, connexion et déclenchement de l'adhan à l'heure.`)}
         ${conf}
         ${par(`Il ne reste plus qu'à l'emballer. Vous recevrez votre numéro de suivi dès qu'elle partira.`)}
+        ${encadre(`
+          <p style="margin:0 0 10px;font-weight:600;color:#0C5B45;">Une question pour préparer votre application</p>
+          ${par(`Avez-vous un téléphone ou une tablette <b>Android</b> à la maison&nbsp;? Si oui, <b>répondez simplement à cet email</b> avec l'adresse Gmail utilisée sur cet appareil — celle qui apparaît sous votre nom quand vous ouvrez le Play Store et touchez votre photo de profil.`)}
+          ${par(`Google m'impose d'inscrire chaque utilisateur avant de rendre l'application publique. Votre adresse me permet donc de la publier sur le Play Store, et à vous de l'installer dès qu'elle y sera.`)}
+          ${par(`Sur <b>iPhone ou iPad</b>, rien à faire&nbsp;: l'application AdhanBox est déjà sur l'App Store, il suffira de la télécharger.`)}
+        `)}
         ${etapes(3)}
         ${num}`),
     };
