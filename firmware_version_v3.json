@@ -1,6 +1,6 @@
 {
-  "version": "3.0.9",
+  "version": "3.0.17",
   "hardware": "v3",
   "url": "https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/build_temp_v3/adhanbox_v3.ino.bin",
-  "changelog": "Correction d un grésillement qui pouvait apparaître pendant la lecture, en particulier à volume élevé, lorsque le boîtier est connecté au Wi-Fi."
+  "changelog": "Le son ne crépite plus. La lecture ne se laisse plus perturber par le réseau Wi-Fi, et le boîtier garde une réserve de son quatre fois plus grande pour absorber les à-coups."
 }
