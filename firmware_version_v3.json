@@ -1,6 +1,6 @@
 {
-  "version": "3.0.6",
+  "version": "3.0.9",
   "hardware": "v3",
   "url": "https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/build_temp_v3/adhanbox_v3.ino.bin",
-  "changelog": "Nouvelle page de depannage integree : appairage Bluetooth, reseau Wi-Fi et test du haut-parleur, plus lisibles."
+  "changelog": "Correction d un grésillement qui pouvait apparaître pendant la lecture, en particulier à volume élevé, lorsque le boîtier est connecté au Wi-Fi."
 }
