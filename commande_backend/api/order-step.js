@@ -11,6 +11,13 @@
 // Idempotent : chaque envoi laisse une trace dans Blob (orders/<ref>/<step>),
 // un deuxième clic ne renvoie pas l'email. Indispensable quand on clique
 // depuis un téléphone et qu'on ne sait plus si ça a marché.
+//
+// La trace ne contient AUCUNE donnée personnelle : ni email, ni prénom, ni
+// numéro de suivi. Le store Blob est public (mode fixé à sa création, non
+// modifiable) et le chemin est prévisible : quiconque connaît l'hôte du store
+// et une référence pourrait lire le fichier. On n'y met donc que ce qui sert
+// à l'idempotence — l'étape, la référence, la date — et le transporteur.
+// api/cron-avis.js retrouve prénom, configuration et email chez Stripe.
 
 import Stripe from 'stripe';
 import { Resend } from 'resend';
@@ -176,11 +183,10 @@ export default async function handler(req, res) {
   }
 
   try {
-    // firstName et config sont relus par api/cron-avis.js : ils lui évitent
-    // de retourner chercher la commande chez Stripe dix jours plus tard.
+    // Pas d'email, de prénom ni de numéro de suivi ici (voir en-tête) :
+    // api/cron-avis.js ne lit que sentAt, et retrouve le client chez Stripe.
     await put(marker, JSON.stringify({
-      step, ref: shortRef, to, firstName, config, tracking: tracking || null,
-      carrier: carrier || null, sentAt: new Date().toISOString(),
+      step, ref: shortRef, carrier: carrier || null, sentAt: new Date().toISOString(),
     }), { access: 'public', contentType: 'application/json', addRandomSuffix: false });
   } catch {
     // L'email est parti : ne pas transformer un échec de traçage en erreur.

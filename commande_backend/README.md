@@ -13,6 +13,8 @@ sur `adhanbox.fr/personnaliser.html`, et elle est visible partout.
 | `POST /api/review` | Dépôt d'un avis depuis `adhanbox.fr/avis.html`. Corps : `{ note, texte, prenom, ville, email?, hp? }`. Stocké **en attente** dans Vercel Blob (`reviews/pending/{id}.json`) + notif email avec liens Approuver / Rejeter. Aucun email ni IP stocké. Badge « acheteur vérifié » si l'email correspond à un client Stripe. `hp` = piège à bots. |
 | `GET /api/reviews` | Liste des avis **approuvés** (`reviews/approved/*.json`), triés du plus récent au plus ancien : `{ count, average, reviews[] }`. Mis en cache CDN 5 min. Consommé par `avis.html` et la section témoignages de la home. |
 | `GET /api/review-moderate?id&action=approve\|reject&token` | Cible des liens de l'email de notif. Approuver déplace l'avis vers `reviews/approved/`, Rejeter le supprime. Protégé par `REVIEW_ADMIN_TOKEN`. Renvoie une page HTML de confirmation. |
+| `GET /api/order-step?ref&step&token` | Envoie au client l'email de l'étape (`preparation`, `montage`, `expedition`, `avis`). Cliqué depuis l'email de notification. Idempotent grâce à une trace Blob `orders/{ref}/{step}.json`. Protégé par `ORDER_ADMIN_TOKEN` (repli : `REVIEW_ADMIN_TOKEN`). |
+| `GET /api/cron-avis` | Tâche quotidienne (09:00, `vercel.json`) : envoie « Avis et photo » dix jours après « Expédiée ». `?dry=1` montre ce qui partirait. Protégé par `Authorization: Bearer CRON_SECRET`. |
 
 ### Système d'avis — stockage
 
@@ -21,6 +23,16 @@ Les avis vivent dans un **store Vercel Blob** connecté au projet (Vercel → St
 automatiquement). Un fichier JSON par avis, sans donnée personnelle :
 `reviews/pending/{id}.json` (en attente) puis `reviews/approved/{id}.json` (publié).
 Modération = un simple clic dans l'email de notification.
+
+### Traces de commande — sans donnée personnelle
+
+Le store est **public** (mode fixé à sa création, non modifiable) et les chemins
+`orders/{ref}/{step}.json` sont prévisibles. Ces traces ne servent qu'à
+l'idempotence : elles ne contiennent que `step`, `ref`, `sentAt` et, pour
+l'expédition, `carrier`. **Jamais** d'email, de prénom, de configuration ni de
+numéro de suivi. `cron-avis` retrouve le client chez Stripe pour le lot du jour,
+et réécrit épurée toute trace qui porterait encore ces champs (traces antérieures
+au 07/09/2026) — le compte apparaît dans sa réponse (`nettoyage`).
 
 ## Variables d'environnement (Vercel → Settings → Environment Variables)
 
@@ -36,6 +48,9 @@ Modération = un simple clic dans l'email de notification.
 | `SITE_URL` | non | Défaut `https://adhanbox.fr` |
 | `BLOB_READ_WRITE_TOKEN` | ✅ (avis) | Injecté auto quand un store Vercel Blob est connecté au projet. Sans lui, `/api/review` et `/api/reviews` échouent. |
 | `REVIEW_ADMIN_TOKEN` | ✅ (avis) | Secret partagé qui protège les liens Approuver/Rejeter. À définir (chaîne longue aléatoire). Sans lui, aucune notif d'avis n'est envoyée et la modération refuse tout. |
+| `ORDER_ADMIN_TOKEN` | non | Secret des liens d'étape de commande. Absent → `REVIEW_ADMIN_TOKEN` est utilisé. |
+| `CRON_SECRET` | ✅ (cron) | Vercel l'envoie en `Authorization: Bearer` à `/api/cron-avis`. Sans lui, la tâche refuse tout. |
+| `AVIS_DELAI_JOURS` | non | Délai entre « Expédiée » et « Avis et photo », défaut `10`. |
 | `BACKEND_URL` | non | Base publique de ce backend pour les liens de modération, défaut `https://adhanbox-commande.vercel.app` |
 
 ## Webhook Stripe à créer (dashboard → Développeurs → Webhooks)
