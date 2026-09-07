@@ -70,7 +70,7 @@ export default async function handler(req, res) {
   do {
     const page = await list({ prefix: 'orders/', cursor, limit: 1000 });
     for (const b of page.blobs) {
-      const m = b.pathname.match(/^orders\/([^/]+)\/(expedition|avis)\.json$/);
+      const m = b.pathname.match(/^orders\/([^/]+)\/(preparation|montage|expedition|avis)\.json$/);
       if (!m) continue;
       const c = commandes.get(m[1]) || { ref: m[1] };
       c[m[2]] = b;
@@ -78,6 +78,28 @@ export default async function handler(req, res) {
     }
     cursor = page.hasMore ? page.cursor : undefined;
   } while (cursor);
+
+  // ?liste=1 : inventaire de tous les mails d'étape envoyés, par commande.
+  // Lecture seule, même garde. Sert à savoir QUI a reçu QUOI et quand, par
+  // exemple pour retrouver les clients invités à répondre à une adresse morte.
+  if (url.searchParams.get('liste') === '1') {
+    const out = [];
+    for (const c of commandes.values()) {
+      const etapes = {};
+      let to = '';
+      for (const step of ['preparation', 'montage', 'expedition', 'avis']) {
+        if (!c[step]) continue;
+        try {
+          const t = await (await fetch(c[step].url)).json();
+          etapes[step] = (t.sentAt || c[step].uploadedAt).slice(0, 10);
+          to = to || t.to || '';
+        } catch { etapes[step] = '?'; }
+      }
+      out.push({ ref: c.ref, to, etapes });
+    }
+    out.sort((a, b) => Object.values(a.etapes)[0].localeCompare(Object.values(b.etapes)[0]));
+    return sendJson(res, 200, { commandes: out });
+  }
 
   // 2) Celles expédiées depuis assez longtemps, sans avis envoyé.
   const limite = Date.now() - DELAI_JOURS * 86400e3;
