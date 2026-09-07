@@ -108,7 +108,8 @@ export default async function handler(req, res) {
   for (const c of lot) {
     if (!c.to) { echecs.push({ ref: c.ref, erreur: 'pas d\'email' }); continue; }
     const { subject, html } = stepEmail('avis', { firstName: c.firstName, ref: c.ref, config: c.config });
-    const sent = await resend.emails.send({ from: FROM_EMAIL, to: c.to, subject, html });
+    const sent = await resend.emails.send({ from: FROM_EMAIL, to: c.to, subject, html,
+                                            replyTo: 'contact@adhanbox.fr' });  // voir order-step.js
     if (sent.error) { echecs.push({ ref: c.ref, erreur: sent.error.message }); continue; }
     try {
       await put(`orders/${c.ref}/avis.json`, JSON.stringify({

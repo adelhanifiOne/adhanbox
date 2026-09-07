@@ -165,7 +165,12 @@ export default async function handler(req, res) {
   const { subject, html } = stepEmail(step, { firstName, ref: shortRef, config, tracking, carrier,
                                              relais: livraison.relais });
   const resend = new Resend(process.env.RESEND_API_KEY);
-  const sent = await resend.emails.send({ from: FROM_EMAIL, to, subject, html });
+  // replyTo obligatoire : commande@adhanbox.fr n'existe pas chez OVH (550 User
+  // unknown, sonde SMTP du 07/09/2026). Sans lui, « répondez simplement à cet
+  // email » envoie le client dans le vide : ni l'adresse Gmail Android, ni la
+  // photo ne seraient jamais arrivées.
+  const sent = await resend.emails.send({ from: FROM_EMAIL, to, subject, html,
+                                          replyTo: 'contact@adhanbox.fr' });
   if (sent.error) {
     return page(res, 502, 'Envoi échoué', esc(sent.error.message || 'Resend a refusé l\'envoi.'), 'err');
   }
