@@ -295,7 +295,12 @@ def _courir(cmd, sortie):
     return p.wait()
 
 
-BUILD = os.path.join(RACINE, 'build_temp_v3')
+# Le banc compile dans SON dossier, pas dans build_temp_v3 : ce dernier est
+# ecrase par deploy_firmware_v3.py avec la version de publication, compilee
+# sans CDCOnBoot (Serial sur l'UART, donc muette par le cable) et signee (512
+# octets de plus). Deux fois le 07/09/2026, une carte flashee depuis le banc
+# juste apres une publication est restee « sans reponse » pour cette raison.
+BUILD = os.path.join(RACINE, 'build_banc_v3')
 BINAIRE = os.path.join(BUILD, 'adhanbox_v3.ino.bin')
 BINAIRE_SIGNE = os.path.join(BUILD, 'adhanbox_v3.ino.signed.bin')
 CLE_PRIVEE = os.path.join(RACINE, 'keys', 'ota_private.pem')

@@ -30,3 +30,6 @@ wifi_config.h
 
 # bac a sable de test (contient des cles) — ne jamais versionner
 _maptest_tmp/
+
+# compilation du banc de production (jamais publiee)
+build_banc_v3/
