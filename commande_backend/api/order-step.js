@@ -1,4 +1,4 @@
-// GET /api/order-step?session=cs_…&step=preparation|montage|expedition&token=…
+// GET /api/order-step?session=cs_…&step=preparation|montage|expedition|avis&token=…
 //     GET /api/order-step?ref=0P4SHMBE&step=…&token=…
 //
 // Envoie au client l'email correspondant à l'étape de sa commande. Pensé pour
@@ -18,11 +18,12 @@ import { list, put } from '@vercel/blob';
 import { stepEmail, esc } from '../lib/email.js';
 
 const FROM_EMAIL = process.env.FROM_EMAIL || 'AdhanBox <commande@adhanbox.fr>';
-const STEPS = ['preparation', 'montage', 'expedition'];
+const STEPS = ['preparation', 'montage', 'expedition', 'avis'];
 const LIBELLE = {
   preparation: 'En préparation',
   montage: 'Assemblée et testée',
   expedition: 'Expédiée',
+  avis: 'Avis et photo',
 };
 
 function page(res, status, title, message, tone, extra = '') {
@@ -170,8 +171,10 @@ export default async function handler(req, res) {
   }
 
   try {
+    // firstName et config sont relus par api/cron-avis.js : ils lui évitent
+    // de retourner chercher la commande chez Stripe dix jours plus tard.
     await put(marker, JSON.stringify({
-      step, ref: shortRef, to, tracking: tracking || null,
+      step, ref: shortRef, to, firstName, config, tracking: tracking || null,
       carrier: carrier || null, sentAt: new Date().toISOString(),
     }), { access: 'public', contentType: 'application/json', addRandomSuffix: false });
   } catch {

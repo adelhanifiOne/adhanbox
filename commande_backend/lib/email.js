@@ -1,4 +1,4 @@
-// Gabarit d'email partagé + corps des 3 emails d'étape.
+// Gabarit d'email partagé + corps des 4 emails d'étape.
 //
 // Placé hors de api/ : Vercel ne route que api/, donc ce fichier n'est pas
 // exposé comme fonction.
@@ -62,8 +62,8 @@ function etapes(courante) {
 }
 
 /**
- * Corps des 3 emails d'étape.
- * @param {'preparation'|'montage'|'expedition'} step
+ * Corps des 4 emails d'étape.
+ * @param {'preparation'|'montage'|'expedition'|'avis'} step
  */
 /** Lien de suivi selon le transporteur : le n° seul ne mène nulle part.
  *  Mondial Relay exige AUSSI le code postal du destinataire (celui du point
@@ -113,6 +113,32 @@ export function stepEmail(step, { firstName, ref, config, tracking, carrier, rel
           ${par(`Sur <b>iPhone ou iPad</b>, rien à faire&nbsp;: l'application AdhanBox est déjà sur l'App Store, il suffira de la télécharger.`)}
         `)}
         ${etapes(3)}
+        ${num}`),
+    };
+  }
+
+  if (step === 'avis') {
+    // Envoyé 10 jours après l'expédition (api/cron-avis.js), ou à la main
+    // (bouton « 4 · Avis »). Deux demandes, pas plus : un avis sur le site, et
+    // une photo en réponse. La dernière phrase compte autant que les deux
+    // autres : un client mécontent doit écrire ici AVANT d'écrire en public.
+    const bouton = `<p style="margin:18px 0 0;text-align:center;">
+      <a href="${SITE}/avis.html"
+         style="display:inline-block;background:#0C5B45;color:#fff;text-decoration:none;font-weight:600;font-size:15px;padding:12px 26px;border-radius:999px;">
+         Laisser mon avis →</a></p>`;
+    return {
+      subject: `Comment se passe la vie avec votre AdhanBox ?`,
+      html: shell(`
+        ${salut(firstName)}
+        ${par(`Votre AdhanBox est chez vous depuis quelques jours. J'espère qu'elle a trouvé sa place, et que l'adhan s'élève bien à l'heure.`)}
+        ${par(`Je fabrique chaque boîtier à la main, et votre retour compte plus que tout&nbsp;: c'est lui qui aidera la prochaine famille à se décider.`)}
+        ${encadre(`
+          <p style="margin:0 0 4px;font-weight:600;color:#0C5B45;">Deux minutes, deux gestes</p>
+          ${par(`<b>Un avis</b> sur <a href="${SITE}/avis.html" style="color:#0C5B45;">adhanbox.fr/avis</a>. Quelques mots suffisent&nbsp;: ce que vous avez ressenti, à qui vous la conseilleriez.`)}
+          ${par(`<b>Une photo ou une courte vidéo</b> du boîtier chez vous, en <b>répondant simplement à cet email</b>. Avec votre accord, je la partagerai sur adhanbox.fr ou sur Instagram, avec votre prénom seulement.`)}
+          ${bouton}
+        `)}
+        ${par(`Et si quelque chose ne va pas, même un détail, dites-le-moi d'abord&nbsp;: je le règle.`)}
         ${num}`),
     };
   }

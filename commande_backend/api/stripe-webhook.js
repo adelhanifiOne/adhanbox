@@ -186,8 +186,10 @@ function stepButtons(sessionId) {
     ${btn('preparation', '1 · En préparation', '#0C5B45')}
     ${btn('montage', '2 · Assemblée', '#0C5B45')}
     ${btn('expedition', '3 · Expédiée', '#B4791A')}
+    ${btn('avis', '4 · Avis', '#6B6B6B')}
     <p style="margin:10px 0 0;color:#9A9A9A;font-size:12px;">
       Un seul envoi par étape. « Expédiée » demandera le numéro de suivi.
+      « Avis » part tout seul dix jours après l'expédition&nbsp;; le bouton sert à l'avancer.
     </p>
   </div>`;
 }
