@@ -1075,10 +1075,35 @@ def t_psram(ctx):
 
 
 def t_sd(ctx):
+    """Debit de lecture SD, et surtout POURQUOI il est bas quand il l'est.
+
+    Le debit moyen seul confond deux pannes tres differentes. A 1 MHz une
+    lecture de 4 Ko prend ~33 ms : si toutes les lectures sont un peu lentes,
+    c'est la carte ; si la plupart sont a pleine vitesse et que quelques-unes
+    durent 200 ms, ce n'est pas la carte, c'est une autre tache qui gele le
+    processeur — et c'est cette meme gelee qui vide le tampon I2S et fait
+    crepiter le son. Le firmware 3.0.9 remonte donc la plus longue lecture et
+    le nombre de gels, en plus de la moyenne.
+    """
     d = ctx.diag()
     lu, besoin = d.get('sd_read_kBs', 0), d.get('need_kBs', 16)
-    return lu >= besoin, '%d ko/s lus, %d requis%s' % (
-        lu, besoin, '' if lu >= besoin else ' → coupures audio garanties')
+    detail = '%d ko/s lus, %d requis' % (lu, besoin)
+    gels = d.get('gels')
+    if gels is not None:
+        detail += ' · plus longue lecture %d ms, %d gel(s)' % (
+            d.get('lecture_max_ms', 0), gels)
+    veille = d.get('wifi_veille')
+    if veille and veille not in ('aucune', 'hors-ligne'):
+        detail += ' · veille du modem Wi-Fi ACTIVE (%s)' % veille
+    # Un seul gel suffit a faire un clic audible : on echoue dessus, meme si la
+    # moyenne passe. C'est exactement ce que l'ancien controle laissait filer.
+    if lu < besoin:
+        return False, detail + ' → coupures audio garanties'
+    if gels:
+        return False, detail + ' → le son crepitera'
+    if veille and veille not in ('aucune', 'hors-ligne'):
+        return False, detail
+    return True, detail
 
 
 def t_heap(ctx):

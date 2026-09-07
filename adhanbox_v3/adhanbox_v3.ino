@@ -2,7 +2,7 @@
 // - Starts an AP when a long-press is detected on CONFIG_BUTTON_PIN
 // - Serves a small webpage that requests navigator.geolocation and POSTs lat/lon
 // - Stores lat/lon/accuracy/timestamp in Preferences (NVS)
-//Version: 3.0.8 (AdhanBox V3 / HW v3)
+//Version: 3.0.9 (AdhanBox V3 / HW v3)
 #include <Arduino.h>
 #include <esp_mac.h>   // esp_read_mac() : MAC eFuse, lisible sans Wi-Fi
 #include <Wire.h>
@@ -269,14 +269,33 @@ class I2SAudio {
  public:
   uint32_t sdClock() const { return _sdClock; }
   // Bench debit SD : lit `bytes` octets d'un fichier existant et renvoie ko/s.
+  // Mesure de la derniere campagne : sert a distinguer DEUX pannes que le
+  // debit moyen seul confond.
+  //   - carte SD reellement lente  -> toutes les lectures sont un peu lentes,
+  //     _benchMaxMs reste petit et proche de la moyenne ;
+  //   - temps CPU vole par une autre tache (Wi-Fi, BLE, pile reseau) -> la
+  //     plupart des lectures sont a pleine vitesse et quelques-unes durent
+  //     tres longtemps : _benchMaxMs explose et _benchStalls compte les gels.
+  // A 1 MHz une lecture de 4 Ko prend ~33 ms en regime normal ; on compte donc
+  // comme « gel » tout ce qui depasse le double.
+  uint32_t _benchMaxMs = 0;    // plus longue lecture de 4 Ko de la campagne
+  uint32_t _benchStalls = 0;   // nombre de lectures au-dela de 70 ms
+  uint32_t benchMaxMs()  const { return _benchMaxMs; }
+  uint32_t benchStalls() const { return _benchStalls; }
+
   int sdBenchKBs(const char* path, uint32_t bytes) {
+    _benchMaxMs = 0; _benchStalls = 0;
     if (!_sdOk || !SD.exists(path)) return -1;
     File f = SD.open(path, FILE_READ);
     if (!f) return -1;
     static uint8_t tmp[4096];
     uint32_t total = 0; unsigned long t0 = millis();
     while (total < bytes) {
+      unsigned long tl = millis();
       int n = f.read(tmp, sizeof(tmp));
+      unsigned long dl = millis() - tl;
+      if (dl > _benchMaxMs) _benchMaxMs = dl;
+      if (dl > 70) _benchStalls++;
       if (n <= 0) break;
       total += n;
     }
@@ -1460,7 +1479,7 @@ void handleOtaUploadComplete() {
 // GET /api/firmware/version
 void handleFirmwareVersion() {
   server.send(200, "application/json",
-              "{\"version\":\"3.0.8\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
+              "{\"version\":\"3.0.9\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
 }
 
 // Returns true if the request carries the correct API key (or if token not yet set).
@@ -1547,11 +1566,11 @@ void handleDeviceInfo() {
   char buf[512];
   if (pairingWindow || hasValidToken) {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.8\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
+             "{\"version\":\"3.0.9\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
              OTA_HOSTNAME, deviceIdHex().c_str(), _apiToken.c_str(), _otaPass.c_str());
   } else {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.8\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
+             "{\"version\":\"3.0.9\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
              OTA_HOSTNAME, deviceIdHex().c_str());
   }
   server.send(200, "application/json", buf);
@@ -3748,6 +3767,16 @@ void handleAudioList() {
   server.send(200, "application/json", out);
 }
 
+// Etat REEL de la veille du modem Wi-Fi, demande au pilote. Ne pas utiliser
+// WiFi.getSleep() : il renvoie la valeur mise en cache par WiFi.setSleep().
+static const char* wifiPsNom() {
+  if (WiFi.status() != WL_CONNECTED) return "hors-ligne";
+  wifi_ps_type_t ps;
+  if (esp_wifi_get_ps(&ps) != ESP_OK) return "inconnu";
+  return ps == WIFI_PS_NONE ? "aucune"
+       : ps == WIFI_PS_MIN_MODEM ? "min_modem" : "max_modem";
+}
+
 // Diagnostic : horloge SD reelle + debit de lecture (ko/s) + heap/PSRAM.
 // Sert a savoir si la SD tient le 128 kbps (16 ko/s) ou pas.
 void handleDiag() {
@@ -3756,10 +3785,11 @@ void handleDiag() {
   char buf[256];
   snprintf(buf, sizeof(buf),
     "{\"sd_clock_hz\":%lu,\"sd_read_kBs\":%d,\"need_kBs\":16,"
-    "\"wifi_sleep\":%s,"
+    "\"lecture_max_ms\":%lu,\"gels\":%lu,\"wifi_veille\":\"%s\","
     "\"free_heap\":%u,\"psram_size\":%u,\"psram_free\":%u}",
     (unsigned long)audio.sdClock(), kBs,
-    (WiFi.status() == WL_CONNECTED && WiFi.getSleep()) ? "true" : "false",
+    (unsigned long)audio.benchMaxMs(), (unsigned long)audio.benchStalls(),
+    wifiPsNom(),
     (unsigned)ESP.getFreeHeap(),
     (unsigned)ESP.getPsramSize(), (unsigned)ESP.getFreePsram());
   server.send(200, "application/json", buf);
@@ -4435,7 +4465,7 @@ static void bancCommande(String c) {
 
   if (verbe == "info") {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.8\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
+             "{\"version\":\"3.0.9\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
              deviceIdHex().c_str());
     bancRep(buf);
 
@@ -4444,10 +4474,11 @@ static void bancCommande(String c) {
     int kBs = audio.sdBenchKBs("/quran/afs/001.mp3", 256 * 1024);
     snprintf(buf, sizeof(buf),
              "{\"sd_clock_hz\":%lu,\"sd_read_kBs\":%d,\"need_kBs\":16,"
-             "\"wifi_sleep\":%s,"
+             "\"lecture_max_ms\":%lu,\"gels\":%lu,\"wifi_veille\":\"%s\","
              "\"free_heap\":%u,\"psram_size\":%u}",
              (unsigned long)audio.sdClock(), kBs,
-             (WiFi.status() == WL_CONNECTED && WiFi.getSleep()) ? "true" : "false",
+             (unsigned long)audio.benchMaxMs(), (unsigned long)audio.benchStalls(),
+             wifiPsNom(),
              (unsigned)ESP.getFreeHeap(), (unsigned)ESP.getPsramSize());
     bancRep(buf);
 
@@ -4638,7 +4669,15 @@ void loop() {
   static unsigned long _wifiSleepCheck = 0;
   if (millis() - _wifiSleepCheck >= 1000) {
     _wifiSleepCheck = millis();
-    if (WiFi.status() == WL_CONNECTED && WiFi.getSleep()) {
+    // ATTENTION : WiFi.getSleep() ne lit PAS le pilote, il renvoie la variable
+    // _sleepEnabled que WiFi.setSleep() vient d'ecrire. L'interroger revient a
+    // se demander a soi-meme ce qu'on a decide : la reponse est toujours
+    // « pas de veille », meme si le pilote, lui, l'a reactivee. Il faut donc
+    // demander l'etat REEL au pilote avec esp_wifi_get_ps().
+    wifi_ps_type_t ps = WIFI_PS_NONE;
+    if (WiFi.status() == WL_CONNECTED && esp_wifi_get_ps(&ps) == ESP_OK
+        && ps != WIFI_PS_NONE) {
+      esp_wifi_set_ps(WIFI_PS_NONE);
       WiFi.setSleep(false);
       Serial.println("[WiFi] modem-sleep remis par le pilote -> redesactive");
     }
