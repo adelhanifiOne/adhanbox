@@ -2,7 +2,7 @@
 // - Starts an AP when a long-press is detected on CONFIG_BUTTON_PIN
 // - Serves a small webpage that requests navigator.geolocation and POSTs lat/lon
 // - Stores lat/lon/accuracy/timestamp in Preferences (NVS)
-//Version: 3.0.14 (AdhanBox V3 / HW v3)
+//Version: 3.0.15 (AdhanBox V3 / HW v3)
 #include <Arduino.h>
 #include <esp_mac.h>   // esp_read_mac() : MAC eFuse, lisible sans Wi-Fi
 #include <Wire.h>
@@ -1578,7 +1578,7 @@ void handleOtaUploadComplete() {
 // GET /api/firmware/version
 void handleFirmwareVersion() {
   server.send(200, "application/json",
-              "{\"version\":\"3.0.14\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
+              "{\"version\":\"3.0.15\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
 }
 
 // Returns true if the request carries the correct API key (or if token not yet set).
@@ -1669,11 +1669,11 @@ void handleDeviceInfo() {
   char buf[512];
   if (pairingWindow || hasValidToken) {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.14\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
+             "{\"version\":\"3.0.15\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
              OTA_HOSTNAME, deviceIdHex().c_str(), _apiToken.c_str(), _otaPass.c_str());
   } else {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.14\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
+             "{\"version\":\"3.0.15\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
              OTA_HOSTNAME, deviceIdHex().c_str());
   }
   server.send(200, "application/json", buf);
@@ -4056,16 +4056,20 @@ void v2Tick() {
 // ======================= fin module V2 =======================
 
 void setup() {
-  Serial.begin(115200);
 #if ARDUINO_USB_CDC_ON_BOOT && ARDUINO_USB_MODE
   // [BANC] Le port USB natif (HWCDC) n'a que 256 octets de tampon d'emission,
-  // et comme le delai d'attente est a zero (voir juste dessous), tout ce qui
+  // et comme le delai d'attente est a zero (voir plus bas), tout ce qui
   // deborde est ABANDONNE sur-le-champ. Le 07/09/2026, la reponse t:diag
   // enrichie (~380 caracteres) arrivait au banc coupee a 250 : 250 + 6 de
   // marqueur <BANC> = 256. Avec 2 Ko, une reponse de banc tient entiere meme
   // derriere un paquet de traces pas encore parties.
+  // IMPERATIVEMENT AVANT Serial.begin() : begin() ne cree le tampon que s'il
+  // n'existe pas encore, alors que setTxBufferSize() appele APRES supprime le
+  // tampon en service pour en recreer un, sous le nez de l'interruption
+  // d'emission. La 3.0.15 le faisait apres, et la carte ne repondait plus.
   Serial.setTxBufferSize(2048);
 #endif
+  Serial.begin(115200);
 #if ARDUINO_USB_CDC_ON_BOOT
   // [BANC] Serial passe par l'USB (CDCOnBoot=cdc) pour que le banc de
   // production pilote la carte par le cable. Mais un boitier chez un client
@@ -4595,7 +4599,7 @@ static void bancCommande(String c) {
 
   if (verbe == "info") {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.14\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
+             "{\"version\":\"3.0.15\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
              deviceIdHex().c_str());
     bancRep(buf);
 
