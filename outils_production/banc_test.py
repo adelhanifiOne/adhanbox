@@ -1110,6 +1110,8 @@ def t_sd(ctx):
                    % (d.get('audio_ecart_max_ms', 0), d.get('audio_ecarts_50ms', 0),
                       d.get('audio_pump_max_ms', 0), d.get('audio_tick_max_ms', 0),
                       d.get('audio_http_max_ms', 0)))
+        if d.get('audio_http_uri'):
+            detail += ' · requete la plus longue : %s' % d['audio_http_uri']
     # Un seul gel suffit a faire un clic audible : on echoue dessus, meme si la
     # moyenne passe. C'est exactement ce que l'ancien controle laissait filer.
     if lu < besoin:

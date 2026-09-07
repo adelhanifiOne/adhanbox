@@ -2,7 +2,7 @@
 // - Starts an AP when a long-press is detected on CONFIG_BUTTON_PIN
 // - Serves a small webpage that requests navigator.geolocation and POSTs lat/lon
 // - Stores lat/lon/accuracy/timestamp in Preferences (NVS)
-//Version: 3.0.11 (AdhanBox V3 / HW v3)
+//Version: 3.0.12 (AdhanBox V3 / HW v3)
 #include <Arduino.h>
 #include <esp_mac.h>   // esp_read_mac() : MAC eFuse, lisible sans Wi-Fi
 #include <Wire.h>
@@ -270,9 +270,28 @@ bool rtcPresent = false;
 // n'y est pour rien et il faut chercher cote materiel.
 struct BlocageAudio {
   uint32_t tours, ecartMaxUs, ecarts50, pumpMaxUs, tickMaxUs, httpMaxUs;
-  void raz() { tours = ecartMaxUs = ecarts50 = pumpMaxUs = tickMaxUs = httpMaxUs = 0; }
+  char httpUri[48];      // la requete qui a produit httpMaxUs
+  void raz() { tours = ecartMaxUs = ecarts50 = pumpMaxUs = tickMaxUs = httpMaxUs = 0; httpUri[0] = 0; }
 };
 BlocageAudio g_blocage;
+
+// ── [CREPITEMENT] Source SD a recharge BORNEE ────────────────────────────────
+// AudioFileSourceBuffer::fill() recharge son tampon avec readNonBlock(), qui
+// n'a aucune implementation non bloquante pour la SD : la version de base
+// appelle read(), et demande tout l'espace libre du tampon, jusqu'a 32 Ko.
+// A 1 MHz c'est ~278 ms de blocage d'un coup, trois fois la reserve du DMA.
+// Mesure le 07/09/2026 : pump() bloque jusqu'a 534 ms pendant l'adhan.
+// Ici chaque appel lit au plus PAS_RECHARGE octets. Le tampon se remplit par
+// petites bouchees a chaque tour de boucle, et le debit total reste le meme :
+// on ne lit pas moins, on lit plus souvent.
+class AudioFileSourceSDDoux : public AudioFileSourceSD {
+public:
+  static const uint32_t PAS_RECHARGE = 2048;   // ~17 ms a 118 ko/s
+  AudioFileSourceSDDoux(const char *chemin) : AudioFileSourceSD(chemin) {}
+  uint32_t readNonBlock(void *data, uint32_t len) override {
+    return AudioFileSourceSD::read(data, len > PAS_RECHARGE ? PAS_RECHARGE : len);
+  }
+};
 static inline void _plusHaut(uint32_t &m, uint32_t v) { if (v > m) m = v; }
 
 class I2SAudio {
@@ -387,7 +406,7 @@ class I2SAudio {
     if (!_sdOk || !SD.exists(path)) return false;
     strncpy(_curPath, path, sizeof(_curPath) - 1);   // [PLAYER] memorise le fichier
     _curPath[sizeof(_curPath) - 1] = 0;
-    src = new AudioFileSourceSD(path);
+    src = new AudioFileSourceSDDoux(path);   // [CREPITEMENT] recharges bornees
     // Buffer fichier 32 Ko (~2s). Le vrai levier n'est pas la taille mais le DEBIT
     // SD (voir SD.begin plus haut) : un buffer plus gros ne fait que retarder si le
     // debit brut est sous 16 Ko/s (128 kbps).
@@ -1501,7 +1520,7 @@ void handleOtaUploadComplete() {
 // GET /api/firmware/version
 void handleFirmwareVersion() {
   server.send(200, "application/json",
-              "{\"version\":\"3.0.11\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
+              "{\"version\":\"3.0.12\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
 }
 
 // Returns true if the request carries the correct API key (or if token not yet set).
@@ -1588,11 +1607,11 @@ void handleDeviceInfo() {
   char buf[512];
   if (pairingWindow || hasValidToken) {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.11\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
+             "{\"version\":\"3.0.12\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
              OTA_HOSTNAME, deviceIdHex().c_str(), _apiToken.c_str(), _otaPass.c_str());
   } else {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.11\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
+             "{\"version\":\"3.0.12\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
              OTA_HOSTNAME, deviceIdHex().c_str());
   }
   server.send(200, "application/json", buf);
@@ -3810,6 +3829,7 @@ void handleDiag() {
     "\"lecture_max_ms\":%lu,\"gels\":%lu,\"wifi_veille\":\"%s\","
     "\"audio_tours\":%lu,\"audio_ecart_max_ms\":%lu,\"audio_ecarts_50ms\":%lu,"
     "\"audio_pump_max_ms\":%lu,\"audio_tick_max_ms\":%lu,\"audio_http_max_ms\":%lu,"
+    "\"audio_http_uri\":\"%s\","
     "\"free_heap\":%u,\"psram_size\":%u,\"psram_free\":%u}",
     (unsigned long)audio.sdClock(), kBs,
     (unsigned long)audio.benchMaxMs(), (unsigned long)audio.benchStalls(),
@@ -3817,7 +3837,7 @@ void handleDiag() {
     (unsigned long)g_blocage.tours, (unsigned long)(g_blocage.ecartMaxUs / 1000),
     (unsigned long)g_blocage.ecarts50,
     (unsigned long)(g_blocage.pumpMaxUs / 1000), (unsigned long)(g_blocage.tickMaxUs / 1000),
-    (unsigned long)(g_blocage.httpMaxUs / 1000),
+    (unsigned long)(g_blocage.httpMaxUs / 1000), g_blocage.httpUri,
     (unsigned)ESP.getFreeHeap(),
     (unsigned)ESP.getPsramSize(), (unsigned)ESP.getFreePsram());
   server.send(200, "application/json", buf);
@@ -4498,7 +4518,7 @@ static void bancCommande(String c) {
 
   if (verbe == "info") {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.11\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
+             "{\"version\":\"3.0.12\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
              deviceIdHex().c_str());
     bancRep(buf);
 
@@ -4510,6 +4530,7 @@ static void bancCommande(String c) {
              "\"lecture_max_ms\":%lu,\"gels\":%lu,\"wifi_veille\":\"%s\","
              "\"audio_tours\":%lu,\"audio_ecart_max_ms\":%lu,\"audio_ecarts_50ms\":%lu,"
              "\"audio_pump_max_ms\":%lu,\"audio_tick_max_ms\":%lu,\"audio_http_max_ms\":%lu,"
+             "\"audio_http_uri\":\"%s\","
              "\"free_heap\":%u,\"psram_size\":%u}",
              (unsigned long)audio.sdClock(), kBs,
              (unsigned long)audio.benchMaxMs(), (unsigned long)audio.benchStalls(),
@@ -4517,7 +4538,7 @@ static void bancCommande(String c) {
              (unsigned long)g_blocage.tours, (unsigned long)(g_blocage.ecartMaxUs / 1000),
              (unsigned long)g_blocage.ecarts50,
              (unsigned long)(g_blocage.pumpMaxUs / 1000), (unsigned long)(g_blocage.tickMaxUs / 1000),
-             (unsigned long)(g_blocage.httpMaxUs / 1000),
+             (unsigned long)(g_blocage.httpMaxUs / 1000), g_blocage.httpUri,
              (unsigned)ESP.getFreeHeap(), (unsigned)ESP.getPsramSize());
     bancRep(buf);
 
@@ -5379,7 +5400,15 @@ void loop() {
   // Handle HTTP server requests (always, whether in AP mode or normal WiFi)
   const uint32_t _tHttp = micros();
   server.handleClient();
-  if (audio.isRunning()) _plusHaut(g_blocage.httpMaxUs, micros() - _tHttp);
+  if (audio.isRunning()) {
+    const uint32_t d = micros() - _tHttp;
+    if (d > g_blocage.httpMaxUs) {
+      g_blocage.httpMaxUs = d;
+      // server.uri() garde la derniere requete traitee : c'est elle qui a bloque.
+      strncpy(g_blocage.httpUri, server.uri().c_str(), sizeof(g_blocage.httpUri) - 1);
+      g_blocage.httpUri[sizeof(g_blocage.httpUri) - 1] = 0;
+    }
+  }
 
   // [AUDIO] Pendant la lecture, on NE fait AUCUNE operation reseau bloquante : un
   // reconnectMQTT() (broker injoignable) ou ArduinoOTA peut bloquer plusieurs
