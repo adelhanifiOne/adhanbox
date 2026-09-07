@@ -2,7 +2,7 @@
 // - Starts an AP when a long-press is detected on CONFIG_BUTTON_PIN
 // - Serves a small webpage that requests navigator.geolocation and POSTs lat/lon
 // - Stores lat/lon/accuracy/timestamp in Preferences (NVS)
-//Version: 3.0.12 (AdhanBox V3 / HW v3)
+//Version: 3.0.13 (AdhanBox V3 / HW v3)
 #include <Arduino.h>
 #include <esp_mac.h>   // esp_read_mac() : MAC eFuse, lisible sans Wi-Fi
 #include <Wire.h>
@@ -12,6 +12,8 @@
 #include <Preferences.h>
 #include <nvs_flash.h>   // [BANC] remise a zero usine : effacement de la NVS
 #include <esp_wifi.h>    // [BANC] lecture des identifiants Wi-Fi memorises
+#include <esp_heap_caps.h>   // [CREPITEMENT] taille du coussin DMA selon la memoire libre
+#include <esp_timer.h>       // [CREPITEMENT] sonde CPU du banc (IRAM)
 #include <RTClib.h>
 #include "rx8025t.h"   // [V3] RTC Epson RX-8025T (remplace le DS3231)
 #include <SPI.h>
@@ -269,9 +271,30 @@ bool rtcPresent = false;
 // Lecture : si ecart_max reste petit (< 20 ms) alors que ca crepite, la boucle
 // n'y est pour rien et il faut chercher cote materiel.
 struct BlocageAudio {
-  uint32_t tours, ecartMaxUs, ecarts50, pumpMaxUs, tickMaxUs, httpMaxUs;
-  char httpUri[48];      // la requete qui a produit httpMaxUs
-  void raz() { tours = ecartMaxUs = ecarts50 = pumpMaxUs = tickMaxUs = httpMaxUs = 0; httpUri[0] = 0; }
+  // Tout est mesure PENDANT la lecture, et seulement passe les 3 premieres
+  // secondes : le demarrage (900 ms de silence de calage + remplissage initial
+  // de 32 Ko) bloque la boucle 1,3 a 1,6 s de facon normale et silencieuse, et
+  // polluait tous les maxima (mesure du 07/09 : http 1635 ms = la requete de
+  // lecture elle-meme, pump 388 ms = le remplissage initial).
+  uint32_t debutMs;                    // millis() au playPath
+  uint32_t dmaMs;                      // taille du coussin DMA, en ms de son
+  uint32_t tours, ecartMaxUs, pumpMaxUs, tickMaxUs, httpMaxUs;
+  uint32_t n50_90, n90_200, n200_500, n500;   // repartition des tours lents
+  uint32_t supDma;                     // tours plus longs que le coussin = clics
+  char httpUri[48];                    // la requete qui a produit httpMaxUs
+  char uriEnCours[48];                 // posee par requireApiKey() pendant le traitement
+  void raz() {
+    tours = ecartMaxUs = pumpMaxUs = tickMaxUs = httpMaxUs = 0;
+    n50_90 = n90_200 = n200_500 = n500 = supDma = 0;
+    httpUri[0] = 0; uriEnCours[0] = 0; debutMs = millis();
+  }
+  bool actif() const { return millis() - debutMs > 3000; }
+  void classer(uint32_t us) {
+    const uint32_t ms = us / 1000;
+    if (ms >= 500) n500++; else if (ms >= 200) n200_500++;
+    else if (ms >= 90) n90_200++; else if (ms >= 50) n50_90++;
+    if (dmaMs && ms > dmaMs) supDma++;
+  }
 };
 BlocageAudio g_blocage;
 
@@ -293,6 +316,18 @@ public:
   }
 };
 static inline void _plusHaut(uint32_t &m, uint32_t v) { if (v > m) m = v; }
+
+// [CREPITEMENT] Sonde CPU du banc. Tourne en rond pendant `us` microsecondes et
+// rend de combien on a DEPASSE : si le coeur nous a ete vole entre-temps (tache
+// prioritaire, ecriture flash qui gele les deux coeurs), le depassement le dit.
+// En IRAM et sans acces flash pour ne dependre de rien. Sert a separer deux
+// causes de gel de lecture SD qui se ressemblent : le CPU vole (logiciel) et la
+// carte ou le bus SPI qui traine (materiel).
+static uint32_t IRAM_ATTR tournerEnRond(uint32_t us) {
+  const int64_t t0 = esp_timer_get_time();
+  while (esp_timer_get_time() - t0 < (int64_t)us) { }
+  return (uint32_t)(esp_timer_get_time() - t0 - us);
+}
 
 class I2SAudio {
   SPIClass spi{FSPI};
@@ -320,16 +355,18 @@ class I2SAudio {
   // comme « gel » tout ce qui depasse le double.
   uint32_t _benchMaxMs = 0;    // plus longue lecture de 4 Ko de la campagne
   uint32_t _benchStalls = 0;   // nombre de lectures au-dela de 70 ms
-  uint32_t benchMaxMs()  const { return _benchMaxMs; }
-  uint32_t benchStalls() const { return _benchStalls; }
+  uint32_t _benchCpuMaxMs = 0; // plus gros vol de CPU vu par la sonde IRAM
+  uint32_t benchMaxMs()    const { return _benchMaxMs; }
+  uint32_t benchStalls()   const { return _benchStalls; }
+  uint32_t benchCpuMaxMs() const { return _benchCpuMaxMs; }
 
   int sdBenchKBs(const char* path, uint32_t bytes) {
-    _benchMaxMs = 0; _benchStalls = 0;
+    _benchMaxMs = 0; _benchStalls = 0; _benchCpuMaxMs = 0;
     if (!_sdOk || !SD.exists(path)) return -1;
     File f = SD.open(path, FILE_READ);
     if (!f) return -1;
     static uint8_t tmp[4096];
-    uint32_t total = 0; unsigned long t0 = millis();
+    uint32_t total = 0, sondeUs = 0, lectures = 0; unsigned long t0 = millis();
     while (total < bytes) {
       unsigned long tl = millis();
       int n = f.read(tmp, sizeof(tmp));
@@ -338,8 +375,16 @@ class I2SAudio {
       if (dl > 70) _benchStalls++;
       if (n <= 0) break;
       total += n;
+      // Toutes les 8 lectures, 10 ms de sonde CPU. Si la SD gele ET que la
+      // sonde est volee dans les memes proportions, c'est le CPU ; si la SD gele
+      // et que la sonde ne voit rien, c'est la carte ou le bus.
+      if ((++lectures & 7) == 0) {
+        const uint32_t vole = tournerEnRond(10000);
+        if (vole / 1000 > _benchCpuMaxMs) _benchCpuMaxMs = vole / 1000;
+        sondeUs += 10000 + vole;
+      }
     }
-    unsigned long dt = millis() - t0;
+    unsigned long dt = millis() - t0 - sondeUs / 1000;
     f.close();
     if (dt == 0) return -2;
     return (int)((uint64_t)total / dt);  // octets/ms == ko/s
@@ -362,11 +407,24 @@ class I2SAudio {
     Serial.printf("[SD] %s @ %lu Hz\n", _sdOk ? "OK" : "FAIL", (unsigned long)_sdClock);
     if (!out) {
       out = new AudioOutputI2S();
-      // DMA I2S = 8x2048 (~16 Ko). ATTENTION : un DMA plus gros (55 Ko) FAIT CRASHER
-      // les modules SANS PSRAM (i2s_alloc_dma_desc echoue apres WiFi+BLE -> assert ->
-      // reboot en boucle des qu'on joue un son). 16 Ko tient partout ; le grésillement
-      // est de toute facon evite par le fait de ne PAS bloquer loop() pendant l'audio.
-      out->SetBuffers(8, 2048);
+      // [CREPITEMENT] Taille du coussin DMA. Tout ce qui bloque loop() plus
+      // longtemps que ce coussin fait un clic : lecture SD qui gele, handler
+      // HTTP, remplissage du tampon. L'ancien 8 x 2048 o = 8 x 512 trames =
+      // 93 ms a 44,1 kHz, et les gels SD mesures sur le Wi-Fi font 100-109 ms :
+      // a la limite, du mauvais cote. On vise 16 x 4092 o = 16 x 1023 trames =
+      // 371 ms (4092 = plus gros descripteur DMA du pilote i2s_std).
+      // Le DMA doit etre en RAM interne : on regarde ce qu'il y a de libre et
+      // on redescend si besoin, parce que i2s_channel_init_std_mode() est sous
+      // assert dans la bibliotheque : une allocation ratee = reboot en boucle.
+      // (C'est ce qui arrivait aux modules V2 sans PSRAM ; la V3 est en N4R2.)
+      const size_t libre = heap_caps_get_free_size(MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+      int desc = 16, octets = 4092;
+      if (libre < 2u * (size_t)desc * octets) desc = 8;                     // 186 ms
+      if (libre < 2u * (size_t)desc * octets) { desc = 8; octets = 2048; }  // l'ancien 93 ms
+      out->SetBuffers(desc, octets);
+      g_blocage.dmaMs = (uint32_t)((uint64_t)desc * (octets / 4) * 1000 / 44100);
+      Serial.printf("[I2S] DMA %d x %d o = %lu ms de son (RAM DMA libre %u o)\n",
+                    desc, octets, (unsigned long)g_blocage.dmaMs, (unsigned)libre);
       out->SetPinout(I2S_BCLK_PIN, I2S_LRC_PIN, I2S_DIN_PIN);
       out->SetGain(gain);
       Serial.println("[I2S] OK");
@@ -1520,12 +1578,16 @@ void handleOtaUploadComplete() {
 // GET /api/firmware/version
 void handleFirmwareVersion() {
   server.send(200, "application/json",
-              "{\"version\":\"3.0.12\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
+              "{\"version\":\"3.0.13\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
 }
 
 // Returns true if the request carries the correct API key (or if token not yet set).
 // Sends 401 and returns false if check fails. Call at the start of any mutating handler.
 bool requireApiKey() {
+  // [CREPITEMENT] memorise la requete en cours : server.uri() est efface a la
+  // fin du traitement, apres coup on ne saurait plus laquelle a bloque.
+  strncpy(g_blocage.uriEnCours, server.uri().c_str(), sizeof(g_blocage.uriEnCours) - 1);
+  g_blocage.uriEnCours[sizeof(g_blocage.uriEnCours) - 1] = 0;
   if (_apiToken.length() == 0) return true;  // not yet initialized
   if (apRunning) return true;                // AP mode: réseau isolé, pas d'auth nécessaire
   String key = server.header("X-API-Key");
@@ -1607,11 +1669,11 @@ void handleDeviceInfo() {
   char buf[512];
   if (pairingWindow || hasValidToken) {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.12\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
+             "{\"version\":\"3.0.13\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
              OTA_HOSTNAME, deviceIdHex().c_str(), _apiToken.c_str(), _otaPass.c_str());
   } else {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.12\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
+             "{\"version\":\"3.0.13\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
              OTA_HOSTNAME, deviceIdHex().c_str());
   }
   server.send(200, "application/json", buf);
@@ -3827,15 +3889,20 @@ void handleDiag() {
   snprintf(buf, sizeof(buf),
     "{\"sd_clock_hz\":%lu,\"sd_read_kBs\":%d,\"need_kBs\":16,"
     "\"lecture_max_ms\":%lu,\"gels\":%lu,\"wifi_veille\":\"%s\","
-    "\"audio_tours\":%lu,\"audio_ecart_max_ms\":%lu,\"audio_ecarts_50ms\":%lu,"
+    "\"gel_cpu_max_ms\":%lu,\"dma_ms\":%lu,"
+    "\"audio_tours\":%lu,\"audio_ecart_max_ms\":%lu,\"audio_sup_dma\":%lu,"
+    "\"audio_n50_90\":%lu,\"audio_n90_200\":%lu,\"audio_n200_500\":%lu,\"audio_n500\":%lu,"
     "\"audio_pump_max_ms\":%lu,\"audio_tick_max_ms\":%lu,\"audio_http_max_ms\":%lu,"
     "\"audio_http_uri\":\"%s\","
     "\"free_heap\":%u,\"psram_size\":%u,\"psram_free\":%u}",
     (unsigned long)audio.sdClock(), kBs,
     (unsigned long)audio.benchMaxMs(), (unsigned long)audio.benchStalls(),
     wifiPsNom(),
+    (unsigned long)audio.benchCpuMaxMs(), (unsigned long)g_blocage.dmaMs,
     (unsigned long)g_blocage.tours, (unsigned long)(g_blocage.ecartMaxUs / 1000),
-    (unsigned long)g_blocage.ecarts50,
+    (unsigned long)g_blocage.supDma,
+    (unsigned long)g_blocage.n50_90, (unsigned long)g_blocage.n90_200,
+    (unsigned long)g_blocage.n200_500, (unsigned long)g_blocage.n500,
     (unsigned long)(g_blocage.pumpMaxUs / 1000), (unsigned long)(g_blocage.tickMaxUs / 1000),
     (unsigned long)(g_blocage.httpMaxUs / 1000), g_blocage.httpUri,
     (unsigned)ESP.getFreeHeap(),
@@ -4518,7 +4585,7 @@ static void bancCommande(String c) {
 
   if (verbe == "info") {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.12\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
+             "{\"version\":\"3.0.13\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
              deviceIdHex().c_str());
     bancRep(buf);
 
@@ -4528,15 +4595,20 @@ static void bancCommande(String c) {
     snprintf(buf, sizeof(buf),
              "{\"sd_clock_hz\":%lu,\"sd_read_kBs\":%d,\"need_kBs\":16,"
              "\"lecture_max_ms\":%lu,\"gels\":%lu,\"wifi_veille\":\"%s\","
-             "\"audio_tours\":%lu,\"audio_ecart_max_ms\":%lu,\"audio_ecarts_50ms\":%lu,"
+             "\"gel_cpu_max_ms\":%lu,\"dma_ms\":%lu,"
+             "\"audio_tours\":%lu,\"audio_ecart_max_ms\":%lu,\"audio_sup_dma\":%lu,"
+             "\"audio_n50_90\":%lu,\"audio_n90_200\":%lu,\"audio_n200_500\":%lu,\"audio_n500\":%lu,"
              "\"audio_pump_max_ms\":%lu,\"audio_tick_max_ms\":%lu,\"audio_http_max_ms\":%lu,"
              "\"audio_http_uri\":\"%s\","
              "\"free_heap\":%u,\"psram_size\":%u}",
              (unsigned long)audio.sdClock(), kBs,
              (unsigned long)audio.benchMaxMs(), (unsigned long)audio.benchStalls(),
              wifiPsNom(),
+             (unsigned long)audio.benchCpuMaxMs(), (unsigned long)g_blocage.dmaMs,
              (unsigned long)g_blocage.tours, (unsigned long)(g_blocage.ecartMaxUs / 1000),
-             (unsigned long)g_blocage.ecarts50,
+             (unsigned long)g_blocage.supDma,
+             (unsigned long)g_blocage.n50_90, (unsigned long)g_blocage.n90_200,
+             (unsigned long)g_blocage.n200_500, (unsigned long)g_blocage.n500,
              (unsigned long)(g_blocage.pumpMaxUs / 1000), (unsigned long)(g_blocage.tickMaxUs / 1000),
              (unsigned long)(g_blocage.httpMaxUs / 1000), g_blocage.httpUri,
              (unsigned)ESP.getFreeHeap(), (unsigned)ESP.getPsramSize());
@@ -4708,17 +4780,18 @@ void loop() {
   if (!_wdtArmed) { esp_task_wdt_add(NULL); _wdtArmed = true; }
   esp_task_wdt_reset();
 
-  // [CREPITEMENT] chronometrage du tour de boucle, uniquement pendant la lecture
-  const bool _joue = audio.isRunning();
+  // [CREPITEMENT] chronometrage du tour de boucle, pendant la lecture et passe
+  // les 3 premieres secondes (voir BlocageAudio)
+  const bool _joue = audio.isRunning() && g_blocage.actif();
   static uint32_t _tourPrecedent = 0;
   const uint32_t _t0 = micros();
   if (_joue && _tourPrecedent) {
     const uint32_t ecart = _t0 - _tourPrecedent;
     _plusHaut(g_blocage.ecartMaxUs, ecart);
-    if (ecart > 50000UL) g_blocage.ecarts50++;
+    g_blocage.classer(ecart);
     g_blocage.tours++;
   }
-  _tourPrecedent = _t0;
+  _tourPrecedent = _joue ? _t0 : 0;
 
   audio.pump();
   const uint32_t _t1 = micros();
@@ -5399,13 +5472,16 @@ void loop() {
 
   // Handle HTTP server requests (always, whether in AP mode or normal WiFi)
   const uint32_t _tHttp = micros();
+  g_blocage.uriEnCours[0] = 0;
   server.handleClient();
-  if (audio.isRunning()) {
+  if (audio.isRunning() && g_blocage.actif()) {
     const uint32_t d = micros() - _tHttp;
     if (d > g_blocage.httpMaxUs) {
       g_blocage.httpMaxUs = d;
-      // server.uri() garde la derniere requete traitee : c'est elle qui a bloque.
-      strncpy(g_blocage.httpUri, server.uri().c_str(), sizeof(g_blocage.httpUri) - 1);
+      // server.uri() est efface a la fin du traitement : on lit la copie que
+      // requireApiKey() a posee pendant le traitement.
+      strncpy(g_blocage.httpUri, g_blocage.uriEnCours[0] ? g_blocage.uriEnCours : "(sans jeton)",
+              sizeof(g_blocage.httpUri) - 1);
       g_blocage.httpUri[sizeof(g_blocage.httpUri) - 1] = 0;
     }
   }

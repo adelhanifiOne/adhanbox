@@ -1080,44 +1080,49 @@ def t_psram(ctx):
 
 
 def t_sd(ctx):
-    """Debit de lecture SD, et surtout POURQUOI il est bas quand il l'est.
+    """Carte SD a l'arret, et surtout la lecture elle-meme.
 
-    Le debit moyen seul confond deux pannes tres differentes. A 1 MHz une
-    lecture de 4 Ko prend ~33 ms : si toutes les lectures sont un peu lentes,
-    c'est la carte ; si la plupart sont a pleine vitesse et que quelques-unes
-    durent 200 ms, ce n'est pas la carte, c'est une autre tache qui gele le
-    processeur — et c'est cette meme gelee qui vide le tampon I2S et fait
-    crepiter le son. Le firmware 3.0.9 remonte donc la plus longue lecture et
-    le nombre de gels, en plus de la moyenne.
+    Le coussin DMA (dma_ms, 371 ms sur V3 quand la memoire le permet, 93 ms
+    avant la 3.0.13) est la seule reserve de son : tout tour de loop() plus long
+    fait un clic. Le firmware mesure ces tours PENDANT la derniere lecture,
+    passe les 3 premieres secondes de demarrage qui bloquent normalement.
+    A l'arret, la sonde CPU (gel_cpu_max_ms) separe deux causes de gel SD qui se
+    ressemblent : le coeur vole (logiciel) et la carte ou le bus qui traine
+    (materiel).
     """
     d = ctx.diag()
     lu, besoin = d.get('sd_read_kBs', 0), d.get('need_kBs', 16)
+    dma = d.get('dma_ms', 0)
     detail = '%d ko/s lus, %d requis' % (lu, besoin)
+    if dma:
+        detail += ' · coussin %d ms' % dma
     gels = d.get('gels')
     if gels is not None:
-        detail += ' · plus longue lecture %d ms, %d gel(s)' % (
-            d.get('lecture_max_ms', 0), gels)
+        detail += ' · a l\'arret : lecture max %d ms, %d gel(s)' % (d.get('lecture_max_ms', 0), gels)
+        if 'gel_cpu_max_ms' in d:
+            detail += ', CPU vole max %d ms' % d['gel_cpu_max_ms']
     veille = d.get('wifi_veille')
     if veille and veille not in ('aucune', 'hors-ligne'):
         detail += ' · veille du modem Wi-Fi ACTIVE (%s)' % veille
-    # [CREPITEMENT] Mesure faite PENDANT la derniere lecture, pas ici. Le DMA
-    # I2S tient ~90 ms : un tour de boucle plus long que ca vide le tampon et
-    # fait un clic. Si l'ecart max reste petit alors que ca crepite, la boucle
-    # n'y est pour rien et il faut chercher cote materiel.
+    sup = None
     if d.get('audio_tours'):
-        detail += (' · lecture : tour max %d ms, %d au-dela de 50 ms'
-                   ' (pump %d, tick %d, http %d)'
-                   % (d.get('audio_ecart_max_ms', 0), d.get('audio_ecarts_50ms', 0),
+        sup = d.get('audio_sup_dma', 0)
+        detail += (' · lecture : tour max %d ms, %d au-dela du coussin'
+                   ' (50-90 : %d, 90-200 : %d, 200-500 : %d, 500+ : %d)'
+                   ' pump %d, tick %d, http %d'
+                   % (d.get('audio_ecart_max_ms', 0), sup,
+                      d.get('audio_n50_90', 0), d.get('audio_n90_200', 0),
+                      d.get('audio_n200_500', 0), d.get('audio_n500', 0),
                       d.get('audio_pump_max_ms', 0), d.get('audio_tick_max_ms', 0),
                       d.get('audio_http_max_ms', 0)))
         if d.get('audio_http_uri'):
             detail += ' · requete la plus longue : %s' % d['audio_http_uri']
-    # Un seul gel suffit a faire un clic audible : on echoue dessus, meme si la
-    # moyenne passe. C'est exactement ce que l'ancien controle laissait filer.
     if lu < besoin:
         return False, detail + ' → coupures audio garanties'
-    if gels:
-        return False, detail + ' → le son crepitera'
+    if sup:
+        return False, detail + ' → le son a crepite %d fois' % sup
+    if dma and d.get('lecture_max_ms', 0) > dma:
+        return False, detail + ' → un gel a l\'arret depasse le coussin'
     if veille and veille not in ('aucune', 'hors-ligne'):
         return False, detail
     return True, detail
