@@ -1100,6 +1100,16 @@ def t_sd(ctx):
     veille = d.get('wifi_veille')
     if veille and veille not in ('aucune', 'hors-ligne'):
         detail += ' · veille du modem Wi-Fi ACTIVE (%s)' % veille
+    # [CREPITEMENT] Mesure faite PENDANT la derniere lecture, pas ici. Le DMA
+    # I2S tient ~90 ms : un tour de boucle plus long que ca vide le tampon et
+    # fait un clic. Si l'ecart max reste petit alors que ca crepite, la boucle
+    # n'y est pour rien et il faut chercher cote materiel.
+    if d.get('audio_tours'):
+        detail += (' · lecture : tour max %d ms, %d au-dela de 50 ms'
+                   ' (pump %d, tick %d, http %d)'
+                   % (d.get('audio_ecart_max_ms', 0), d.get('audio_ecarts_50ms', 0),
+                      d.get('audio_pump_max_ms', 0), d.get('audio_tick_max_ms', 0),
+                      d.get('audio_http_max_ms', 0)))
     # Un seul gel suffit a faire un clic audible : on echoue dessus, meme si la
     # moyenne passe. C'est exactement ce que l'ancien controle laissait filer.
     if lu < besoin:
