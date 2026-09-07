@@ -905,10 +905,15 @@ def remise_a_zero(box, sortie=info, infos=None):
               'posee' if avant.get('lat') else '—'))
     try:
         rep = box.usine()
-    except RuntimeError as e:
-        # La carte peut rebooter avant que sa reponse ne traverse : on ne
-        # conclut rien ici, la relecture tranchera.
-        sortie('Pas de reponse a l\'ordre (%s) — on juge sur la relecture.' % e)
+    except (RuntimeError, ValueError) as e:
+        # La carte peut rebooter avant que sa reponse ne traverse (RuntimeError),
+        # ou repondre juste au moment ou une tache ESP-IDF ecrit sa propre ligne
+        # de journal, ce qui colle deux choses sur la meme ligne (ValueError, que
+        # leve json.loads). Dans les DEUX cas on ne conclut rien ici : cette
+        # fonction dit elle-meme que le verdict vient de la relecture. Abandonner
+        # sur une reponse illisible reviendrait a jeter un effacement qui a
+        # probablement eu lieu.
+        sortie('Reponse a l\'ordre inexploitable (%s) — on juge sur la relecture.' % e)
         rep = {}
     else:
         nvs = rep.get('nvs', {})
