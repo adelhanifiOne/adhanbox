@@ -2,7 +2,7 @@
 // - Starts an AP when a long-press is detected on CONFIG_BUTTON_PIN
 // - Serves a small webpage that requests navigator.geolocation and POSTs lat/lon
 // - Stores lat/lon/accuracy/timestamp in Preferences (NVS)
-//Version: 3.0.16 (AdhanBox V3 / HW v3)
+//Version: 3.0.17 (AdhanBox V3 / HW v3)
 #include <Arduino.h>
 #include <esp_mac.h>   // esp_read_mac() : MAC eFuse, lisible sans Wi-Fi
 #include <Wire.h>
@@ -407,24 +407,10 @@ class I2SAudio {
     Serial.printf("[SD] %s @ %lu Hz\n", _sdOk ? "OK" : "FAIL", (unsigned long)_sdClock);
     if (!out) {
       out = new AudioOutputI2S();
-      // [CREPITEMENT] Taille du coussin DMA. Tout ce qui bloque loop() plus
-      // longtemps que ce coussin fait un clic : lecture SD qui gele, handler
-      // HTTP, remplissage du tampon. L'ancien 8 x 2048 o = 8 x 512 trames =
-      // 93 ms a 44,1 kHz, et les gels SD mesures sur le Wi-Fi font 100-109 ms :
-      // a la limite, du mauvais cote. On vise 16 x 4092 o = 16 x 1023 trames =
-      // 371 ms (4092 = plus gros descripteur DMA du pilote i2s_std).
-      // Le DMA doit etre en RAM interne : on regarde ce qu'il y a de libre et
-      // on redescend si besoin, parce que i2s_channel_init_std_mode() est sous
-      // assert dans la bibliotheque : une allocation ratee = reboot en boucle.
-      // (C'est ce qui arrivait aux modules V2 sans PSRAM ; la V3 est en N4R2.)
-      const size_t libre = heap_caps_get_free_size(MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-      int desc = 16, octets = 4092;
-      if (libre < 2u * (size_t)desc * octets) desc = 8;                     // 186 ms
-      if (libre < 2u * (size_t)desc * octets) { desc = 8; octets = 2048; }  // l'ancien 93 ms
-      out->SetBuffers(desc, octets);
-      g_blocage.dmaMs = (uint32_t)((uint64_t)desc * (octets / 4) * 1000 / 44100);
-      Serial.printf("[I2S] DMA %d x %d o = %lu ms de son (RAM DMA libre %u o)\n",
-                    desc, octets, (unsigned long)g_blocage.dmaMs, (unsigned)libre);
+      // [CREPITEMENT] La taille du coussin DMA se decide A CHAQUE LECTURE, voir
+      // dimensionnerCoussin() : la memoire libre au moment de jouer n'est pas
+      // celle du demarrage.
+      dimensionnerCoussin();
       out->SetPinout(I2S_BCLK_PIN, I2S_LRC_PIN, I2S_DIN_PIN);
       out->SetGain(gain);
       Serial.println("[I2S] OK");
@@ -458,6 +444,43 @@ class I2SAudio {
   // suffisante pour une barre de lecture ; MP3 CBR -> quasi lineaire).
   uint32_t posBytes()  { return src ? (uint32_t)src->getPos()  : 0; }
   uint32_t sizeBytes() { return src ? (uint32_t)src->getSize() : 0; }
+  // ── [CREPITEMENT] Coussin DMA dimensionne a chaque lecture ─────────────────
+  // Le canal I2S et ses tampons DMA sont crees a CHAQUE lecture
+  // (AudioGeneratorMP3::begin -> AudioOutputI2S::begin -> i2s_new_channel puis
+  // i2s_channel_init_std_mode, tous deux sous assert dans la bibliotheque) et
+  // detruits a l'arret (AudioOutputI2S::stop -> i2s_del_channel). La memoire
+  // interne libre au moment de jouer n'est donc pas celle du demarrage : le BLE
+  // d'appairage prend ~60 Ko, le TLS de la synchro de contenu ~45 Ko. Sur la
+  // carte du banc le 07/09/2026 : 217 Ko libres un jour, 69 Ko le lendemain.
+  // Une allocation ratee = assert = reboot en boucle A CHAQUE ADHAN, chez le
+  // client. C'est exactement ce qui arrivait aux modules V2 sans PSRAM.
+  // On choisit donc la taille juste avant de jouer, par paliers, avec une
+  // marge qui laisse vivre le Wi-Fi et le serveur HTTP pendant la lecture.
+  // Le DMA doit etre en RAM interne : la PSRAM ne sert a rien ici.
+  void dimensionnerCoussin() {
+    if (!out) return;
+    const uint32_t caps = MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT;
+    const size_t libre = heap_caps_get_free_size(caps);
+    const size_t bloc  = heap_caps_get_largest_free_block(caps);
+    struct Palier { int desc, octets; size_t marge; };
+    static const Palier paliers[] = {
+      {16, 4092, 48 * 1024},   // 16 x 1023 trames = 371 ms a 44,1 kHz
+      { 8, 4092, 40 * 1024},   //  8 x 1023        = 186 ms
+      { 8, 2048, 24 * 1024},   //  8 x  512        =  93 ms, l'ancien reglage
+      { 8, 1024, 12 * 1024},   //  8 x  256        =  46 ms, mieux qu'un reboot
+    };
+    int desc = 8, octets = 1024;
+    for (const Palier &p : paliers) {
+      const size_t besoin = (size_t)p.desc * (size_t)(p.octets + 32);   // tampons + descripteurs
+      if (libre >= besoin + p.marge && bloc >= (size_t)p.octets + 64) { desc = p.desc; octets = p.octets; break; }
+    }
+    // SetBuffers refuse si le canal est deja ouvert : on garde alors l'actuel.
+    if (!out->SetBuffers(desc, octets)) return;
+    g_blocage.dmaMs = (uint32_t)((uint64_t)desc * (uint64_t)(octets / 4) * 1000ULL / 44100ULL);
+    Serial.printf("[I2S] coussin %d x %d o = %lu ms (RAM DMA libre %u o, plus gros bloc %u o)\n",
+                  desc, octets, (unsigned long)g_blocage.dmaMs, (unsigned)libre, (unsigned)bloc);
+  }
+
   bool playPath(const char *path) {
     stop();
     g_blocage.raz();                 // [CREPITEMENT] chaque lecture repart a zero
@@ -471,6 +494,7 @@ class I2SAudio {
     buf = new AudioFileSourceBuffer(src, 32768);
     String p = path; p.toLowerCase();
     bool ok;
+    dimensionnerCoussin();           // [CREPITEMENT] juste avant que begin() ne cree le canal
     if (p.endsWith(".wav")) { wav = new AudioGeneratorWAV(); ok = wav->begin(buf, out); }
     else { mp3 = new AudioGeneratorMP3(); ok = mp3->begin(buf, out); }
     // Anti "debut coupe" : recreer le canal I2S redemarre BCLK -> le MAX98357A se
@@ -1578,7 +1602,7 @@ void handleOtaUploadComplete() {
 // GET /api/firmware/version
 void handleFirmwareVersion() {
   server.send(200, "application/json",
-              "{\"version\":\"3.0.16\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
+              "{\"version\":\"3.0.17\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
 }
 
 // Returns true if the request carries the correct API key (or if token not yet set).
@@ -1669,11 +1693,11 @@ void handleDeviceInfo() {
   char buf[512];
   if (pairingWindow || hasValidToken) {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.16\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
+             "{\"version\":\"3.0.17\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
              OTA_HOSTNAME, deviceIdHex().c_str(), _apiToken.c_str(), _otaPass.c_str());
   } else {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.16\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
+             "{\"version\":\"3.0.17\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
              OTA_HOSTNAME, deviceIdHex().c_str());
   }
   server.send(200, "application/json", buf);
@@ -4066,7 +4090,7 @@ void setup() {
   // IMPERATIVEMENT AVANT Serial.begin() : begin() ne cree le tampon que s'il
   // n'existe pas encore, alors que setTxBufferSize() appele APRES supprime le
   // tampon en service pour en recreer un, sous le nez de l'interruption
-  // d'emission. La 3.0.16 le faisait apres, et la carte ne repondait plus.
+  // d'emission. La 3.0.17 le faisait apres, et la carte ne repondait plus.
   Serial.setTxBufferSize(2048);
 #endif
   Serial.begin(115200);
@@ -4604,7 +4628,7 @@ static void bancCommande(String c) {
 
   if (verbe == "info") {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.16\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
+             "{\"version\":\"3.0.17\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
              deviceIdHex().c_str());
     bancRep(buf);
 
