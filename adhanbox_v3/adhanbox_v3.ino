@@ -2,7 +2,7 @@
 // - Starts an AP when a long-press is detected on CONFIG_BUTTON_PIN
 // - Serves a small webpage that requests navigator.geolocation and POSTs lat/lon
 // - Stores lat/lon/accuracy/timestamp in Preferences (NVS)
-//Version: 3.0.13 (AdhanBox V3 / HW v3)
+//Version: 3.0.14 (AdhanBox V3 / HW v3)
 #include <Arduino.h>
 #include <esp_mac.h>   // esp_read_mac() : MAC eFuse, lisible sans Wi-Fi
 #include <Wire.h>
@@ -1578,7 +1578,7 @@ void handleOtaUploadComplete() {
 // GET /api/firmware/version
 void handleFirmwareVersion() {
   server.send(200, "application/json",
-              "{\"version\":\"3.0.13\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
+              "{\"version\":\"3.0.14\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
 }
 
 // Returns true if the request carries the correct API key (or if token not yet set).
@@ -1669,11 +1669,11 @@ void handleDeviceInfo() {
   char buf[512];
   if (pairingWindow || hasValidToken) {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.13\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
+             "{\"version\":\"3.0.14\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
              OTA_HOSTNAME, deviceIdHex().c_str(), _apiToken.c_str(), _otaPass.c_str());
   } else {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.13\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
+             "{\"version\":\"3.0.14\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
              OTA_HOSTNAME, deviceIdHex().c_str());
   }
   server.send(200, "application/json", buf);
@@ -3885,7 +3885,7 @@ static const char* wifiPsNom() {
 void handleDiag() {
   stopPlay();  // mesure au repos (pas de contention SPI avec l'audio)
   int kBs = audio.sdBenchKBs("/quran/afs/001.mp3", 256 * 1024);
-  char buf[512];
+  char buf[640];
   snprintf(buf, sizeof(buf),
     "{\"sd_clock_hz\":%lu,\"sd_read_kBs\":%d,\"need_kBs\":16,"
     "\"lecture_max_ms\":%lu,\"gels\":%lu,\"wifi_veille\":\"%s\","
@@ -4057,6 +4057,15 @@ void v2Tick() {
 
 void setup() {
   Serial.begin(115200);
+#if ARDUINO_USB_CDC_ON_BOOT && ARDUINO_USB_MODE
+  // [BANC] Le port USB natif (HWCDC) n'a que 256 octets de tampon d'emission,
+  // et comme le delai d'attente est a zero (voir juste dessous), tout ce qui
+  // deborde est ABANDONNE sur-le-champ. Le 07/09/2026, la reponse t:diag
+  // enrichie (~380 caracteres) arrivait au banc coupee a 250 : 250 + 6 de
+  // marqueur <BANC> = 256. Avec 2 Ko, une reponse de banc tient entiere meme
+  // derriere un paquet de traces pas encore parties.
+  Serial.setTxBufferSize(2048);
+#endif
 #if ARDUINO_USB_CDC_ON_BOOT
   // [BANC] Serial passe par l'USB (CDCOnBoot=cdc) pour que le banc de
   // production pilote la carte par le cable. Mais un boitier chez un client
@@ -4573,6 +4582,7 @@ static void bancRep(const String &json) {
   // C'est arrive sur t:usine, dont la reponse part juste apres l'arret du
   // Wi-Fi et l'effacement de la NVS, au pire moment donc.
   Serial.print(String(F("<BANC>")) + json + F("\r\n"));
+  Serial.flush();   // arme l'emission ; n'attend pas (delai a zero, voir setup)
 }
 
 static void bancCommande(String c) {
@@ -4581,11 +4591,11 @@ static void bancCommande(String c) {
   String verbe = (esp < 0) ? c : c.substring(0, esp);
   String arg   = (esp < 0) ? String("") : c.substring(esp + 1);
   arg.trim();
-  char buf[512];
+  char buf[640];
 
   if (verbe == "info") {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.13\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
+             "{\"version\":\"3.0.14\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
              deviceIdHex().c_str());
     bancRep(buf);
 
