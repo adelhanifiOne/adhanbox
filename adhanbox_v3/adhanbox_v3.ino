@@ -2,7 +2,7 @@
 // - Starts an AP when a long-press is detected on CONFIG_BUTTON_PIN
 // - Serves a small webpage that requests navigator.geolocation and POSTs lat/lon
 // - Stores lat/lon/accuracy/timestamp in Preferences (NVS)
-//Version: 3.0.20 (AdhanBox V3 / HW v3)
+//Version: 3.0.21 (AdhanBox V3 / HW v3)
 #include <Arduino.h>
 #include <esp_mac.h>   // esp_read_mac() : MAC eFuse, lisible sans Wi-Fi
 #include <Wire.h>
@@ -291,6 +291,12 @@ static void miette(const char *quoi, uint32_t info = 0) {
   g_mietteInfo = info;
 }
 
+// ── [SYNCHRO] Etat partage entre la tache de synchro, loop() et playPath ────
+volatile bool _syncRunning  = false;    // la tache de synchro tourne
+volatile bool _syncAbandon  = false;    // playPath lui demande de tout lacher
+bool          _syncAFaire   = true;     // une synchro est due (boot, ou reprise)
+unsigned long _syncPasAvant = 0;        // millis() avant lequel on ne relance pas
+
 struct BlocageAudio {
   // Tout est mesure PENDANT la lecture, et seulement passe les 3 premieres
   // secondes : le demarrage (900 ms de silence de calage + remplissage initial
@@ -507,7 +513,7 @@ class I2SAudio {
   // POURQUOI C'EST DANGEREUX : ces deux appels sont sous assert() dans la
   // bibliotheque, et le noyau Arduino ESP32 compile SANS -DNDEBUG. Une seule
   // allocation ratee = abort = la carte redemarre, en pleine priere. C'est
-  // exactement ce qui est arrive avec la 3.0.20 : elle visait 16 x 4092 o, et
+  // exactement ce qui est arrive avec la 3.0.21 : elle visait 16 x 4092 o, et
   // se contentait de verifier la memoire TOTALE libre plus UN bloc. Or le
   // pilote demande 16 blocs SEPARES : apres des heures de Wi-Fi, de TLS et de
   // BLE, la RAM interne est fragmentee, le total suffit, les blocs non.
@@ -575,6 +581,14 @@ class I2SAudio {
                 Serial.println("[Audio] plus de memoire pour le tampon"); return false; }
     String p = path; p.toLowerCase();
     bool ok;
+    // [SYNCHRO] Si un telechargement est en cours, on le fait abandonner et on
+    // attend qu'il ait rendu sa memoire (TLS + pile de 32 Ko) : c'est cette
+    // memoire-la qui decide de la taille du coussin, juste en dessous.
+    if (_syncRunning) {
+      _syncAbandon = true;
+      for (int i = 0; i < 80 && _syncRunning; i++) delay(10);   // au plus 800 ms
+      _syncAbandon = false;
+    }
     dimensionnerCoussin();           // [CREPITEMENT] juste avant que begin() ne cree le canal
     // [PLANTAGE] C'est ICI que ca casse quand ca casse : begin() appelle
     // i2s_new_channel puis i2s_channel_init_std_mode, tous deux sous assert().
@@ -1696,7 +1710,7 @@ void handleOtaUploadComplete() {
 // GET /api/firmware/version
 void handleFirmwareVersion() {
   server.send(200, "application/json",
-              "{\"version\":\"3.0.20\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
+              "{\"version\":\"3.0.21\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
 }
 
 // Returns true if the request carries the correct API key (or if token not yet set).
@@ -1787,11 +1801,11 @@ void handleDeviceInfo() {
   char buf[512];
   if (pairingWindow || hasValidToken) {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.20\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
+             "{\"version\":\"3.0.21\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
              OTA_HOSTNAME, deviceIdHex().c_str(), _apiToken.c_str(), _otaPass.c_str());
   } else {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.20\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
+             "{\"version\":\"3.0.21\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
              OTA_HOSTNAME, deviceIdHex().c_str());
   }
   server.send(200, "application/json", buf);
@@ -4034,6 +4048,14 @@ void handleDiag() {
 // Sync de contenu : telecharge les fichiers MANQUANTS listes dans un manifeste
 // texte (1 ligne = "chemin|url"). Permet d'ajouter des duaas/sons a distance.
 String _syncMsg = "(idle)";   // diagnostic visible via /api/content/status
+// [SYNCHRO] L'adhan a la priorite absolue sur la synchro. Quand une lecture
+// demarre, elle leve _syncAbandon ; la tache de synchro s'arrete en quelques
+// dizaines de ms, ferme le TLS et rend ses ~70 Ko de RAM interne AVANT que le
+// coussin DMA ne soit dimensionne. Sans ca, mesure le 08/09/2026 : un adhan
+// lance pendant un telechargement heritait d'un coussin de 46 ms et de 24
+// tours au-dela. La synchro reprendra 2 min apres, et ne refera que le manque.
+// (les variables partagees de la synchro sont declarees en tete de fichier,
+//  avant la classe audio qui les utilise dans playPath)
 static const char *V2_CONTENT_URL =
   "https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/audio_content.txt";
 
@@ -4054,9 +4076,10 @@ int v2SyncContent() {
   if (mc != 200) { http.end(); return -1; }
   String man = http.getString();
   http.end();
+  if (_syncAbandon || audio.isRunning()) { _syncAFaire = true; _syncPasAvant = millis() + 120000UL; return 0; }
 
   // ── [SYNCHRO] Ce que cette boucle NE FAIT PLUS, et pourquoi ──────────────
-  // Jusqu'en 3.0.20 elle ouvrait une connexion TLS pour CHAQUE fichier, lisait
+  // Jusqu'en 3.0.21 elle ouvrait une connexion TLS pour CHAQUE fichier, lisait
   // le Content-Length, et si la taille sur la SD differait, EFFACAIT le fichier
   // puis le retelechargeait. Or cinq des six adhans precharges sur les cartes SD
   // n'ont plus la taille des fichiers du serveur (archive.org y a ajoute ~99 Ko
@@ -4120,9 +4143,8 @@ int v2SyncContent() {
     int written = 0; bool ok = true;
     unsigned long dernierOctet = millis();
     while (expected < 0 || written < expected) {
-      while (audio.isRunning()) {            // regle 3 : l'adhan d'abord
-        vTaskDelay(pdMS_TO_TICKS(250));
-        dernierOctet = millis();
+      if (_syncAbandon || audio.isRunning()) {   // regle 3 : l'adhan d'abord, on rend TOUT
+        ok = false; _syncMsg += " " + path + "=abandon(adhan)"; break;
       }
       if (!h2.connected() && !flux->available()) break;
       size_t dispo = flux->available();
@@ -4141,6 +4163,11 @@ int v2SyncContent() {
 
     if (!ok || (expected > 0 && written != expected)) {          // regle 2
       SD.remove(part);
+      if (_syncAbandon || audio.isRunning()) {
+        _syncAFaire = true; _syncPasAvant = millis() + 120000UL;   // on reviendra
+        Serial.printf("[sync] %s abandonne pour laisser jouer l'adhan, reprise dans 2 min\n", path.c_str());
+        return added;
+      }
       _syncMsg += " " + path + "=TRUNC(" + String(written) + "/" + String(expected) + ")";
       Serial.printf("[sync] TRONQUE %s (%d/%d octets) -> .part supprime, rien touche\n", path.c_str(), written, expected);
       continue;
@@ -4154,7 +4181,7 @@ int v2SyncContent() {
 }
 // Synchro lancee en TACHE DE FOND (sinon le download bloque le serveur HTTP
 // + watchdog sur les gros fichiers). L'app interroge /api/content/status.
-static volatile bool _syncRunning = false;
+// _syncRunning : declare en tete de fichier, avec les autres variables de synchro
 static volatile int  _syncAdded   = 0;
 void _v2SyncTask(void*) {
   _syncRunning = true;
@@ -4200,9 +4227,10 @@ void v2Tick() {
   // Sync auto au boot, en tache de fond, mais pas dans la premiere minute : le
   // TLS et la pile de 32 Ko de la tache pesent lourd, on laisse d'abord passer
   // l'appairage, une eventuelle mise a jour, et un adhan qui tomberait pile.
-  if (!synced && WiFi.status() == WL_CONNECTED && millis() > 60000UL) {
-    synced = true;
-    if (!_syncRunning) xTaskCreate(_v2SyncTask, "v2sync", 32768, nullptr, 1, nullptr);
+  if (_syncAFaire && WiFi.status() == WL_CONNECTED && millis() > 60000UL
+      && (long)(millis() - _syncPasAvant) >= 0 && !audio.isRunning() && !_syncRunning) {
+    _syncAFaire = false; synced = true;
+    xTaskCreate(_v2SyncTask, "v2sync", 32768, nullptr, 1, nullptr);
   }
   if (millis() - lastCheck < 1000) return;              // 1x / s
   lastCheck = millis();
@@ -4237,7 +4265,7 @@ void setup() {
   // IMPERATIVEMENT AVANT Serial.begin() : begin() ne cree le tampon que s'il
   // n'existe pas encore, alors que setTxBufferSize() appele APRES supprime le
   // tampon en service pour en recreer un, sous le nez de l'interruption
-  // d'emission. La 3.0.20 le faisait apres, et la carte ne repondait plus.
+  // d'emission. La 3.0.21 le faisait apres, et la carte ne repondait plus.
   Serial.setTxBufferSize(2048);
 #endif
   Serial.begin(115200);
@@ -4775,7 +4803,7 @@ static void bancCommande(String c) {
 
   if (verbe == "info") {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.20\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
+             "{\"version\":\"3.0.21\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
              deviceIdHex().c_str());
     bancRep(buf);
 
