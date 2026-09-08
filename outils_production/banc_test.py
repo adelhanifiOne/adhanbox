@@ -1101,6 +1101,8 @@ def t_sd(ctx):
     detail = '%d ko/s lus, %d requis' % (lu, besoin)
     if dma:
         detail += ' · coussin %d ms' % dma
+        if d.get('dma_libre'):
+            detail += ' (RAM DMA libre %d ko)' % (d['dma_libre'] // 1024)
     gels = d.get('gels')
     if gels is not None:
         detail += ' · a l\'arret : lecture max %d ms, %d gel(s)' % (d.get('lecture_max_ms', 0), gels)
@@ -1122,6 +1124,12 @@ def t_sd(ctx):
                       d.get('audio_http_max_ms', 0)))
         if d.get('audio_http_uri'):
             detail += ' · requete la plus longue : %s' % d['audio_http_uri']
+    # « PANIQUE » = la carte a redemarre sur un plantage logiciel. C'est ce que
+    # produit un assert de la bibliotheque audio quand l'allocation DMA echoue.
+    # A ne jamais laisser passer : le client entend l'adhan se couper.
+    red = d.get('redemarrage')
+    if red and red not in ('allumage', 'logiciel', 'reset externe'):
+        return False, detail + ' → dernier demarrage : %s' % red
     if lu < besoin:
         return False, detail + ' → coupures audio garanties'
     if sup:

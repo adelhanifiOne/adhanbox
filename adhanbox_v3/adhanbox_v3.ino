@@ -2,7 +2,7 @@
 // - Starts an AP when a long-press is detected on CONFIG_BUTTON_PIN
 // - Serves a small webpage that requests navigator.geolocation and POSTs lat/lon
 // - Stores lat/lon/accuracy/timestamp in Preferences (NVS)
-//Version: 3.0.17 (AdhanBox V3 / HW v3)
+//Version: 3.0.18 (AdhanBox V3 / HW v3)
 #include <Arduino.h>
 #include <esp_mac.h>   // esp_read_mac() : MAC eFuse, lisible sans Wi-Fi
 #include <Wire.h>
@@ -13,6 +13,7 @@
 #include <nvs_flash.h>   // [BANC] remise a zero usine : effacement de la NVS
 #include <esp_wifi.h>    // [BANC] lecture des identifiants Wi-Fi memorises
 #include <esp_heap_caps.h>   // [CREPITEMENT] taille du coussin DMA selon la memoire libre
+#include <esp_system.h>      // [CREPITEMENT] esp_reset_reason : pourquoi la carte a redemarre
 #include <esp_timer.h>       // [CREPITEMENT] sonde CPU du banc (IRAM)
 #include <RTClib.h>
 #include "rx8025t.h"   // [V3] RTC Epson RX-8025T (remplace le DS3231)
@@ -277,6 +278,7 @@ struct BlocageAudio {
   // polluait tous les maxima (mesure du 07/09 : http 1635 ms = la requete de
   // lecture elle-meme, pump 388 ms = le remplissage initial).
   uint32_t debutMs;                    // millis() au playPath
+  uint32_t dmaLibre;                   // RAM DMA interne libre au moment de choisir le coussin
   uint32_t dmaMs;                      // taille du coussin DMA, en ms de son
   uint32_t tours, ecartMaxUs, pumpMaxUs, tickMaxUs, httpMaxUs;
   uint32_t n50_90, n90_200, n200_500, n500;   // repartition des tours lents
@@ -316,6 +318,24 @@ public:
   }
 };
 static inline void _plusHaut(uint32_t &m, uint32_t v) { if (v > m) m = v; }
+
+// [CREPITEMENT] Pourquoi la carte a demarre. « PANIQUE » = plantage logiciel :
+// c'est ce que produit un assert de la bibliotheque audio quand elle n'obtient
+// pas sa memoire DMA. « TENSION INSUFFISANTE » = alimentation. Le banc l'affiche.
+static const char* raisonRedemarrage() {
+  switch (esp_reset_reason()) {
+    case ESP_RST_POWERON:   return "allumage";
+    case ESP_RST_EXT:       return "reset externe";
+    case ESP_RST_SW:        return "logiciel";
+    case ESP_RST_PANIC:     return "PANIQUE";
+    case ESP_RST_INT_WDT:   return "chien de garde interruptions";
+    case ESP_RST_TASK_WDT:  return "chien de garde tache";
+    case ESP_RST_WDT:       return "chien de garde";
+    case ESP_RST_DEEPSLEEP: return "sortie de veille";
+    case ESP_RST_BROWNOUT:  return "TENSION INSUFFISANTE";
+    default:                return "inconnu";
+  }
+}
 
 // [CREPITEMENT] Sonde CPU du banc. Tourne en rond pendant `us` microsecondes et
 // rend de combien on a DEPASSE : si le coeur nous a ete vole entre-temps (tache
@@ -457,28 +477,61 @@ class I2SAudio {
   // On choisit donc la taille juste avant de jouer, par paliers, avec une
   // marge qui laisse vivre le Wi-Fi et le serveur HTTP pendant la lecture.
   // Le DMA doit etre en RAM interne : la PSRAM ne sert a rien ici.
+  // ── [CREPITEMENT] Coussin DMA dimensionne a chaque lecture ─────────────────
+  // Le canal I2S et ses tampons DMA sont crees a CHAQUE lecture
+  // (AudioGeneratorMP3::begin -> AudioOutputI2S::begin -> i2s_new_channel puis
+  // i2s_channel_init_std_mode) et detruits a l'arret. La memoire interne libre
+  // au moment de jouer n'est donc pas celle du demarrage.
+  //
+  // POURQUOI C'EST DANGEREUX : ces deux appels sont sous assert() dans la
+  // bibliotheque, et le noyau Arduino ESP32 compile SANS -DNDEBUG. Une seule
+  // allocation ratee = abort = la carte redemarre, en pleine priere. C'est
+  // exactement ce qui est arrive avec la 3.0.18 : elle visait 16 x 4092 o, et
+  // se contentait de verifier la memoire TOTALE libre plus UN bloc. Or le
+  // pilote demande 16 blocs SEPARES : apres des heures de Wi-Fi, de TLS et de
+  // BLE, la RAM interne est fragmentee, le total suffit, les blocs non.
+  //
+  // Donc on ne verifie plus, ON ESSAIE : on alloue reellement les blocs du
+  // palier, on les libere, et on ne retient le palier que s'ils sont tous
+  // venus. Et le plafond redescend a 8 blocs, le meme nombre que le reglage
+  // qui a tourne des mois sans un seul redemarrage ; seule leur taille double.
+  // 186 ms restent plus du double du pire tour de boucle mesure (82 ms).
+  static bool coussinAllouable(int desc, int octets, uint32_t caps) {
+    void *essai[16] = {nullptr};
+    if (desc > 16) return false;
+    bool ok = true;
+    for (int i = 0; i < desc && ok; i++) {
+      essai[i] = heap_caps_malloc((size_t)octets, caps);
+      if (!essai[i]) ok = false;
+    }
+    for (int i = 0; i < desc; i++) if (essai[i]) heap_caps_free(essai[i]);
+    return ok;
+  }
+
   void dimensionnerCoussin() {
     if (!out) return;
     const uint32_t caps = MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT;
     const size_t libre = heap_caps_get_free_size(caps);
-    const size_t bloc  = heap_caps_get_largest_free_block(caps);
+    g_blocage.dmaLibre = (uint32_t)libre;
     struct Palier { int desc, octets; size_t marge; };
     static const Palier paliers[] = {
-      {16, 4092, 48 * 1024},   // 16 x 1023 trames = 371 ms a 44,1 kHz
-      { 8, 4092, 40 * 1024},   //  8 x 1023        = 186 ms
+      { 8, 4092, 40 * 1024},   //  8 x 1023 trames = 186 ms a 44,1 kHz
+      { 8, 3072, 32 * 1024},   //  8 x  768        = 139 ms
       { 8, 2048, 24 * 1024},   //  8 x  512        =  93 ms, l'ancien reglage
       { 8, 1024, 12 * 1024},   //  8 x  256        =  46 ms, mieux qu'un reboot
     };
     int desc = 8, octets = 1024;
     for (const Palier &p : paliers) {
       const size_t besoin = (size_t)p.desc * (size_t)(p.octets + 32);   // tampons + descripteurs
-      if (libre >= besoin + p.marge && bloc >= (size_t)p.octets + 64) { desc = p.desc; octets = p.octets; break; }
+      if (libre >= besoin + p.marge && coussinAllouable(p.desc, p.octets, caps)) {
+        desc = p.desc; octets = p.octets; break;
+      }
     }
     // SetBuffers refuse si le canal est deja ouvert : on garde alors l'actuel.
     if (!out->SetBuffers(desc, octets)) return;
     g_blocage.dmaMs = (uint32_t)((uint64_t)desc * (uint64_t)(octets / 4) * 1000ULL / 44100ULL);
-    Serial.printf("[I2S] coussin %d x %d o = %lu ms (RAM DMA libre %u o, plus gros bloc %u o)\n",
-                  desc, octets, (unsigned long)g_blocage.dmaMs, (unsigned)libre, (unsigned)bloc);
+    Serial.printf("[I2S] coussin %d x %d o = %lu ms (RAM DMA libre %u o)\n",
+                  desc, octets, (unsigned long)g_blocage.dmaMs, (unsigned)libre);
   }
 
   bool playPath(const char *path) {
@@ -1602,7 +1655,7 @@ void handleOtaUploadComplete() {
 // GET /api/firmware/version
 void handleFirmwareVersion() {
   server.send(200, "application/json",
-              "{\"version\":\"3.0.17\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
+              "{\"version\":\"3.0.18\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
 }
 
 // Returns true if the request carries the correct API key (or if token not yet set).
@@ -1693,11 +1746,11 @@ void handleDeviceInfo() {
   char buf[512];
   if (pairingWindow || hasValidToken) {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.17\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
+             "{\"version\":\"3.0.18\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
              OTA_HOSTNAME, deviceIdHex().c_str(), _apiToken.c_str(), _otaPass.c_str());
   } else {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.17\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
+             "{\"version\":\"3.0.18\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
              OTA_HOSTNAME, deviceIdHex().c_str());
   }
   server.send(200, "application/json", buf);
@@ -3913,7 +3966,7 @@ void handleDiag() {
   snprintf(buf, sizeof(buf),
     "{\"sd_clock_hz\":%lu,\"sd_read_kBs\":%d,\"need_kBs\":16,"
     "\"lecture_max_ms\":%lu,\"gels\":%lu,\"wifi_veille\":\"%s\","
-    "\"gel_cpu_max_ms\":%lu,\"dma_ms\":%lu,"
+    "\"gel_cpu_max_ms\":%lu,\"dma_ms\":%lu,\"dma_libre\":%lu,\"redemarrage\":\"%s\","
     "\"audio_tours\":%lu,\"audio_ecart_max_ms\":%lu,\"audio_sup_dma\":%lu,"
     "\"audio_n50_90\":%lu,\"audio_n90_200\":%lu,\"audio_n200_500\":%lu,\"audio_n500\":%lu,"
     "\"audio_pump_max_ms\":%lu,\"audio_tick_max_ms\":%lu,\"audio_http_max_ms\":%lu,"
@@ -3923,6 +3976,7 @@ void handleDiag() {
     (unsigned long)audio.benchMaxMs(), (unsigned long)audio.benchStalls(),
     wifiPsNom(),
     (unsigned long)audio.benchCpuMaxMs(), (unsigned long)g_blocage.dmaMs,
+    (unsigned long)g_blocage.dmaLibre, raisonRedemarrage(),
     (unsigned long)g_blocage.tours, (unsigned long)(g_blocage.ecartMaxUs / 1000),
     (unsigned long)g_blocage.supDma,
     (unsigned long)g_blocage.n50_90, (unsigned long)g_blocage.n90_200,
@@ -4090,7 +4144,7 @@ void setup() {
   // IMPERATIVEMENT AVANT Serial.begin() : begin() ne cree le tampon que s'il
   // n'existe pas encore, alors que setTxBufferSize() appele APRES supprime le
   // tampon en service pour en recreer un, sous le nez de l'interruption
-  // d'emission. La 3.0.17 le faisait apres, et la carte ne repondait plus.
+  // d'emission. La 3.0.18 le faisait apres, et la carte ne repondait plus.
   Serial.setTxBufferSize(2048);
 #endif
   Serial.begin(115200);
@@ -4628,7 +4682,7 @@ static void bancCommande(String c) {
 
   if (verbe == "info") {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.17\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
+             "{\"version\":\"3.0.18\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
              deviceIdHex().c_str());
     bancRep(buf);
 
@@ -4638,7 +4692,7 @@ static void bancCommande(String c) {
     snprintf(buf, sizeof(buf),
              "{\"sd_clock_hz\":%lu,\"sd_read_kBs\":%d,\"need_kBs\":16,"
              "\"lecture_max_ms\":%lu,\"gels\":%lu,\"wifi_veille\":\"%s\","
-             "\"gel_cpu_max_ms\":%lu,\"dma_ms\":%lu,"
+             "\"gel_cpu_max_ms\":%lu,\"dma_ms\":%lu,\"dma_libre\":%lu,\"redemarrage\":\"%s\","
              "\"audio_tours\":%lu,\"audio_ecart_max_ms\":%lu,\"audio_sup_dma\":%lu,"
              "\"audio_n50_90\":%lu,\"audio_n90_200\":%lu,\"audio_n200_500\":%lu,\"audio_n500\":%lu,"
              "\"audio_pump_max_ms\":%lu,\"audio_tick_max_ms\":%lu,\"audio_http_max_ms\":%lu,"
@@ -4648,6 +4702,7 @@ static void bancCommande(String c) {
              (unsigned long)audio.benchMaxMs(), (unsigned long)audio.benchStalls(),
              wifiPsNom(),
              (unsigned long)audio.benchCpuMaxMs(), (unsigned long)g_blocage.dmaMs,
+             (unsigned long)g_blocage.dmaLibre, raisonRedemarrage(),
              (unsigned long)g_blocage.tours, (unsigned long)(g_blocage.ecartMaxUs / 1000),
              (unsigned long)g_blocage.supDma,
              (unsigned long)g_blocage.n50_90, (unsigned long)g_blocage.n90_200,
