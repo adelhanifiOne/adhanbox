@@ -2873,6 +2873,7 @@
 			(at -6.35 -2.9)
 			(size 1 0.5)
 			(layers "F.Cu" "F.Mask" "F.Paste")
+			(net "GND")
 			(uuid "69c75bda-0a53-5a03-90c6-126eea84ee56")
 		)
 		(pad "3" smd rect
@@ -2931,6 +2932,7 @@
 			(at -6.35 4.3)
 			(size 1 0.5)
 			(layers "F.Cu" "F.Mask" "F.Paste")
+			(net "GND")
 			(uuid "29934884-0c63-5218-8493-f88dedb8452e")
 		)
 		(pad "12" smd rect
@@ -2949,6 +2951,7 @@
 			(at -3.2 7.9)
 			(size 0.5 1)
 			(layers "F.Cu" "F.Mask" "F.Paste")
+			(net "GND")
 			(uuid "f352c272-394b-5446-b3a0-dc87784e6fda")
 		)
 		(pad "15" smd rect

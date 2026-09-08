@@ -28,10 +28,11 @@ arduino-cli compile --fqbn esp32:esp32:esp32c3:PartitionScheme=min_spiffs,CDCOnB
 `keys/ota_private.pem` (même clé que V2 et V3), écrit
 `firmware_version_halo.json` et pousse sur `main`.
 
-Ce firmware n'a pas encore été compilé sur une vraie chaîne arduino-esp32
-(environnement de génération sans accès aux dépôts Espressif) : seule une
-vérification de syntaxe et de noms sur l'hôte a été faite. Première compilation
-à faire sur le Mac de développement, comme pour la V3.
+Première compilation faite le 08/09/2026 sur le Mac de développement avec
+arduino-cli 1.5.1 et le core esp32:esp32 3.3.11 : aucune erreur ni avertissement
+(`--warnings all`), 1 611 745 octets de programme (81 % des 1,9 Mo de la
+partition OTA), 45 960 octets de RAM statique. Le binaire n'a pas encore été
+flashé sur une carte.
 
 ## Premier flash
 

@@ -230,7 +230,7 @@ P("#FLG2", "power:PWR_FLAG", "PWR_FLAG", "", 40.64, 30.48, {"1": "GND"}, in_bom=
 
 # ---- Feuille 2 : module, strapping, boutons, capteur (zone milieu) ----
 P("U1", "Halo:ESP32-C3-MINI-1", "ESP32-C3-MINI-1-N4", "RF_Module:ESP32-C3-MINI-1", 68.58, 157.48,
-  {"3": "3V3", "1": "GND", "8": "EN", "5": "STRAP_IO2", "22": "STRAP_IO8", "23": "BOOT",
+  {"3": "3V3", "1": "GND", "2": "GND", "11": "GND", "14": "GND", "8": "EN", "5": "STRAP_IO2", "22": "STRAP_IO8", "23": "BOOT",
    "6": "BTN_USER", "18": "ALS", "16": "LED_DATA_3V3", "26": "USB_DM", "27": "USB_DP",
    "12": "NC", "13": "NC", "19": "NC", "20": "NC", "21": "NC", "30": "NC", "31": "NC"})
 P("R1", "Device:R", "10k", FP["R"], 121.92, 129.54, {"1": "3V3", "2": "EN"})
