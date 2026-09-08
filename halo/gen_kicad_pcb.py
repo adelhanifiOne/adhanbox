@@ -243,6 +243,19 @@ def fp_hole(ref, x, y, d):
 # --------------------------------------------------------------------------
 NETS = {p["ref"]: p["nets"] for p in parts}
 VALUE = {p["ref"]: p["value"] for p in parts}
+DNP = {p["ref"]: p["dnp"] for p in parts}
+IN_BOM = {p["ref"]: p["in_bom"] for p in parts}
+
+def set_attrs(fp, ref):
+    """Reporte les drapeaux du schema sur l'empreinte : sans cela la parite schema/PCB
+    rale et `kicad-cli pcb export pos --exclude-dnp` laisse les DNP dans le CPL."""
+    add = ([] if IN_BOM.get(ref, True) else ["exclude_from_bom"]) + (["dnp"] if DNP.get(ref) else [])
+    if not add:
+        return fp
+    def fix(m):
+        toks = m.group(1).split()
+        return "(attr " + " ".join(toks + [a for a in add if a not in toks]) + ")"
+    return re.sub(r"\(attr ([^)]*)\)", fix, fp, count=1)
 
 PLACE = {   # ref: (x, y, rot)
     "U1": (0, -24, 0),
@@ -303,7 +316,7 @@ def footprint_of(ref):
         return instantiate(TEMPLATES["C_0805"], ref, val, x, y, R, nets)
     raise KeyError(ref)
 
-footprints = [footprint_of(p["ref"]) for p in parts if not p["ref"].startswith("#")]
+footprints = [set_attrs(footprint_of(p["ref"]), p["ref"]) for p in parts if not p["ref"].startswith("#")]
 for k, a in enumerate((45, 135, 225, 315), start=1):
     x, y = polar(R_HOLE, a)
     footprints.append(fp_hole(f"H{k}", x, y, 2.2))

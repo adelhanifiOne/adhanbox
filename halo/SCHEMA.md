@@ -8,7 +8,10 @@ Fichiers du dossier :
 
 | Fichier | Contenu |
 |---|---|
-| `Halo_BOM.csv` | BOM PCB au format JLCPCB (mêmes colonnes que `AdhanBoxPCBV3_BOM.csv`) |
+| `Halo_BOM.csv` | BOM PCB au format JLCPCB (mêmes colonnes que `AdhanBoxPCBV3_BOM.csv`), écrite à la main |
+| `GERBER_HALO/` | Dossier de fabrication : Gerbers, perçage Excellon, `Halo_CPL.csv` (positions JLCPCB) |
+| `Halo_GERBER.zip` | Les Gerbers et le perçage seuls, l'archive à téléverser chez JLCPCB |
+| `export_fab.py` | Produit `GERBER_HALO/` et le zip, et vérifie que BOM, CPL et PCB concordent |
 | `Halo_BOM_produit.csv` | BOM complète du produit fini : coque, pied, câble, boîte |
 | `Halo.kicad_pro` | Projet KiCad : à ouvrir en premier, il relie le schéma et le PCB |
 | `Halo.kicad_sch` | Schéma KiCad 10, même structure que la V3 : symboles + labels globaux, prêt pour le PCB |
@@ -17,7 +20,8 @@ Fichiers du dossier :
 | `gen_kicad_pcb.py` | Générateur du `.kicad_pcb` : placement, anneau 5V, arcs de data. Importe composants et nets de `gen_kicad_sch.py` |
 | `route_center.py` | Routeur du centre : Dijkstra sur grille 0,1 mm, F.Cu + B.Cu, vias, stitching GND. Réécrit `Halo.kicad_pcb` |
 | `drc.py` | DRC programmatique (règles par défaut KiCad, connectivité, courtyards, antenne). Code retour 1 si erreur |
-| `build.sh` | Enchaîne schéma, PCB, routage, DRC, 3D |
+| `gen_kicad_libs.py` | Extrait `Halo.kicad_sym`, `Halo.pretty/` et les tables de librairies du projet |
+| `build.sh` | Enchaîne schéma, PCB, routage, DRC, librairies, dossier de fabrication, 3D |
 | `firmware/halo/halo.ino` | Firmware ESP32-C3, dérivé de la V3 : BLE, horaires, halo de prière, mode nuit. Voir `firmware/README.md` |
 | `Halo_routage.png` | Rendu des deux couches de cuivre après routage |
 | `gen_coque_pied.py` | Coque et pied en CadQuery, avec contrôles de collision ; écrit `3d/` |
@@ -442,8 +446,13 @@ pastilles 0,7 x 0,7) ; SOT-23-5/6 et fusible 1206 aux cotes des bibliothèques
 KiCad 10. `gen_kicad_libs.py` extrait ces empreintes et symboles dans
 `Halo.pretty` et `Halo.kicad_sym` avec les tables de librairies du projet.
 ERC 0, DRC KiCad 0 erreur (`kicad-cli pcb drc --refill-zones`), `drc.py` 0
-erreur. Gerbers, perçage et fichier de position dans `GERBER_HALO/` et
-`Halo_GERBER.zip` (kicad-cli 10.0.3).
+erreur. `export_fab.py` sort les Gerbers, le perçage et le CPL dans
+`GERBER_HALO/` (kicad-cli 10.0.3) et contrôle que la BOM couvre exactement les
+composants du schéma, avec les bonnes empreintes et les bonnes quantités.
+
+Les composants DNP (Q1 le phototransistor, J2 les pads d'alimentation, TP1 à
+TP4) portent le drapeau « ne pas monter » sur le PCB comme au schéma : ils
+sortent de la BOM à poser et du CPL.
 
 Ordre conseillé ensuite : Mettre à jour le PCB depuis le schéma (les
 références et nets sont déjà cohérents), remplir les zones (B), lancer le DRC
@@ -458,8 +467,11 @@ Les UUID sont déterministes, le diff git reste lisible.
 
 ## 8. À confirmer avant de commander
 
-1. Les réf LCSC marquées "A CONFIRMER" dans la BOM : U1, U3, D1, F1, R7, LED, Q1.
-   Vérifier stock et prix sur jlcpcb.com/parts le jour de la commande.
+1. Deux références LCSC manquent encore dans la BOM, `export_fab.py` les
+   rappelle à chaque exécution : F1 (PTC 1206 1,1 A, type MF-MSMF110-2) et
+   U3 (SN74AHCT1G125DBVR ou 74AHCT1G125GW). Les réf marquées "A CONFIRMER"
+   (U1, D1, R7, LED, Q1) sont renseignées mais à revérifier en stock et en
+   prix sur jlcpcb.com/parts le jour de la commande.
 2. RSSI avec le téléphone posé, sur le premier proto. Décide entre MINI-1 et MINI-1U.
 3. Rendu du halo à travers la lèvre PETG : tester deux épaisseurs, 1,2 et 1,6 mm.
 4. Consommation réelle à 60 % sur une seule couleur, pour valider F1 à 1,1 A.
