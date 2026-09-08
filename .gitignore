@@ -38,3 +38,7 @@ __pycache__/
 
 # KiCad : etat local de l editeur
 *.kicad_prl
+
+# Historique local de l editeur et verrous KiCad
+.history/
+*.lck
