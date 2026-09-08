@@ -45,6 +45,7 @@
 #include "esp_sntp.h"         // intervalle de resynchronisation NTP
 #include "esp_task_wdt.h"     // watchdog materiel : reboot si le firmware freeze
 #include "esp_ota_ops.h"      // rollback OTA : revient a la version precedente si boot-loop
+#include "esp_system.h"       // esp_reset_reason : reset logiciel ou coupure de courant ?
 
 #define HALO_VERSION  "1.0.0"
 #define HALO_HARDWARE "halo"
@@ -195,6 +196,12 @@ unsigned long apStartTime = 0;
 // Signal "rebooter en mode appairage BLE" : memoire RTC, survit a ESP.restart()
 #define PAIR_BOOT_MAGIC 0x50414952UL   // "PAIR"
 RTC_NOINIT_ATTR uint32_t g_pairBootMagic;
+// Halo en cours, en memoire RTC : survit a un reset logiciel (OTA, watchdog,
+// appairage) pour reprendre la scene la ou elle en etait.
+#define HALO_CARRY_MAGIC 0x48414C4FUL  // "HALO"
+RTC_NOINIT_ATTR uint32_t g_haloCarryMagic;
+RTC_NOINIT_ATTR int32_t  g_haloCarryIndex;
+RTC_NOINIT_ATTR int64_t  g_haloCarryUntilUtc;   // fin du halo, epoch UTC
 
 // LED
 int ledBrightness = 50;                 // reglage de l'app, 0..100
@@ -236,6 +243,8 @@ void handleOtaUpload(); void handleOtaUploadComplete(); void handleUpdatePage();
 bool requireApiKey(); void setupOTA(); void setupServerRoutes(); void startServices();
 void startConfigAP(); void stopConfigAP();
 bool syncTimeFromNtp(unsigned long timeoutMs = 10000);
+static void saveEpoch();
+static bool restoreCarriedTime();
 void scheduleNextPrayer();
 bool computeNextPrayer(time_t nowLocal, time_t &nextLocal, int &idx);
 bool performMawaqitSync(String &errorMsg);
@@ -458,6 +467,8 @@ static void renderScene(int scene, unsigned long now) {
 // l'heure locale.
 static bool timeSet() { return time(nullptr) > 1700000000; }
 static bool _timeFromPhone = false;   // heure posee par l'app, en attendant le NTP
+static bool _timeCarried = false;     // heure reprise de l'horloge interne apres un reset logiciel
+static inline bool timeApprox() { return _timeFromPhone || _timeCarried; }
 
 static int tzOffsetMinStored() {
   prefs.begin("adhancfg", true);
@@ -495,6 +506,43 @@ static String fmtLocal(time_t local) {
   return String(b);
 }
 
+// ── Heure sans RTC ───────────────────────────────────────────────────────────
+// Le C3 n'a pas de puce RTC ni de pile, mais son horloge systeme tourne sur
+// le timer RTC interne, qui survit a un reset LOGICIEL (ESP.restart, watchdog,
+// OTA, appairage) et ne repart a zero que sur coupure de courant. On sauvegarde
+// donc l'heure en NVS toutes les 15 min ; au demarrage, si le reset est
+// logiciel et que l'horloge interne est coherente avec cette sauvegarde
+// (jamais en arriere, moins de 7 jours devant), on la garde en attendant le
+// NTP. Sur coupure de courant, l'horloge est fausse et la sauvegarde trop
+// vieille pour servir : pas d'heure, respiration blanche.
+static void saveEpoch() {
+  if (!timeSet() || timeApprox()) return;   // on ne sauvegarde qu'une heure sure
+  prefs.begin("adhancfg", false);
+  prefs.putULong("last_epoch", (unsigned long)time(nullptr));
+  prefs.end();
+}
+
+static bool restoreCarriedTime() {
+  esp_reset_reason_t why = esp_reset_reason();
+  bool soft = (why == ESP_RST_SW || why == ESP_RST_PANIC || why == ESP_RST_INT_WDT || why == ESP_RST_TASK_WDT
+               || why == ESP_RST_WDT || why == ESP_RST_DEEPSLEEP);
+  prefs.begin("adhancfg", true);
+  unsigned long last = prefs.getULong("last_epoch", 0);
+  prefs.end();
+  time_t now = time(nullptr);
+  bool plausible = soft && last > 1700000000UL && now >= (time_t)last - 60 && now < (time_t)last + 7 * 86400;
+  Serial.printf("Reset %d, horloge interne %ld, derniere sauvegarde %lu -> %s\n", (int)why, (long)now, last,
+                plausible ? "heure reprise (approx.)" : "pas d'heure");
+  if (!plausible) {
+    struct timeval tv = { .tv_sec = 0, .tv_usec = 0 };   // on ne garde pas une heure douteuse
+    settimeofday(&tv, nullptr);
+    g_haloCarryMagic = 0;
+    return false;
+  }
+  _timeCarried = true;
+  return true;
+}
+
 bool syncTimeFromNtp(unsigned long timeoutMs) {
   if (!WiFi.isConnected()) { Serial.println("NTP impossible : pas de Wi-Fi"); return false; }
   configTime(0, 0, "pool.ntp.org", "time.nist.gov");
@@ -506,6 +554,8 @@ bool syncTimeFromNtp(unsigned long timeoutMs) {
   }
   if (!timeSet()) { Serial.println("NTP : pas de reponse"); return false; }
   _timeFromPhone = false;
+  _timeCarried = false;
+  saveEpoch();
   Serial.printf("NTP OK, heure locale %s (UTC%+d min)\n", fmtLocal(nowLocal()).c_str(), tzOffsetMin());
   return true;
 }
@@ -699,6 +749,9 @@ void haloStart(int prayerIndex, int minutes) {
   haloUntilMs = millis() + (unsigned long)constrain(minutes, 1, 120) * 60000UL;
   ledScenario = SCENE_PRAYER;
   ledCustomActive = false;
+  g_haloCarryIndex = prayerIndex;
+  g_haloCarryUntilUtc = (int64_t)time(nullptr) + (int64_t)constrain(minutes, 1, 120) * 60;
+  g_haloCarryMagic = HALO_CARRY_MAGIC;
   Serial.printf("[HALO] debut, priere %d, %d min\n", prayerIndex, minutes);
 }
 
@@ -709,6 +762,7 @@ void haloStop() {
   haloPrayerIndex = 0;
   haloUntilMs = 0;
   haloPrevScenario = -1;
+  g_haloCarryMagic = 0;
   Serial.println("[HALO] fin");
 }
 
@@ -1164,11 +1218,12 @@ void handleSetRtcManual() {
   int hh = 0, mm = 0, ss = 0;
   if (timeStr.length() >= 5) { hh = timeStr.substring(0, 2).toInt(); mm = timeStr.substring(3, 5).toInt(); if (timeStr.length() >= 8) ss = timeStr.substring(6, 8).toInt(); }
   if (y < 2024 || y > 2100 || m < 1 || m > 12 || d < 1 || d > 31) { server.send(400, "text/plain", "Invalid date/time"); return; }
-  if (!timeSet() || _timeFromPhone) {
+  if (!timeSet() || timeApprox()) {
     time_t local = civilToEpoch(y, m, d) + hh * 3600 + mm * 60 + ss;
     struct timeval tv = { .tv_sec = local - (time_t)tzOffsetMin() * 60, .tv_usec = 0 };
     settimeofday(&tv, nullptr);
     _timeFromPhone = true;
+    _timeCarried = false;
     scheduleNextPrayer();
     Serial.printf("Heure prise du telephone : %s\n", fmtLocal(nowLocal()).c_str());
   }
@@ -1182,7 +1237,7 @@ void handleApiTime() {
   char buf[160];
   snprintf(buf, sizeof(buf), "{\"time\":\"%s\",\"tz_min\":%d,\"ok\":%s,\"source\":\"%s\"}",
            timeSet() ? fmtLocal(nowLocal()).c_str() : "", tzOffsetMin(), timeSet() ? "true" : "false",
-           !timeSet() ? "none" : (_timeFromPhone ? "phone" : "ntp"));
+           !timeSet() ? "none" : (_timeFromPhone ? "phone" : (_timeCarried ? "carry" : "ntp")));
   server.send(200, "application/json", buf);
 }
 
@@ -1585,9 +1640,9 @@ void handleHaloStatus() {
   String next = "";
   if (scheduledPrayerIndex) { struct tm nt; localTm(scheduledPrayerLocal, nt); char nb[8]; snprintf(nb, sizeof(nb), "%02d:%02d", nt.tm_hour, nt.tm_min); next = nb; }
   snprintf(buf, sizeof(buf),
-           "{\"active\":%s,\"prayer_index\":%d,\"remaining_s\":%ld,\"als\":%d,\"night\":%s,\"time_ok\":%s,\"time\":\"%s\",\"next\":\"%s\",\"next_index\":%d,\"brightness_effective\":%d}",
+           "{\"active\":%s,\"prayer_index\":%d,\"remaining_s\":%ld,\"als\":%d,\"night\":%s,\"time_ok\":%s,\"time_approx\":%s,\"time\":\"%s\",\"next\":\"%s\",\"next_index\":%d,\"brightness_effective\":%d}",
            haloPrayerIndex ? "true" : "false", haloPrayerIndex, remaining, (int)(alsEma < 0 ? -1 : alsEma), nightMode ? "true" : "false",
-           timeSet() ? "true" : "false", timeSet() ? fmtLocal(nowLocal()).c_str() : "", next.c_str(), scheduledPrayerIndex, effectiveBrightness());
+           timeSet() ? "true" : "false", timeApprox() ? "true" : "false", timeSet() ? fmtLocal(nowLocal()).c_str() : "", next.c_str(), scheduledPrayerIndex, effectiveBrightness());
   server.send(200, "application/json", buf);
 }
 
@@ -2111,6 +2166,17 @@ void setup() {
   // firmware est confirme valide.
   if (esp_ota_mark_app_valid_cancel_rollback() == ESP_OK) Serial.println("[OTA] firmware confirme valide");
 
+  // Heure et halo repris de l'horloge interne si le reset est logiciel
+  if (restoreCarriedTime()) {
+    scheduleNextPrayer();
+    if (g_haloCarryMagic == HALO_CARRY_MAGIC && g_haloCarryUntilUtc > (int64_t)time(nullptr)) {
+      int remaining = (int)((g_haloCarryUntilUtc - (int64_t)time(nullptr) + 59) / 60);
+      Serial.printf("[HALO] reprise apres reset, %d min restantes\n", remaining);
+      haloStart(g_haloCarryIndex, remaining);
+    }
+  }
+  g_haloCarryMagic = (haloPrayerIndex != 0) ? HALO_CARRY_MAGIC : 0;
+
   // ── Demarrage : Wi-Fi memorise d'abord, appairage BLE en repli ──
   bool wifiConnected = false;
   bool pairBoot = (g_pairBootMagic == PAIR_BOOT_MAGIC);
@@ -2191,7 +2257,7 @@ void setup() {
 
   if (WiFi.status() == WL_CONNECTED) {
     wifiConnected = true;
-    if (!timeSet() || _timeFromPhone) syncTimeFromNtp(15000);
+    if (!timeSet() || timeApprox()) syncTimeFromNtp(15000);
     scheduleNextPrayer();
     startServices();
   } else {
@@ -2324,7 +2390,7 @@ void loop() {
       prefs.putString("wifi_pass", wifiConnectPass);
       prefs.end();
       startServices();
-      if (!timeSet() || _timeFromPhone) syncTimeFromNtp(15000);
+      if (!timeSet() || timeApprox()) syncTimeFromNtp(15000);
       scheduleNextPrayer();
     } else if (millis() - wifiConnectStart > WIFI_CONNECT_TIMEOUT_MS) {
       wifiConnectState = WCS_FAILED;
@@ -2350,6 +2416,15 @@ void loop() {
       wifiConnectStart = now;
       wifiConnectState = WCS_CONNECTING;
     }
+  }
+
+  // Sauvegarde de l'heure (15 min) ; si l'heure est approximative, on retente le NTP toutes les 5 min
+  static unsigned long lastEpochSave = 0;
+  if (now - lastEpochSave > 15UL * 60UL * 1000UL) { lastEpochSave = now; saveEpoch(); }
+  static unsigned long lastApproxNtp = 0;
+  if (timeApprox() && WiFi.status() == WL_CONNECTED && now - lastApproxNtp > 5UL * 60UL * 1000UL) {
+    lastApproxNtp = now;
+    if (syncTimeFromNtp(5000)) scheduleNextPrayer();
   }
 
   // Synchro Mawaqit automatique : une fois par minute on regarde, plus de 20 h -> on resynchronise

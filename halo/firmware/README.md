@@ -44,9 +44,20 @@ Ensuite l'OTA par l'app (`/ota/upload`) ou ArduinoOTA (`espota.py`) suffit.
 - **Démarrage** : Wi-Fi mémorisé (15 s), sinon appairage BLE `AdhanBox-XXXXXX`
   pendant 5 min (anneau rouge clignotant). Puis NTP, resynchronisé toutes les
   heures. Tant qu'il n'y a pas d'heure, l'anneau respire en blanc faible.
+- **Heure sans RTC** : l'horloge système du C3 tourne sur son timer RTC
+  interne, qui survit à un reset logiciel (OTA, watchdog, appairage) et ne
+  repart à zéro que sur coupure de courant. L'heure est sauvegardée en NVS
+  toutes les 15 min ; après un reset logiciel, si l'horloge interne est
+  cohérente avec cette sauvegarde, elle est gardée (source `carry`) et le
+  halo en cours reprend là où il en était. Le NTP est alors retenté toutes
+  les 5 min. Sur coupure de courant : pas d'heure jusqu'au NTP ou au
+  téléphone.
 - **Heure de secours** : l'app envoie l'heure du téléphone (`/set_rtc_manual`)
   à l'appairage puis toutes les 10 min ; elle est prise tant que le NTP n'a
   pas répondu, ce qui rend le Halo utilisable sur un Wi-Fi sans internet.
+- **Déclenchement** : pas d'alarme matérielle, le Halo est toujours alimenté.
+  Une fois par seconde, la boucle compare l'heure locale à la prochaine
+  prière ; anti-doublon par jour en NVS, comme la V3.
 - **Prières** : calcul local (NOAA, méthodes MWL/ISNA/UOIF/Egypte/Karachi/
   personnalisée) ou Mawaqit si une mosquée est configurée (synchro toutes les
   20 h, repli Aladhan), décalages par prière. À l'heure dite, le **halo** :
@@ -78,7 +89,7 @@ En plus des routes V3 (voir `adhanbox_v3.ino`, `setupServerRoutes`) :
 | `GET /api/halo/status` | Halo en cours, prière, secondes restantes, ADC, nuit, heure, prochaine prière |
 | `POST /api/halo/stop` | Arrête le halo en cours |
 | `POST /api/halo/test?minutes=1` | Lance un halo de test |
-| `GET /api/time` | `time`, `tz_min`, `ok`, `source` (`ntp`, `phone`, `none`) |
+| `GET /api/time` | `time`, `tz_min`, `ok`, `source` (`ntp`, `phone`, `carry`, `none`) |
 
 Les routes audio de la V3 répondent « rien ne joue » (`"audio":false`) pour
 que l'app, qui les sonde sur toutes les box, ne tombe pas en erreur.
