@@ -52,9 +52,22 @@ Ensuite l'OTA par l'app (`/ota/upload`) ou ArduinoOTA (`espota.py`) suffit.
   halo en cours reprend là où il en était. Le NTP est alors retenté toutes
   les 5 min. Sur coupure de courant : pas d'heure jusqu'au NTP ou au
   téléphone.
+- **Heure sans RTC** : l'horloge système du C3 tourne sur son timer RTC
+  interne, qui survit à un reset logiciel (OTA, watchdog, appairage) et ne
+  repart à zéro que sur coupure de courant. L'heure est sauvegardée en NVS
+  toutes les 15 min ; au démarrage, si le reset est logiciel et que l'horloge
+  interne est cohérente avec la sauvegarde (jamais en arrière, moins de 7
+  jours devant), elle est gardée comme approximative en attendant le NTP,
+  retenté toutes les 5 min, et le halo en cours reprend. Sur coupure de
+  courant : pas d'heure jusqu'au NTP. `/api/time` donne la source (`ntp`,
+  `phone`, `carry`, `none`).
 - **Heure de secours** : l'app envoie l'heure du téléphone (`/set_rtc_manual`)
   à l'appairage puis toutes les 10 min ; elle est prise tant que le NTP n'a
   pas répondu, ce qui rend le Halo utilisable sur un Wi-Fi sans internet.
+- **Déclenchement** : pas d'alarme matérielle, le Halo est toujours alimenté.
+  La boucle compare chaque seconde l'heure locale à la prochaine prière,
+  recalculée après chaque déclenchement et chaque changement de réglage.
+  Anti-doublon en NVS comme la V3.
 - **Déclenchement** : pas d'alarme matérielle, le Halo est toujours alimenté.
   Une fois par seconde, la boucle compare l'heure locale à la prochaine
   prière ; anti-doublon par jour en NVS, comme la V3.
