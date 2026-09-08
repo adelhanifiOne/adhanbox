@@ -18,6 +18,7 @@ Fichiers du dossier :
 | `route_center.py` | Routeur du centre : Dijkstra sur grille 0,1 mm, F.Cu + B.Cu, vias, stitching GND. Réécrit `Halo.kicad_pcb` |
 | `drc.py` | DRC programmatique (règles par défaut KiCad, connectivité, courtyards, antenne). Code retour 1 si erreur |
 | `build.sh` | Enchaîne schéma, PCB, routage, DRC, 3D |
+| `firmware/halo/halo.ino` | Firmware ESP32-C3, dérivé de la V3 : BLE, horaires, halo de prière, mode nuit. Voir `firmware/README.md` |
 | `Halo_routage.png` | Rendu des deux couches de cuivre après routage |
 | `gen_coque_pied.py` | Coque et pied en CadQuery, avec contrôles de collision ; écrit `3d/` |
 | `3d/Halo_coque.step` `.stl` | Coque arrière translucide, à imprimer fond sur le plateau |

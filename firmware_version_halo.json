@@ -1,0 +1,6 @@
+{
+  "version": "1.0.0",
+  "hardware": "halo",
+  "url": "https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/build_temp_halo/halo.ino.bin",
+  "changelog": "Premier firmware du Halo : appairage BLE, horaires, halo de priere, mode nuit."
+}
