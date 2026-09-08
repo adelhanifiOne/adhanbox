@@ -2,7 +2,7 @@
 // - Starts an AP when a long-press is detected on CONFIG_BUTTON_PIN
 // - Serves a small webpage that requests navigator.geolocation and POSTs lat/lon
 // - Stores lat/lon/accuracy/timestamp in Preferences (NVS)
-//Version: 3.0.18 (AdhanBox V3 / HW v3)
+//Version: 3.0.19 (AdhanBox V3 / HW v3)
 #include <Arduino.h>
 #include <esp_mac.h>   // esp_read_mac() : MAC eFuse, lisible sans Wi-Fi
 #include <Wire.h>
@@ -271,6 +271,26 @@ bool rtcPresent = false;
 //   http  = server.handleClient().
 // Lecture : si ecart_max reste petit (< 20 ms) alors que ca crepite, la boucle
 // n'y est pour rien et il faut chercher cote materiel.
+// ── [PLANTAGE] Miette de pain : ce que la carte faisait juste avant ─────────
+// RTC_NOINIT_ATTR : le demarrage NE remet PAS cette memoire a zero, elle
+// survit donc a un plantage et a son redemarrage (meme mecanique que
+// g_pairBootMagic). Un boitier ferme chez un client ne peut pas etre branche
+// en USB : sans ca, il oublie son plantage en redemarrant, et on ne saura
+// jamais ou il est mort. Avec ca, le diagnostic le dit.
+#define MIETTE_MAGIC 0xADB1E7E5u
+RTC_NOINIT_ATTR uint32_t g_mietteMagic;
+RTC_NOINIT_ATTR char     g_miette[40];
+RTC_NOINIT_ATTR uint32_t g_mietteInfo;
+static char     g_mietteAvant[40] = {0};   // relue au demarrage, pour le diag
+static uint32_t g_mietteAvantInfo = 0;
+
+static void miette(const char *quoi, uint32_t info = 0) {
+  g_mietteMagic = MIETTE_MAGIC;
+  strncpy(g_miette, quoi, sizeof(g_miette) - 1);
+  g_miette[sizeof(g_miette) - 1] = 0;
+  g_mietteInfo = info;
+}
+
 struct BlocageAudio {
   // Tout est mesure PENDANT la lecture, et seulement passe les 3 premieres
   // secondes : le demarrage (900 ms de silence de calage + remplissage initial
@@ -450,6 +470,7 @@ class I2SAudio {
     if (src) { delete src; src = nullptr; }
     _paused = false;
     _curPath[0] = 0;
+    miette("repos");
   }
   // [PLAYER] Pause/reprise : on suspend le DECODAGE (position conservee) mais
   // pump() continue d'alimenter le DMA I2S en SILENCE (voir pump). Sans ce
@@ -486,7 +507,7 @@ class I2SAudio {
   // POURQUOI C'EST DANGEREUX : ces deux appels sont sous assert() dans la
   // bibliotheque, et le noyau Arduino ESP32 compile SANS -DNDEBUG. Une seule
   // allocation ratee = abort = la carte redemarre, en pleine priere. C'est
-  // exactement ce qui est arrive avec la 3.0.18 : elle visait 16 x 4092 o, et
+  // exactement ce qui est arrive avec la 3.0.19 : elle visait 16 x 4092 o, et
   // se contentait de verifier la memoire TOTALE libre plus UN bloc. Or le
   // pilote demande 16 blocs SEPARES : apres des heures de Wi-Fi, de TLS et de
   // BLE, la RAM interne est fragmentee, le total suffit, les blocs non.
@@ -540,16 +561,36 @@ class I2SAudio {
     if (!_sdOk || !SD.exists(path)) return false;
     strncpy(_curPath, path, sizeof(_curPath) - 1);   // [PLAYER] memorise le fichier
     _curPath[sizeof(_curPath) - 1] = 0;
+    miette("ouverture lecture");
+    // [PLANTAGE] `new` rend nullptr quand la memoire manque (pas d'exception
+    // sur ce noyau). Sans ces controles, on deref un pointeur nul et la carte
+    // redemarre en pleine priere. Mieux vaut ne pas jouer que planter.
     src = new AudioFileSourceSDDoux(path);   // [CREPITEMENT] recharges bornees
+    if (!src) { Serial.println("[Audio] plus de memoire pour la source"); return false; }
     // Buffer fichier 32 Ko (~2s). Le vrai levier n'est pas la taille mais le DEBIT
     // SD (voir SD.begin plus haut) : un buffer plus gros ne fait que retarder si le
     // debit brut est sous 16 Ko/s (128 kbps).
     buf = new AudioFileSourceBuffer(src, 32768);
+    if (!buf) { delete src; src = nullptr;
+                Serial.println("[Audio] plus de memoire pour le tampon"); return false; }
     String p = path; p.toLowerCase();
     bool ok;
     dimensionnerCoussin();           // [CREPITEMENT] juste avant que begin() ne cree le canal
-    if (p.endsWith(".wav")) { wav = new AudioGeneratorWAV(); ok = wav->begin(buf, out); }
-    else { mp3 = new AudioGeneratorMP3(); ok = mp3->begin(buf, out); }
+    // [PLANTAGE] C'est ICI que ca casse quand ca casse : begin() appelle
+    // i2s_new_channel puis i2s_channel_init_std_mode, tous deux sous assert().
+    // La miette porte la RAM DMA libre : si la carte redemarre sur cette
+    // etape, le diagnostic dira combien il en restait.
+    miette("ouverture canal audio", g_blocage.dmaLibre);
+    if (p.endsWith(".wav")) {
+      wav = new AudioGeneratorWAV();
+      if (!wav) { stop(); Serial.println("[Audio] plus de memoire pour le decodeur"); return false; }
+      ok = wav->begin(buf, out);
+    } else {
+      mp3 = new AudioGeneratorMP3();
+      if (!mp3) { stop(); Serial.println("[Audio] plus de memoire pour le decodeur"); return false; }
+      ok = mp3->begin(buf, out);
+    }
+    miette(ok ? "lecture" : "lecture refusee");
     // Anti "debut coupe" : recreer le canal I2S redemarre BCLK -> le MAX98357A se
     // resynchronise (~0.8s) en avalant le debut. On lui envoie ~900ms de silence
     // propre AVANT le contenu (rien n'est encore decode) : l'ampli se cale, puis la
@@ -1655,7 +1696,7 @@ void handleOtaUploadComplete() {
 // GET /api/firmware/version
 void handleFirmwareVersion() {
   server.send(200, "application/json",
-              "{\"version\":\"3.0.18\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
+              "{\"version\":\"3.0.19\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
 }
 
 // Returns true if the request carries the correct API key (or if token not yet set).
@@ -1746,11 +1787,11 @@ void handleDeviceInfo() {
   char buf[512];
   if (pairingWindow || hasValidToken) {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.18\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
+             "{\"version\":\"3.0.19\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
              OTA_HOSTNAME, deviceIdHex().c_str(), _apiToken.c_str(), _otaPass.c_str());
   } else {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.18\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
+             "{\"version\":\"3.0.19\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
              OTA_HOSTNAME, deviceIdHex().c_str());
   }
   server.send(200, "application/json", buf);
@@ -3967,6 +4008,7 @@ void handleDiag() {
     "{\"sd_clock_hz\":%lu,\"sd_read_kBs\":%d,\"need_kBs\":16,"
     "\"lecture_max_ms\":%lu,\"gels\":%lu,\"wifi_veille\":\"%s\","
     "\"gel_cpu_max_ms\":%lu,\"dma_ms\":%lu,\"dma_libre\":%lu,\"redemarrage\":\"%s\","
+    "\"avant_plantage\":\"%s\",\"avant_plantage_info\":%lu,"
     "\"audio_tours\":%lu,\"audio_ecart_max_ms\":%lu,\"audio_sup_dma\":%lu,"
     "\"audio_n50_90\":%lu,\"audio_n90_200\":%lu,\"audio_n200_500\":%lu,\"audio_n500\":%lu,"
     "\"audio_pump_max_ms\":%lu,\"audio_tick_max_ms\":%lu,\"audio_http_max_ms\":%lu,"
@@ -3977,6 +4019,7 @@ void handleDiag() {
     wifiPsNom(),
     (unsigned long)audio.benchCpuMaxMs(), (unsigned long)g_blocage.dmaMs,
     (unsigned long)g_blocage.dmaLibre, raisonRedemarrage(),
+    g_mietteAvant[0] ? g_mietteAvant : "-", (unsigned long)g_mietteAvantInfo,
     (unsigned long)g_blocage.tours, (unsigned long)(g_blocage.ecartMaxUs / 1000),
     (unsigned long)g_blocage.supDma,
     (unsigned long)g_blocage.n50_90, (unsigned long)g_blocage.n90_200,
@@ -3999,6 +4042,7 @@ int v2SyncContent() {
 #if ENABLE_BLE
   if (_bleActive) stopBLEProvisioning();   // libere la RAM BLE (~60KB) avant le TLS
 #endif
+  miette("synchro contenu");
   WiFiClientSecure cli; cli.setInsecure();
   HTTPClient http;
   if (!http.begin(cli, V2_CONTENT_URL)) return -1;
@@ -4134,6 +4178,15 @@ void v2Tick() {
 // ======================= fin module V2 =======================
 
 void setup() {
+  // [PLANTAGE] Relire la miette AVANT tout : c'est le seul instant ou elle
+  // porte encore ce que faisait la carte au moment de mourir.
+  if (g_mietteMagic == MIETTE_MAGIC) {
+    strncpy(g_mietteAvant, g_miette, sizeof(g_mietteAvant) - 1);
+    g_mietteAvant[sizeof(g_mietteAvant) - 1] = 0;
+    g_mietteAvantInfo = g_mietteInfo;
+  }
+  g_mietteMagic = 0;
+  miette("demarrage");
 #if ARDUINO_USB_CDC_ON_BOOT && ARDUINO_USB_MODE
   // [BANC] Le port USB natif (HWCDC) n'a que 256 octets de tampon d'emission,
   // et comme le delai d'attente est a zero (voir plus bas), tout ce qui
@@ -4144,7 +4197,7 @@ void setup() {
   // IMPERATIVEMENT AVANT Serial.begin() : begin() ne cree le tampon que s'il
   // n'existe pas encore, alors que setTxBufferSize() appele APRES supprime le
   // tampon en service pour en recreer un, sous le nez de l'interruption
-  // d'emission. La 3.0.18 le faisait apres, et la carte ne repondait plus.
+  // d'emission. La 3.0.19 le faisait apres, et la carte ne repondait plus.
   Serial.setTxBufferSize(2048);
 #endif
   Serial.begin(115200);
@@ -4682,7 +4735,7 @@ static void bancCommande(String c) {
 
   if (verbe == "info") {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.18\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
+             "{\"version\":\"3.0.19\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
              deviceIdHex().c_str());
     bancRep(buf);
 
@@ -4693,6 +4746,7 @@ static void bancCommande(String c) {
              "{\"sd_clock_hz\":%lu,\"sd_read_kBs\":%d,\"need_kBs\":16,"
              "\"lecture_max_ms\":%lu,\"gels\":%lu,\"wifi_veille\":\"%s\","
              "\"gel_cpu_max_ms\":%lu,\"dma_ms\":%lu,\"dma_libre\":%lu,\"redemarrage\":\"%s\","
+             "\"avant_plantage\":\"%s\",\"avant_plantage_info\":%lu,"
              "\"audio_tours\":%lu,\"audio_ecart_max_ms\":%lu,\"audio_sup_dma\":%lu,"
              "\"audio_n50_90\":%lu,\"audio_n90_200\":%lu,\"audio_n200_500\":%lu,\"audio_n500\":%lu,"
              "\"audio_pump_max_ms\":%lu,\"audio_tick_max_ms\":%lu,\"audio_http_max_ms\":%lu,"
@@ -4703,6 +4757,7 @@ static void bancCommande(String c) {
              wifiPsNom(),
              (unsigned long)audio.benchCpuMaxMs(), (unsigned long)g_blocage.dmaMs,
              (unsigned long)g_blocage.dmaLibre, raisonRedemarrage(),
+             g_mietteAvant[0] ? g_mietteAvant : "-", (unsigned long)g_mietteAvantInfo,
              (unsigned long)g_blocage.tours, (unsigned long)(g_blocage.ecartMaxUs / 1000),
              (unsigned long)g_blocage.supDma,
              (unsigned long)g_blocage.n50_90, (unsigned long)g_blocage.n90_200,

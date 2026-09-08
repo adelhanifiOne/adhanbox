@@ -1128,8 +1128,17 @@ def t_sd(ctx):
     # produit un assert de la bibliotheque audio quand l'allocation DMA echoue.
     # A ne jamais laisser passer : le client entend l'adhan se couper.
     red = d.get('redemarrage')
+    avant = d.get('avant_plantage')
     if red and red not in ('allumage', 'logiciel', 'reset externe'):
-        return False, detail + ' → dernier demarrage : %s' % red
+        msg = detail + ' → dernier demarrage : %s' % red
+        # La miette de pain dit CE QUE FAISAIT la carte au moment de mourir.
+        # « ouverture canal audio » = l'allocation DMA ; l'info porte alors la
+        # RAM DMA libre a cet instant.
+        if avant and avant != '-':
+            msg += ', juste apres « %s »' % avant
+            if d.get('avant_plantage_info'):
+                msg += ' (%d ko libres)' % (d['avant_plantage_info'] // 1024)
+        return False, msg
     if lu < besoin:
         return False, detail + ' → coupures audio garanties'
     if sup:
