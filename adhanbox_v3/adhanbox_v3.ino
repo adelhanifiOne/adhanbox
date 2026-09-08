@@ -2,7 +2,7 @@
 // - Starts an AP when a long-press is detected on CONFIG_BUTTON_PIN
 // - Serves a small webpage that requests navigator.geolocation and POSTs lat/lon
 // - Stores lat/lon/accuracy/timestamp in Preferences (NVS)
-//Version: 3.0.7 (AdhanBox V3 / HW v3)
+//Version: 3.0.17 (AdhanBox V3 / HW v3)
 #include <Arduino.h>
 #include <esp_mac.h>   // esp_read_mac() : MAC eFuse, lisible sans Wi-Fi
 #include <Wire.h>
@@ -12,6 +12,8 @@
 #include <Preferences.h>
 #include <nvs_flash.h>   // [BANC] remise a zero usine : effacement de la NVS
 #include <esp_wifi.h>    // [BANC] lecture des identifiants Wi-Fi memorises
+#include <esp_heap_caps.h>   // [CREPITEMENT] taille du coussin DMA selon la memoire libre
+#include <esp_timer.h>       // [CREPITEMENT] sonde CPU du banc (IRAM)
 #include <RTClib.h>
 #include "rx8025t.h"   // [V3] RTC Epson RX-8025T (remplace le DS3231)
 #include <SPI.h>
@@ -254,6 +256,79 @@ bool rtcPresent = false;
 #define SD_SCK_PIN    12
 #define SD_MISO_PIN   13
 
+// ── [CREPITEMENT] Mesure du blocage de loop() PENDANT la lecture ───────────
+// Le diagnostic SD mesure a l'ARRET : il ne peut pas voir ce defaut-ci. Or le
+// DMA I2S fait 16 Ko, soit ~90 ms de son : si une iteration de loop() dure plus
+// longtemps que ca, le peripherique n'a plus rien a jouer et on entend un clic.
+// On mesure donc l'ecart entre deux tours de boucle pendant que ca joue, et le
+// temps passe dans les trois appels susceptibles de bloquer :
+//   pump  = decodage + lecture SD. AudioFileSourceBuffer::fill() appelle
+//           readNonBlock(), qui n'a AUCUNE implementation non bloquante pour la
+//           SD (AudioFileSource.h : readNonBlock -> read). Il peut donc demander
+//           jusqu'a 32 Ko d'un coup, soit ~278 ms a 1 MHz. Premier suspect.
+//   tick  = azkar/coran + synchro de contenu.
+//   http  = server.handleClient().
+// Lecture : si ecart_max reste petit (< 20 ms) alors que ca crepite, la boucle
+// n'y est pour rien et il faut chercher cote materiel.
+struct BlocageAudio {
+  // Tout est mesure PENDANT la lecture, et seulement passe les 3 premieres
+  // secondes : le demarrage (900 ms de silence de calage + remplissage initial
+  // de 32 Ko) bloque la boucle 1,3 a 1,6 s de facon normale et silencieuse, et
+  // polluait tous les maxima (mesure du 07/09 : http 1635 ms = la requete de
+  // lecture elle-meme, pump 388 ms = le remplissage initial).
+  uint32_t debutMs;                    // millis() au playPath
+  uint32_t dmaMs;                      // taille du coussin DMA, en ms de son
+  uint32_t tours, ecartMaxUs, pumpMaxUs, tickMaxUs, httpMaxUs;
+  uint32_t n50_90, n90_200, n200_500, n500;   // repartition des tours lents
+  uint32_t supDma;                     // tours plus longs que le coussin = clics
+  char httpUri[48];                    // la requete qui a produit httpMaxUs
+  char uriEnCours[48];                 // posee par requireApiKey() pendant le traitement
+  void raz() {
+    tours = ecartMaxUs = pumpMaxUs = tickMaxUs = httpMaxUs = 0;
+    n50_90 = n90_200 = n200_500 = n500 = supDma = 0;
+    httpUri[0] = 0; uriEnCours[0] = 0; debutMs = millis();
+  }
+  bool actif() const { return millis() - debutMs > 3000; }
+  void classer(uint32_t us) {
+    const uint32_t ms = us / 1000;
+    if (ms >= 500) n500++; else if (ms >= 200) n200_500++;
+    else if (ms >= 90) n90_200++; else if (ms >= 50) n50_90++;
+    if (dmaMs && ms > dmaMs) supDma++;
+  }
+};
+BlocageAudio g_blocage;
+
+// ── [CREPITEMENT] Source SD a recharge BORNEE ────────────────────────────────
+// AudioFileSourceBuffer::fill() recharge son tampon avec readNonBlock(), qui
+// n'a aucune implementation non bloquante pour la SD : la version de base
+// appelle read(), et demande tout l'espace libre du tampon, jusqu'a 32 Ko.
+// A 1 MHz c'est ~278 ms de blocage d'un coup, trois fois la reserve du DMA.
+// Mesure le 07/09/2026 : pump() bloque jusqu'a 534 ms pendant l'adhan.
+// Ici chaque appel lit au plus PAS_RECHARGE octets. Le tampon se remplit par
+// petites bouchees a chaque tour de boucle, et le debit total reste le meme :
+// on ne lit pas moins, on lit plus souvent.
+class AudioFileSourceSDDoux : public AudioFileSourceSD {
+public:
+  static const uint32_t PAS_RECHARGE = 2048;   // ~17 ms a 118 ko/s
+  AudioFileSourceSDDoux(const char *chemin) : AudioFileSourceSD(chemin) {}
+  uint32_t readNonBlock(void *data, uint32_t len) override {
+    return AudioFileSourceSD::read(data, len > PAS_RECHARGE ? PAS_RECHARGE : len);
+  }
+};
+static inline void _plusHaut(uint32_t &m, uint32_t v) { if (v > m) m = v; }
+
+// [CREPITEMENT] Sonde CPU du banc. Tourne en rond pendant `us` microsecondes et
+// rend de combien on a DEPASSE : si le coeur nous a ete vole entre-temps (tache
+// prioritaire, ecriture flash qui gele les deux coeurs), le depassement le dit.
+// En IRAM et sans acces flash pour ne dependre de rien. Sert a separer deux
+// causes de gel de lecture SD qui se ressemblent : le CPU vole (logiciel) et la
+// carte ou le bus SPI qui traine (materiel).
+static uint32_t IRAM_ATTR tournerEnRond(uint32_t us) {
+  const int64_t t0 = esp_timer_get_time();
+  while (esp_timer_get_time() - t0 < (int64_t)us) { }
+  return (uint32_t)(esp_timer_get_time() - t0 - us);
+}
+
 class I2SAudio {
   SPIClass spi{FSPI};
   AudioOutputI2S        *out = nullptr;
@@ -269,18 +344,47 @@ class I2SAudio {
  public:
   uint32_t sdClock() const { return _sdClock; }
   // Bench debit SD : lit `bytes` octets d'un fichier existant et renvoie ko/s.
+  // Mesure de la derniere campagne : sert a distinguer DEUX pannes que le
+  // debit moyen seul confond.
+  //   - carte SD reellement lente  -> toutes les lectures sont un peu lentes,
+  //     _benchMaxMs reste petit et proche de la moyenne ;
+  //   - temps CPU vole par une autre tache (Wi-Fi, BLE, pile reseau) -> la
+  //     plupart des lectures sont a pleine vitesse et quelques-unes durent
+  //     tres longtemps : _benchMaxMs explose et _benchStalls compte les gels.
+  // A 1 MHz une lecture de 4 Ko prend ~33 ms en regime normal ; on compte donc
+  // comme « gel » tout ce qui depasse le double.
+  uint32_t _benchMaxMs = 0;    // plus longue lecture de 4 Ko de la campagne
+  uint32_t _benchStalls = 0;   // nombre de lectures au-dela de 70 ms
+  uint32_t _benchCpuMaxMs = 0; // plus gros vol de CPU vu par la sonde IRAM
+  uint32_t benchMaxMs()    const { return _benchMaxMs; }
+  uint32_t benchStalls()   const { return _benchStalls; }
+  uint32_t benchCpuMaxMs() const { return _benchCpuMaxMs; }
+
   int sdBenchKBs(const char* path, uint32_t bytes) {
+    _benchMaxMs = 0; _benchStalls = 0; _benchCpuMaxMs = 0;
     if (!_sdOk || !SD.exists(path)) return -1;
     File f = SD.open(path, FILE_READ);
     if (!f) return -1;
     static uint8_t tmp[4096];
-    uint32_t total = 0; unsigned long t0 = millis();
+    uint32_t total = 0, sondeUs = 0, lectures = 0; unsigned long t0 = millis();
     while (total < bytes) {
+      unsigned long tl = millis();
       int n = f.read(tmp, sizeof(tmp));
+      unsigned long dl = millis() - tl;
+      if (dl > _benchMaxMs) _benchMaxMs = dl;
+      if (dl > 70) _benchStalls++;
       if (n <= 0) break;
       total += n;
+      // Toutes les 8 lectures, 10 ms de sonde CPU. Si la SD gele ET que la
+      // sonde est volee dans les memes proportions, c'est le CPU ; si la SD gele
+      // et que la sonde ne voit rien, c'est la carte ou le bus.
+      if ((++lectures & 7) == 0) {
+        const uint32_t vole = tournerEnRond(10000);
+        if (vole / 1000 > _benchCpuMaxMs) _benchCpuMaxMs = vole / 1000;
+        sondeUs += 10000 + vole;
+      }
     }
-    unsigned long dt = millis() - t0;
+    unsigned long dt = millis() - t0 - sondeUs / 1000;
     f.close();
     if (dt == 0) return -2;
     return (int)((uint64_t)total / dt);  // octets/ms == ko/s
@@ -303,11 +407,10 @@ class I2SAudio {
     Serial.printf("[SD] %s @ %lu Hz\n", _sdOk ? "OK" : "FAIL", (unsigned long)_sdClock);
     if (!out) {
       out = new AudioOutputI2S();
-      // DMA I2S = 8x2048 (~16 Ko). ATTENTION : un DMA plus gros (55 Ko) FAIT CRASHER
-      // les modules SANS PSRAM (i2s_alloc_dma_desc echoue apres WiFi+BLE -> assert ->
-      // reboot en boucle des qu'on joue un son). 16 Ko tient partout ; le grésillement
-      // est de toute facon evite par le fait de ne PAS bloquer loop() pendant l'audio.
-      out->SetBuffers(8, 2048);
+      // [CREPITEMENT] La taille du coussin DMA se decide A CHAQUE LECTURE, voir
+      // dimensionnerCoussin() : la memoire libre au moment de jouer n'est pas
+      // celle du demarrage.
+      dimensionnerCoussin();
       out->SetPinout(I2S_BCLK_PIN, I2S_LRC_PIN, I2S_DIN_PIN);
       out->SetGain(gain);
       Serial.println("[I2S] OK");
@@ -341,18 +444,57 @@ class I2SAudio {
   // suffisante pour une barre de lecture ; MP3 CBR -> quasi lineaire).
   uint32_t posBytes()  { return src ? (uint32_t)src->getPos()  : 0; }
   uint32_t sizeBytes() { return src ? (uint32_t)src->getSize() : 0; }
+  // ── [CREPITEMENT] Coussin DMA dimensionne a chaque lecture ─────────────────
+  // Le canal I2S et ses tampons DMA sont crees a CHAQUE lecture
+  // (AudioGeneratorMP3::begin -> AudioOutputI2S::begin -> i2s_new_channel puis
+  // i2s_channel_init_std_mode, tous deux sous assert dans la bibliotheque) et
+  // detruits a l'arret (AudioOutputI2S::stop -> i2s_del_channel). La memoire
+  // interne libre au moment de jouer n'est donc pas celle du demarrage : le BLE
+  // d'appairage prend ~60 Ko, le TLS de la synchro de contenu ~45 Ko. Sur la
+  // carte du banc le 07/09/2026 : 217 Ko libres un jour, 69 Ko le lendemain.
+  // Une allocation ratee = assert = reboot en boucle A CHAQUE ADHAN, chez le
+  // client. C'est exactement ce qui arrivait aux modules V2 sans PSRAM.
+  // On choisit donc la taille juste avant de jouer, par paliers, avec une
+  // marge qui laisse vivre le Wi-Fi et le serveur HTTP pendant la lecture.
+  // Le DMA doit etre en RAM interne : la PSRAM ne sert a rien ici.
+  void dimensionnerCoussin() {
+    if (!out) return;
+    const uint32_t caps = MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT;
+    const size_t libre = heap_caps_get_free_size(caps);
+    const size_t bloc  = heap_caps_get_largest_free_block(caps);
+    struct Palier { int desc, octets; size_t marge; };
+    static const Palier paliers[] = {
+      {16, 4092, 48 * 1024},   // 16 x 1023 trames = 371 ms a 44,1 kHz
+      { 8, 4092, 40 * 1024},   //  8 x 1023        = 186 ms
+      { 8, 2048, 24 * 1024},   //  8 x  512        =  93 ms, l'ancien reglage
+      { 8, 1024, 12 * 1024},   //  8 x  256        =  46 ms, mieux qu'un reboot
+    };
+    int desc = 8, octets = 1024;
+    for (const Palier &p : paliers) {
+      const size_t besoin = (size_t)p.desc * (size_t)(p.octets + 32);   // tampons + descripteurs
+      if (libre >= besoin + p.marge && bloc >= (size_t)p.octets + 64) { desc = p.desc; octets = p.octets; break; }
+    }
+    // SetBuffers refuse si le canal est deja ouvert : on garde alors l'actuel.
+    if (!out->SetBuffers(desc, octets)) return;
+    g_blocage.dmaMs = (uint32_t)((uint64_t)desc * (uint64_t)(octets / 4) * 1000ULL / 44100ULL);
+    Serial.printf("[I2S] coussin %d x %d o = %lu ms (RAM DMA libre %u o, plus gros bloc %u o)\n",
+                  desc, octets, (unsigned long)g_blocage.dmaMs, (unsigned)libre, (unsigned)bloc);
+  }
+
   bool playPath(const char *path) {
     stop();
+    g_blocage.raz();                 // [CREPITEMENT] chaque lecture repart a zero
     if (!_sdOk || !SD.exists(path)) return false;
     strncpy(_curPath, path, sizeof(_curPath) - 1);   // [PLAYER] memorise le fichier
     _curPath[sizeof(_curPath) - 1] = 0;
-    src = new AudioFileSourceSD(path);
+    src = new AudioFileSourceSDDoux(path);   // [CREPITEMENT] recharges bornees
     // Buffer fichier 32 Ko (~2s). Le vrai levier n'est pas la taille mais le DEBIT
     // SD (voir SD.begin plus haut) : un buffer plus gros ne fait que retarder si le
     // debit brut est sous 16 Ko/s (128 kbps).
     buf = new AudioFileSourceBuffer(src, 32768);
     String p = path; p.toLowerCase();
     bool ok;
+    dimensionnerCoussin();           // [CREPITEMENT] juste avant que begin() ne cree le canal
     if (p.endsWith(".wav")) { wav = new AudioGeneratorWAV(); ok = wav->begin(buf, out); }
     else { mp3 = new AudioGeneratorMP3(); ok = mp3->begin(buf, out); }
     // Anti "debut coupe" : recreer le canal I2S redemarre BCLK -> le MAX98357A se
@@ -1460,12 +1602,16 @@ void handleOtaUploadComplete() {
 // GET /api/firmware/version
 void handleFirmwareVersion() {
   server.send(200, "application/json",
-              "{\"version\":\"3.0.7\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
+              "{\"version\":\"3.0.17\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
 }
 
 // Returns true if the request carries the correct API key (or if token not yet set).
 // Sends 401 and returns false if check fails. Call at the start of any mutating handler.
 bool requireApiKey() {
+  // [CREPITEMENT] memorise la requete en cours : server.uri() est efface a la
+  // fin du traitement, apres coup on ne saurait plus laquelle a bloque.
+  strncpy(g_blocage.uriEnCours, server.uri().c_str(), sizeof(g_blocage.uriEnCours) - 1);
+  g_blocage.uriEnCours[sizeof(g_blocage.uriEnCours) - 1] = 0;
   if (_apiToken.length() == 0) return true;  // not yet initialized
   if (apRunning) return true;                // AP mode: réseau isolé, pas d'auth nécessaire
   String key = server.header("X-API-Key");
@@ -1547,11 +1693,11 @@ void handleDeviceInfo() {
   char buf[512];
   if (pairingWindow || hasValidToken) {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.7\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
+             "{\"version\":\"3.0.17\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
              OTA_HOSTNAME, deviceIdHex().c_str(), _apiToken.c_str(), _otaPass.c_str());
   } else {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.7\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
+             "{\"version\":\"3.0.17\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
              OTA_HOSTNAME, deviceIdHex().c_str());
   }
   server.send(200, "application/json", buf);
@@ -3748,16 +3894,41 @@ void handleAudioList() {
   server.send(200, "application/json", out);
 }
 
+// Etat REEL de la veille du modem Wi-Fi, demande au pilote. Ne pas utiliser
+// WiFi.getSleep() : il renvoie la valeur mise en cache par WiFi.setSleep().
+static const char* wifiPsNom() {
+  if (WiFi.status() != WL_CONNECTED) return "hors-ligne";
+  wifi_ps_type_t ps;
+  if (esp_wifi_get_ps(&ps) != ESP_OK) return "inconnu";
+  return ps == WIFI_PS_NONE ? "aucune"
+       : ps == WIFI_PS_MIN_MODEM ? "min_modem" : "max_modem";
+}
+
 // Diagnostic : horloge SD reelle + debit de lecture (ko/s) + heap/PSRAM.
 // Sert a savoir si la SD tient le 128 kbps (16 ko/s) ou pas.
 void handleDiag() {
   stopPlay();  // mesure au repos (pas de contention SPI avec l'audio)
   int kBs = audio.sdBenchKBs("/quran/afs/001.mp3", 256 * 1024);
-  char buf[256];
+  char buf[640];
   snprintf(buf, sizeof(buf),
     "{\"sd_clock_hz\":%lu,\"sd_read_kBs\":%d,\"need_kBs\":16,"
+    "\"lecture_max_ms\":%lu,\"gels\":%lu,\"wifi_veille\":\"%s\","
+    "\"gel_cpu_max_ms\":%lu,\"dma_ms\":%lu,"
+    "\"audio_tours\":%lu,\"audio_ecart_max_ms\":%lu,\"audio_sup_dma\":%lu,"
+    "\"audio_n50_90\":%lu,\"audio_n90_200\":%lu,\"audio_n200_500\":%lu,\"audio_n500\":%lu,"
+    "\"audio_pump_max_ms\":%lu,\"audio_tick_max_ms\":%lu,\"audio_http_max_ms\":%lu,"
+    "\"audio_http_uri\":\"%s\","
     "\"free_heap\":%u,\"psram_size\":%u,\"psram_free\":%u}",
     (unsigned long)audio.sdClock(), kBs,
+    (unsigned long)audio.benchMaxMs(), (unsigned long)audio.benchStalls(),
+    wifiPsNom(),
+    (unsigned long)audio.benchCpuMaxMs(), (unsigned long)g_blocage.dmaMs,
+    (unsigned long)g_blocage.tours, (unsigned long)(g_blocage.ecartMaxUs / 1000),
+    (unsigned long)g_blocage.supDma,
+    (unsigned long)g_blocage.n50_90, (unsigned long)g_blocage.n90_200,
+    (unsigned long)g_blocage.n200_500, (unsigned long)g_blocage.n500,
+    (unsigned long)(g_blocage.pumpMaxUs / 1000), (unsigned long)(g_blocage.tickMaxUs / 1000),
+    (unsigned long)(g_blocage.httpMaxUs / 1000), g_blocage.httpUri,
     (unsigned)ESP.getFreeHeap(),
     (unsigned)ESP.getPsramSize(), (unsigned)ESP.getFreePsram());
   server.send(200, "application/json", buf);
@@ -3909,6 +4080,19 @@ void v2Tick() {
 // ======================= fin module V2 =======================
 
 void setup() {
+#if ARDUINO_USB_CDC_ON_BOOT && ARDUINO_USB_MODE
+  // [BANC] Le port USB natif (HWCDC) n'a que 256 octets de tampon d'emission,
+  // et comme le delai d'attente est a zero (voir plus bas), tout ce qui
+  // deborde est ABANDONNE sur-le-champ. Le 07/09/2026, la reponse t:diag
+  // enrichie (~380 caracteres) arrivait au banc coupee a 250 : 250 + 6 de
+  // marqueur <BANC> = 256. Avec 2 Ko, une reponse de banc tient entiere meme
+  // derriere un paquet de traces pas encore parties.
+  // IMPERATIVEMENT AVANT Serial.begin() : begin() ne cree le tampon que s'il
+  // n'existe pas encore, alors que setTxBufferSize() appele APRES supprime le
+  // tampon en service pour en recreer un, sous le nez de l'interruption
+  // d'emission. La 3.0.17 le faisait apres, et la carte ne repondait plus.
+  Serial.setTxBufferSize(2048);
+#endif
   Serial.begin(115200);
 #if ARDUINO_USB_CDC_ON_BOOT
   // [BANC] Serial passe par l'USB (CDCOnBoot=cdc) pour que le banc de
@@ -4419,8 +4603,19 @@ void handleFactoryReset() {
 }
 
 static void bancRep(const String &json) {
-  Serial.print(F("<BANC>"));
-  Serial.println(json);
+  // UNE SEULE ecriture, marqueur et fin de ligne compris. Entre deux appels a
+  // Serial, une tache ESP-IDF (Wi-Fi, NVS) peut glisser sa propre ligne de
+  // journal : elle se retrouve alors COLLEE derriere le JSON, avant le saut de
+  // ligne, et le banc lit deux choses sur une seule ligne (« Extra data »).
+  // C'est arrive sur t:usine, dont la reponse part juste apres l'arret du
+  // Wi-Fi et l'effacement de la NVS, au pire moment donc.
+  Serial.print(String(F("<BANC>")) + json + F("\r\n"));
+  // SURTOUT PAS de Serial.flush() ici. Le delai d'attente du port USB est a
+  // zero (voir setup) ; dans ce pilote, flush() avec un delai nul ne peut pas
+  // attendre, conclut « USB debranche » et JETTE tout ce qui reste a emettre.
+  // La 3.0.14 l'avait ajoute : toutes les reponses etaient coupees a 64 octets,
+  // la taille du FIFO materiel. Avec un tampon de 2 Ko (setup), la reponse est
+  // mise en file d'un coup et l'interruption la vide toute seule.
 }
 
 static void bancCommande(String c) {
@@ -4429,11 +4624,11 @@ static void bancCommande(String c) {
   String verbe = (esp < 0) ? c : c.substring(0, esp);
   String arg   = (esp < 0) ? String("") : c.substring(esp + 1);
   arg.trim();
-  char buf[288];
+  char buf[640];
 
   if (verbe == "info") {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.7\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
+             "{\"version\":\"3.0.17\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
              deviceIdHex().c_str());
     bancRep(buf);
 
@@ -4442,8 +4637,23 @@ static void bancCommande(String c) {
     int kBs = audio.sdBenchKBs("/quran/afs/001.mp3", 256 * 1024);
     snprintf(buf, sizeof(buf),
              "{\"sd_clock_hz\":%lu,\"sd_read_kBs\":%d,\"need_kBs\":16,"
+             "\"lecture_max_ms\":%lu,\"gels\":%lu,\"wifi_veille\":\"%s\","
+             "\"gel_cpu_max_ms\":%lu,\"dma_ms\":%lu,"
+             "\"audio_tours\":%lu,\"audio_ecart_max_ms\":%lu,\"audio_sup_dma\":%lu,"
+             "\"audio_n50_90\":%lu,\"audio_n90_200\":%lu,\"audio_n200_500\":%lu,\"audio_n500\":%lu,"
+             "\"audio_pump_max_ms\":%lu,\"audio_tick_max_ms\":%lu,\"audio_http_max_ms\":%lu,"
+             "\"audio_http_uri\":\"%s\","
              "\"free_heap\":%u,\"psram_size\":%u}",
              (unsigned long)audio.sdClock(), kBs,
+             (unsigned long)audio.benchMaxMs(), (unsigned long)audio.benchStalls(),
+             wifiPsNom(),
+             (unsigned long)audio.benchCpuMaxMs(), (unsigned long)g_blocage.dmaMs,
+             (unsigned long)g_blocage.tours, (unsigned long)(g_blocage.ecartMaxUs / 1000),
+             (unsigned long)g_blocage.supDma,
+             (unsigned long)g_blocage.n50_90, (unsigned long)g_blocage.n90_200,
+             (unsigned long)g_blocage.n200_500, (unsigned long)g_blocage.n500,
+             (unsigned long)(g_blocage.pumpMaxUs / 1000), (unsigned long)(g_blocage.tickMaxUs / 1000),
+             (unsigned long)(g_blocage.httpMaxUs / 1000), g_blocage.httpUri,
              (unsigned)ESP.getFreeHeap(), (unsigned)ESP.getPsramSize());
     bancRep(buf);
 
@@ -4597,8 +4807,7 @@ static void bancCommande(String c) {
     // d'acces physique, aucune confirmation supplementaire.
     usineEffacer(buf, sizeof(buf));
     bancRep(buf);
-    Serial.flush();                   // la reponse doit partir AVANT le reboot
-    delay(300);
+    delay(300);                       // le temps que la reponse parte (pas de flush : voir bancRep)
     ESP.restart();
 
   } else {
@@ -4612,17 +4821,57 @@ void loop() {
   // la nourrit a chaque tour. Ainsi setup() ne peut pas declencher le WDT.
   if (!_wdtArmed) { esp_task_wdt_add(NULL); _wdtArmed = true; }
   esp_task_wdt_reset();
-  audio.pump();
-  v2Tick();          // [V2] azkar/coran + sync contenu
 
-  // [V2] Desactive le modem-sleep WiFi des la 1ere connexion (tous chemins :
-  // boot, BLE, reconnexion). Le modem-sleep par defaut reveille le WiFi par
-  // intervalles et gele le CPU -> coupures audio I2S periodiques. Une fois.
-  static bool _wifiSleepDisabled = false;
-  if (!_wifiSleepDisabled && WiFi.status() == WL_CONNECTED) {
-    WiFi.setSleep(false);
-    _wifiSleepDisabled = true;
-    Serial.println("[WiFi] modem-sleep desactive (audio I2S stable)");
+  // [CREPITEMENT] chronometrage du tour de boucle, pendant la lecture et passe
+  // les 3 premieres secondes (voir BlocageAudio)
+  const bool _joue = audio.isRunning() && g_blocage.actif();
+  static uint32_t _tourPrecedent = 0;
+  const uint32_t _t0 = micros();
+  if (_joue && _tourPrecedent) {
+    const uint32_t ecart = _t0 - _tourPrecedent;
+    _plusHaut(g_blocage.ecartMaxUs, ecart);
+    g_blocage.classer(ecart);
+    g_blocage.tours++;
+  }
+  _tourPrecedent = _joue ? _t0 : 0;
+
+  audio.pump();
+  const uint32_t _t1 = micros();
+  if (_joue) _plusHaut(g_blocage.pumpMaxUs, _t1 - _t0);
+  v2Tick();          // [V2] azkar/coran + sync contenu
+  if (_joue) _plusHaut(g_blocage.tickMaxUs, micros() - _t1);
+
+  // [V2] Le modem-sleep WiFi reveille le modem par intervalles et GELE le CPU
+  // pendant ce temps -> le decodeur ne remplit plus le DMA I2S -> crepitement.
+  //
+  // ATTENTION, LE PIEGE : esp_wifi_set_ps() est REMIS A SA VALEUR PAR DEFAUT
+  // (WIFI_PS_MIN_MODEM) par chaque appel a WiFi.mode(). Ce fichier en compte
+  // onze : appairage BLE, point d'acces, reconnexions, remise a zero usine.
+  // La version precedente ne desactivait la veille QU'UNE SEULE FOIS, avec un
+  // verrou statique : le boitier demarrait propre, puis la premiere
+  // reconnexion reactivait la veille en silence et le verrou interdisait de la
+  // recorriger. Mesure au banc sur le meme boitier, meme carte SD :
+  //   carte fraichement flashee, jamais reconnectee : 118 ko/s, son propre ;
+  //   apres une reconnexion                        :  85 ko/s, crepitement.
+  // 85/118 = ~30 % de temps CPU perdu, pas du debit disque perdu.
+  //
+  // On RE-VERIFIE donc l'etat une fois par seconde et on le corrige des qu'il
+  // derive, au lieu de faire confiance a un reglage pose une fois pour toutes.
+  static unsigned long _wifiSleepCheck = 0;
+  if (millis() - _wifiSleepCheck >= 1000) {
+    _wifiSleepCheck = millis();
+    // ATTENTION : WiFi.getSleep() ne lit PAS le pilote, il renvoie la variable
+    // _sleepEnabled que WiFi.setSleep() vient d'ecrire. L'interroger revient a
+    // se demander a soi-meme ce qu'on a decide : la reponse est toujours
+    // « pas de veille », meme si le pilote, lui, l'a reactivee. Il faut donc
+    // demander l'etat REEL au pilote avec esp_wifi_get_ps().
+    wifi_ps_type_t ps = WIFI_PS_NONE;
+    if (WiFi.status() == WL_CONNECTED && esp_wifi_get_ps(&ps) == ESP_OK
+        && ps != WIFI_PS_NONE) {
+      esp_wifi_set_ps(WIFI_PS_NONE);
+      WiFi.setSleep(false);
+      Serial.println("[WiFi] modem-sleep remis par le pilote -> redesactive");
+    }
   }
 #if ENABLE_BLE
   // Handle BLE provisioning credentials (received in BLE task, processed here)
@@ -5264,7 +5513,20 @@ void loop() {
   }
 
   // Handle HTTP server requests (always, whether in AP mode or normal WiFi)
+  const uint32_t _tHttp = micros();
+  g_blocage.uriEnCours[0] = 0;
   server.handleClient();
+  if (audio.isRunning() && g_blocage.actif()) {
+    const uint32_t d = micros() - _tHttp;
+    if (d > g_blocage.httpMaxUs) {
+      g_blocage.httpMaxUs = d;
+      // server.uri() est efface a la fin du traitement : on lit la copie que
+      // requireApiKey() a posee pendant le traitement.
+      strncpy(g_blocage.httpUri, g_blocage.uriEnCours[0] ? g_blocage.uriEnCours : "(sans jeton)",
+              sizeof(g_blocage.httpUri) - 1);
+      g_blocage.httpUri[sizeof(g_blocage.httpUri) - 1] = 0;
+    }
+  }
 
   // [AUDIO] Pendant la lecture, on NE fait AUCUNE operation reseau bloquante : un
   // reconnectMQTT() (broker injoignable) ou ArduinoOTA peut bloquer plusieurs

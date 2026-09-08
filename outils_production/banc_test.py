@@ -295,7 +295,12 @@ def _courir(cmd, sortie):
     return p.wait()
 
 
-BUILD = os.path.join(RACINE, 'build_temp_v3')
+# Le banc compile dans SON dossier, pas dans build_temp_v3 : ce dernier est
+# ecrase par deploy_firmware_v3.py avec la version de publication, compilee
+# sans CDCOnBoot (Serial sur l'UART, donc muette par le cable) et signee (512
+# octets de plus). Deux fois le 07/09/2026, une carte flashee depuis le banc
+# juste apres une publication est restee « sans reponse » pour cette raison.
+BUILD = os.path.join(RACINE, 'build_banc_v3')
 BINAIRE = os.path.join(BUILD, 'adhanbox_v3.ino.bin')
 BINAIRE_SIGNE = os.path.join(BUILD, 'adhanbox_v3.ino.signed.bin')
 CLE_PRIVEE = os.path.join(RACINE, 'keys', 'ota_private.pem')
@@ -905,10 +910,15 @@ def remise_a_zero(box, sortie=info, infos=None):
               'posee' if avant.get('lat') else '—'))
     try:
         rep = box.usine()
-    except RuntimeError as e:
-        # La carte peut rebooter avant que sa reponse ne traverse : on ne
-        # conclut rien ici, la relecture tranchera.
-        sortie('Pas de reponse a l\'ordre (%s) — on juge sur la relecture.' % e)
+    except (RuntimeError, ValueError) as e:
+        # La carte peut rebooter avant que sa reponse ne traverse (RuntimeError),
+        # ou repondre juste au moment ou une tache ESP-IDF ecrit sa propre ligne
+        # de journal, ce qui colle deux choses sur la meme ligne (ValueError, que
+        # leve json.loads). Dans les DEUX cas on ne conclut rien ici : cette
+        # fonction dit elle-meme que le verdict vient de la relecture. Abandonner
+        # sur une reponse illisible reviendrait a jeter un effacement qui a
+        # probablement eu lieu.
+        sortie('Reponse a l\'ordre inexploitable (%s) — on juge sur la relecture.' % e)
         rep = {}
     else:
         nvs = rep.get('nvs', {})
@@ -1075,10 +1085,52 @@ def t_psram(ctx):
 
 
 def t_sd(ctx):
+    """Carte SD a l'arret, et surtout la lecture elle-meme.
+
+    Le coussin DMA (dma_ms, 371 ms sur V3 quand la memoire le permet, 93 ms
+    avant la 3.0.13) est la seule reserve de son : tout tour de loop() plus long
+    fait un clic. Le firmware mesure ces tours PENDANT la derniere lecture,
+    passe les 3 premieres secondes de demarrage qui bloquent normalement.
+    A l'arret, la sonde CPU (gel_cpu_max_ms) separe deux causes de gel SD qui se
+    ressemblent : le coeur vole (logiciel) et la carte ou le bus qui traine
+    (materiel).
+    """
     d = ctx.diag()
     lu, besoin = d.get('sd_read_kBs', 0), d.get('need_kBs', 16)
-    return lu >= besoin, '%d ko/s lus, %d requis%s' % (
-        lu, besoin, '' if lu >= besoin else ' → coupures audio garanties')
+    dma = d.get('dma_ms', 0)
+    detail = '%d ko/s lus, %d requis' % (lu, besoin)
+    if dma:
+        detail += ' · coussin %d ms' % dma
+    gels = d.get('gels')
+    if gels is not None:
+        detail += ' · a l\'arret : lecture max %d ms, %d gel(s)' % (d.get('lecture_max_ms', 0), gels)
+        if 'gel_cpu_max_ms' in d:
+            detail += ', CPU vole max %d ms' % d['gel_cpu_max_ms']
+    veille = d.get('wifi_veille')
+    if veille and veille not in ('aucune', 'hors-ligne'):
+        detail += ' · veille du modem Wi-Fi ACTIVE (%s)' % veille
+    sup = None
+    if d.get('audio_tours'):
+        sup = d.get('audio_sup_dma', 0)
+        detail += (' · lecture : tour max %d ms, %d au-dela du coussin'
+                   ' (50-90 : %d, 90-200 : %d, 200-500 : %d, 500+ : %d)'
+                   ' pump %d, tick %d, http %d'
+                   % (d.get('audio_ecart_max_ms', 0), sup,
+                      d.get('audio_n50_90', 0), d.get('audio_n90_200', 0),
+                      d.get('audio_n200_500', 0), d.get('audio_n500', 0),
+                      d.get('audio_pump_max_ms', 0), d.get('audio_tick_max_ms', 0),
+                      d.get('audio_http_max_ms', 0)))
+        if d.get('audio_http_uri'):
+            detail += ' · requete la plus longue : %s' % d['audio_http_uri']
+    if lu < besoin:
+        return False, detail + ' → coupures audio garanties'
+    if sup:
+        return False, detail + ' → le son a crepite %d fois' % sup
+    if dma and d.get('lecture_max_ms', 0) > dma:
+        return False, detail + ' → un gel a l\'arret depasse le coussin'
+    if veille and veille not in ('aucune', 'hors-ligne'):
+        return False, detail
+    return True, detail
 
 
 def t_heap(ctx):

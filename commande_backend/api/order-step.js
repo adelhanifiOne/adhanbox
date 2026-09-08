@@ -1,4 +1,4 @@
-// GET /api/order-step?session=cs_…&step=preparation|montage|expedition&token=…
+// GET /api/order-step?session=cs_…&step=preparation|montage|expedition|avis&token=…
 //     GET /api/order-step?ref=0P4SHMBE&step=…&token=…
 //
 // Envoie au client l'email correspondant à l'étape de sa commande. Pensé pour
@@ -11,6 +11,13 @@
 // Idempotent : chaque envoi laisse une trace dans Blob (orders/<ref>/<step>),
 // un deuxième clic ne renvoie pas l'email. Indispensable quand on clique
 // depuis un téléphone et qu'on ne sait plus si ça a marché.
+//
+// La trace ne contient AUCUNE donnée personnelle : ni email, ni prénom, ni
+// numéro de suivi. Le store Blob est public (mode fixé à sa création, non
+// modifiable) et le chemin est prévisible : quiconque connaît l'hôte du store
+// et une référence pourrait lire le fichier. On n'y met donc que ce qui sert
+// à l'idempotence — l'étape, la référence, la date — et le transporteur.
+// api/cron-avis.js retrouve prénom, configuration et email chez Stripe.
 
 import Stripe from 'stripe';
 import { Resend } from 'resend';
@@ -18,11 +25,12 @@ import { list, put } from '@vercel/blob';
 import { stepEmail, esc } from '../lib/email.js';
 
 const FROM_EMAIL = process.env.FROM_EMAIL || 'AdhanBox <commande@adhanbox.fr>';
-const STEPS = ['preparation', 'montage', 'expedition'];
+const STEPS = ['preparation', 'montage', 'expedition', 'avis'];
 const LIBELLE = {
   preparation: 'En préparation',
   montage: 'Assemblée et testée',
   expedition: 'Expédiée',
+  avis: 'Avis et photo',
 };
 
 function page(res, status, title, message, tone, extra = '') {
@@ -164,15 +172,21 @@ export default async function handler(req, res) {
   const { subject, html } = stepEmail(step, { firstName, ref: shortRef, config, tracking, carrier,
                                              relais: livraison.relais });
   const resend = new Resend(process.env.RESEND_API_KEY);
-  const sent = await resend.emails.send({ from: FROM_EMAIL, to, subject, html });
+  // replyTo obligatoire : commande@adhanbox.fr n'existe pas chez OVH (550 User
+  // unknown, sonde SMTP du 07/09/2026). Sans lui, « répondez simplement à cet
+  // email » envoie le client dans le vide : ni l'adresse Gmail Android, ni la
+  // photo ne seraient jamais arrivées.
+  const sent = await resend.emails.send({ from: FROM_EMAIL, to, subject, html,
+                                          replyTo: 'contact@adhanbox.fr' });
   if (sent.error) {
     return page(res, 502, 'Envoi échoué', esc(sent.error.message || 'Resend a refusé l\'envoi.'), 'err');
   }
 
   try {
+    // Pas d'email, de prénom ni de numéro de suivi ici (voir en-tête) :
+    // api/cron-avis.js ne lit que sentAt, et retrouve le client chez Stripe.
     await put(marker, JSON.stringify({
-      step, ref: shortRef, to, tracking: tracking || null,
-      carrier: carrier || null, sentAt: new Date().toISOString(),
+      step, ref: shortRef, carrier: carrier || null, sentAt: new Date().toISOString(),
     }), { access: 'public', contentType: 'application/json', addRandomSuffix: false });
   } catch {
     // L'email est parti : ne pas transformer un échec de traçage en erreur.
