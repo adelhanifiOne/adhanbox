@@ -8,7 +8,10 @@ Fichiers du dossier :
 
 | Fichier | Contenu |
 |---|---|
-| `Halo_BOM.csv` | BOM PCB au format JLCPCB (mêmes colonnes que `AdhanBoxPCBV3_BOM.csv`) |
+| `Halo_BOM.csv` | BOM PCB au format JLCPCB (mêmes colonnes que `AdhanBoxPCBV3_BOM.csv`), écrite à la main |
+| `GERBER_HALO/` | Dossier de fabrication : Gerbers, perçage Excellon, `Halo_CPL.csv` (positions JLCPCB) |
+| `Halo_GERBER.zip` | Les Gerbers et le perçage seuls, l'archive à téléverser chez JLCPCB |
+| `export_fab.py` | Produit `GERBER_HALO/` et le zip, et vérifie que BOM, CPL et PCB concordent |
 | `Halo_BOM_produit.csv` | BOM complète du produit fini : coque, pied, câble, boîte |
 | `Halo.kicad_pro` | Projet KiCad : à ouvrir en premier, il relie le schéma et le PCB |
 | `Halo.kicad_sch` | Schéma KiCad 10, même structure que la V3 : symboles + labels globaux, prêt pour le PCB |
@@ -17,7 +20,9 @@ Fichiers du dossier :
 | `gen_kicad_pcb.py` | Générateur du `.kicad_pcb` : placement, anneau 5V, arcs de data. Importe composants et nets de `gen_kicad_sch.py` |
 | `route_center.py` | Routeur du centre : Dijkstra sur grille 0,1 mm, F.Cu + B.Cu, vias, stitching GND. Réécrit `Halo.kicad_pcb` |
 | `drc.py` | DRC programmatique (règles par défaut KiCad, connectivité, courtyards, antenne). Code retour 1 si erreur |
-| `build.sh` | Enchaîne schéma, PCB, routage, DRC, 3D |
+| `gen_kicad_libs.py` | Extrait `Halo.kicad_sym`, `Halo.pretty/` et les tables de librairies du projet |
+| `build.sh` | Enchaîne schéma, PCB, routage, DRC, librairies, dossier de fabrication, 3D |
+| `firmware/halo/halo.ino` | Firmware ESP32-C3, dérivé de la V3 : BLE, horaires, halo de prière, mode nuit. Voir `firmware/README.md` |
 | `Halo_routage.png` | Rendu des deux couches de cuivre après routage |
 | `gen_coque_pied.py` | Coque et pied en CadQuery, avec contrôles de collision ; écrit `3d/` |
 | `3d/Halo_coque.step` `.stl` | Coque arrière translucide, à imprimer fond sur le plateau |
@@ -157,11 +162,14 @@ flashe directement. Après le premier firmware, l'OTA de la V3 fait le reste.
 | U3 74AHCT1G125 | 5 (VCC) | 5V | C8 100nF entre VCC et GND |
 | R7 330R | 1 | LED_DATA_5V | |
 | R7 330R | 2 | LED_DIN1 | vers DIN de LED1 |
-| LED1 | VDD | 5V | C10 100nF entre VDD et GND |
-| LED1 | DIN | LED_DIN1 | |
-| LED1 | DOUT | LED_DIN2 | |
-| LED1 | GND | GND | |
-| LED2 à LED24 | idem | LED_DINn / LED_DINn+1 | chaîne en série, DOUT de LED24 en l'air |
+| LED1 | 4 VDD | 5V | C10 100nF entre VDD et GND |
+| LED1 | 3 DI | LED_DIN1 | |
+| LED1 | 1 DO | LED_DIN2 | |
+| LED1 | 2 GND | GND | |
+| LED2 à LED24 | idem | LED_DINn / LED_DINn+1 | chaîne en série, DO de LED24 en l'air |
+
+Brochage WS2812B-2020 Worldsemi (datasheet V1.4, LCSC C965555) : 1 DO, 2 GND,
+3 DI, 4 VDD ; vu de dessus, DI et VDD d'un côté, GND et DO de l'autre.
 
 Pourquoi un translateur : le WS2812B-2020 demande un niveau haut d'au moins
 0,7 x VDD, soit 3,5 V sous 5 V. Les 3,3 V du C3 sont juste en dessous. La V3
@@ -239,57 +247,65 @@ Tout ce paragraphe est réalisé dans `Halo.kicad_pcb`, généré par
   tournée vers le mur), **B.Cu = face avant visible** derrière le téléphone,
   plan de masse plein et logo "HALO" en sérigraphie miroir. Assemblage JLCPCB
   sur une seule face, F.Cu.
-- Plan de masse sur les deux faces, avec une encoche sans cuivre de 16 x 8 mm
-  sous l'antenne du module.
+- Plan de masse sur les deux faces, avec une encoche sans cuivre de 16 x 8,1 mm
+  sous l'antenne du module (la zone antenne du module fait 5,4 mm, datasheet
+  fig. 11-1 ; l'encoche va jusqu'à 0,7 mm de la rangée GND 36-48).
 - 4 trous de fixation diamètre 2,2 mm (H1 à H4) à 45°, 135°, 225°, 315° sur
   un cercle de rayon 30 mm, pour les vis autotaraudeuses M2 de la coque.
 
 ### 6.2 Anneau de LEDs, face F.Cu
 
-24 LEDs sur un cercle de rayon 38 mm, pas 15°, LED1 à 262,5° soit en bas à
-gauche, puis sens horaire vu côté composants. Il n'y a pas de LED exactement
-en bas : les deux plus basses, LED1 et LED24, encadrent l'ouverture par où
-passent les pistes de l'USB-C. Le haut du halo tombe entre LED12 et LED13.
-Centre de la carte en (0, 0), Y positif vers le bas comme dans KiCad.
+24 LEDs sur un cercle de rayon 38 mm, pas 15°, LED1 à 277,5° soit en bas à
+droite, puis sens trigonométrique (anti-horaire) vu côté composants. Ce sens
+est imposé par le brochage du WS2812B-2020 : VDD et DI sont du même côté du
+boîtier, donc pour avoir VDD vers l'anneau 5V extérieur, DO regarde forcément
+dans le sens trigonométrique. Il n'y a pas de LED exactement en bas : les deux
+plus basses, LED1 et LED24, encadrent l'ouverture par où passent les pistes de
+l'USB-C. Le haut du halo tombe entre LED12 et LED13. Le firmware ne présume
+rien de la position de LED1. Centre de la carte en (0, 0), Y positif vers le
+bas comme dans KiCad.
 
 | LED | angle | X (mm) | Y (mm) |
 |---|---|---|---|
-| LED1 | 262,5° | -4,96 | +37,67 |
-| LED2 | 247,5° | -14,54 | +35,11 |
-| LED3 | 232,5° | -23,13 | +30,14 |
-| LED4 | 217,5° | -30,14 | +23,13 |
-| LED5 | 202,5° | -35,11 | +14,54 |
-| LED6 | 187,5° | -37,67 | +4,96 |
-| LED7 | 172,5° | -37,67 | -4,96 |
-| LED8 | 157,5° | -35,11 | -14,54 |
-| LED9 | 142,5° | -30,14 | -23,13 |
-| LED10 | 127,5° | -23,13 | -30,14 |
-| LED11 | 112,5° | -14,54 | -35,11 |
-| LED12 | 97,5° | -4,96 | -37,67 |
-| LED13 | 82,5° | +4,96 | -37,67 |
-| LED14 | 67,5° | +14,54 | -35,11 |
-| LED15 | 52,5° | +23,13 | -30,14 |
-| LED16 | 37,5° | +30,14 | -23,13 |
-| LED17 | 22,5° | +35,11 | -14,54 |
-| LED18 | 7,5° | +37,67 | -4,96 |
-| LED19 | 352,5° | +37,67 | +4,96 |
-| LED20 | 337,5° | +35,11 | +14,54 |
-| LED21 | 322,5° | +30,14 | +23,13 |
-| LED22 | 307,5° | +23,13 | +30,14 |
-| LED23 | 292,5° | +14,54 | +35,11 |
-| LED24 | 277,5° | +4,96 | +37,67 |
+| LED1 | 277,5° | +4,96 | +37,67 |
+| LED2 | 292,5° | +14,54 | +35,11 |
+| LED3 | 307,5° | +23,13 | +30,14 |
+| LED4 | 322,5° | +30,14 | +23,13 |
+| LED5 | 337,5° | +35,11 | +14,54 |
+| LED6 | 352,5° | +37,67 | +4,96 |
+| LED7 | 7,5° | +37,67 | -4,96 |
+| LED8 | 22,5° | +35,11 | -14,54 |
+| LED9 | 37,5° | +30,14 | -23,13 |
+| LED10 | 52,5° | +23,13 | -30,14 |
+| LED11 | 67,5° | +14,54 | -35,11 |
+| LED12 | 82,5° | +4,96 | -37,67 |
+| LED13 | 97,5° | -4,96 | -37,67 |
+| LED14 | 112,5° | -14,54 | -35,11 |
+| LED15 | 127,5° | -23,13 | -30,14 |
+| LED16 | 142,5° | -30,14 | -23,13 |
+| LED17 | 157,5° | -35,11 | -14,54 |
+| LED18 | 172,5° | -37,67 | -4,96 |
+| LED19 | 187,5° | -37,67 | +4,96 |
+| LED20 | 202,5° | -35,11 | +14,54 |
+| LED21 | 217,5° | -30,14 | +23,13 |
+| LED22 | 232,5° | -23,13 | +30,14 |
+| LED23 | 247,5° | -14,54 | +35,11 |
+| LED24 | 262,5° | -4,96 | +37,67 |
 
 Chaque LED est tournée de angle + 90° : son axe Y local pointe vers
-l'extérieur, DOUT vers la LED suivante. Routage déjà fait dans le fichier :
+l'extérieur (VDD et DO sur la rangée extérieure), son axe X local vers la LED
+suivante (DO et GND de ce côté). Routage déjà fait dans le fichier :
 
 - Anneau 5V à l'extérieur des LEDs, rayon 40,6 mm, largeur 0,8 mm, ouvert de
   266° à 274° en bas pour laisser passer les pistes de l'USB-C. Alimenté par
-  F1 à son extrémité droite.
+  F1 à son extrémité gauche (266°).
 - Un stub de 0,4 mm de chaque pad VDD vers l'anneau 5V.
-- 23 arcs de data de 0,3 mm, DOUT de la LED n vers DIN de la LED n+1, au
-  rayon 37,4 mm. R7 vers DIN de LED1.
-- Les 24 condensateurs 100nF (C10 à C33) sont radiaux au rayon 39,8 mm, à 5°
-  de leur LED, du côté opposé à l'ouverture du bas. Leur pad 1 chevauche
+- 23 pistes de data de 0,3 mm, du DO de la LED n (rangée extérieure, rayon
+  38,55) au DI de la LED n+1 (rangée intérieure, rayon 37,45) : segments
+  droits de 8 mm qui passent à 0,4 mm du pad GND du 100nF intercalé. R7 vers
+  DI de LED1.
+- Les 24 condensateurs 100nF (C10 à C33) sont radiaux au rayon 40 mm, à 5° de
+  leur LED, du côté opposé à l'ouverture du bas. Leur pad 1 chevauche
   l'anneau 5V, leur pad 2 va à la masse par le plan.
 - Les pads GND des LEDs se raccordent au plan de masse F.Cu par thermiques.
 
@@ -297,15 +313,22 @@ l'extérieur, DOUT vers la LED suivante. Routage déjà fait dans le fichier :
 
 Routé par `route_center.py` (voir 6.4). Placement :
 
-- U1 en haut, centre à (0, -24), antenne vers le haut. L'antenne est à 5 mm
-  des LEDs les plus proches, LED12 et LED13. Point à vérifier sur le proto :
+- U1 en haut, centre à (0, -24), antenne vers le haut. Empreinte = land
+  pattern de la datasheet Espressif (fig. 11-1) : broches en retrait sous le
+  module à x = ±5,9 mm, rangées y = -2,2 et +7,6, masse centrale 3 x 3 avec un
+  via par pastille, pastilles d'angle 50-53 raccordées par un court segment.
+  La zone antenne (y < -2,9 mm du module) est à 5 mm des LEDs les plus
+  proches, LED12 et LED13. Point à vérifier sur le proto :
   mesurer le RSSI avec et sans téléphone posé. Si la perte dépasse 10 dB,
   passer au ESP32-C3-MINI-1U avec antenne externe déportée dans la coque.
-- Découplage et pull-ups en deux colonnes à x = ±10,5 mm le long du module.
+- Découplage et pull-ups en deux colonnes à x = ±10,5 mm le long des
+  broches : à gauche C5, C4 (3V3, broche 3), R1, C6 (EN, broche 8) et R4 à
+  x = -14 (IO2, broche 5) ; à droite R3 et R2 (IO8 et IO9, rangée basse).
   SW1 et SW2 à gauche du module, SW3 à droite, TP4 (EN) à côté de SW2.
 - Q1 et R8 en haut à gauche à (-17, -29), avec une fenêtre dans la coque.
-- J1 USB-C sur la languette à (0, +46,6), ouverture vers le bas. F1, D1, C7
-  juste au-dessus dans le disque. Les pistes VBUS, D+, D-, CC1, CC2 montent
+- J1 USB-C sur la languette à (0, +46,6), ouverture vers le bas. F1 à
+  gauche, D1 au centre, C7 à droite juste au-dessus dans le disque ; U3, R7
+  et C8 à droite, sous LED1. Les pistes VBUS, D+, D-, CC1, CC2 montent
   par l'ouverture de l'anneau 5V.
 - U2 et ses capas en bas à gauche à (-12, +20). R5, R6 à droite. TP1 à TP3
   et J2 sur la droite.
@@ -415,13 +438,21 @@ sont copiées de la V3. Les autres sont dessinées dans le générateur avec des
 cotes nominales : ESP32-C3-MINI-1, SOT-23-5, SOT-23-6, fusible 1206,
 condensateur 0603, WS2812B-2020, phototransistor 0805, trou 2,2 mm.
 
-Avant de sortir les Gerbers, dans pcbnew : Outils > Mettre à jour les
-empreintes depuis la bibliothèque, pour remplacer ces cotes nominales par
-celles des bibliothèques KiCad. Les positions, rotations et nets sont
-conservés. Le WS2812B-2020 n'est pas dans la bibliothèque standard : importer
-la réf LCSC C965555 avec le plugin "LCSC to KiCad", puis vérifier que les
-arcs de data et les stubs VDD tombent toujours sur les bons pads. Vérifier
-aussi le brochage du module contre la datasheet, voir 3.3.
+Vérifications faites le 08/09/2026 : ESP32-C3-MINI-1 redessiné d'après la
+fig. 11-1 de la datasheet Espressif v2.2 (identique à l'empreinte officielle
+espressif/kicad-libraries) et table 3-1 des broches ; WS2812B-2020 redessiné
+d'après la datasheet Worldsemi V1.4 (brochage 1 DO, 2 GND, 3 DI, 4 VDD,
+pastilles 0,7 x 0,7) ; SOT-23-5/6 et fusible 1206 aux cotes des bibliothèques
+KiCad 10. `gen_kicad_libs.py` extrait ces empreintes et symboles dans
+`Halo.pretty` et `Halo.kicad_sym` avec les tables de librairies du projet.
+ERC 0, DRC KiCad 0 erreur (`kicad-cli pcb drc --refill-zones`), `drc.py` 0
+erreur. `export_fab.py` sort les Gerbers, le perçage et le CPL dans
+`GERBER_HALO/` (kicad-cli 10.0.3) et contrôle que la BOM couvre exactement les
+composants du schéma, avec les bonnes empreintes et les bonnes quantités.
+
+Les composants DNP (Q1 le phototransistor, J2 les pads d'alimentation, TP1 à
+TP4) portent le drapeau « ne pas monter » sur le PCB comme au schéma : ils
+sortent de la BOM à poser et du CPL.
 
 Ordre conseillé ensuite : Mettre à jour le PCB depuis le schéma (les
 références et nets sont déjà cohérents), remplir les zones (B), lancer le DRC
@@ -436,8 +467,11 @@ Les UUID sont déterministes, le diff git reste lisible.
 
 ## 8. À confirmer avant de commander
 
-1. Les réf LCSC marquées "A CONFIRMER" dans la BOM : U1, U3, D1, F1, R7, LED, Q1.
-   Vérifier stock et prix sur jlcpcb.com/parts le jour de la commande.
+1. Deux références LCSC manquent encore dans la BOM, `export_fab.py` les
+   rappelle à chaque exécution : F1 (PTC 1206 1,1 A, type MF-MSMF110-2) et
+   U3 (SN74AHCT1G125DBVR ou 74AHCT1G125GW). Les réf marquées "A CONFIRMER"
+   (U1, D1, R7, LED, Q1) sont renseignées mais à revérifier en stock et en
+   prix sur jlcpcb.com/parts le jour de la commande.
 2. RSSI avec le téléphone posé, sur le premier proto. Décide entre MINI-1 et MINI-1U.
 3. Rendu du halo à travers la lèvre PETG : tester deux épaisseurs, 1,2 et 1,6 mm.
 4. Consommation réelle à 60 % sur une seule couleur, pour valider F1 à 1,1 A.

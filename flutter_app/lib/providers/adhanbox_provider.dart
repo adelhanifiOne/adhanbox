@@ -595,6 +595,7 @@ final isV2DeviceProvider = FutureProvider<bool>((ref) async {
 //   - firmware 1.x -> canal V1 (firmware_version.json)
 //   - firmware 2.x -> canal V2 (firmware_version_v2.json)
 //   - firmware 3.x -> canal V3 (firmware_version_v3.json) — PCB V3 (RTC RX8025T)
+//   - hardware "halo" -> canal Halo (firmware_version_halo.json) — ESP32-C3
 // Comme chaque manifeste ne contient que sa propre lignée, un device 1.x ou 2.x
 // ne se voit JAMAIS proposer un firmware 3.x (et inversement) : les cartes V2
 // (DS3231) et V3 (RX8025T) ont des drivers RTC differents -> croiser les canaux
@@ -611,7 +612,11 @@ final latestFirmwareVersionProvider =
   final major =
       int.tryParse((device['version'] ?? '1.0.0').toString().split('.').first) ?? 1;
   String channel;
-  if (hw == 'v3' || major >= 3) {
+  if (hw == 'halo') {
+    // Halo (ESP32-C3, anneau LED, sans son) : son propre canal. Teste AVANT
+    // les majeurs : un Halo 1.x tomberait sinon sur le canal V1 (S3).
+    channel = 'firmware_version_halo.json';
+  } else if (hw == 'v3' || major >= 3) {
     channel = 'firmware_version_v3.json';
   } else if (hw == 'v2' || major == 2) {
     channel = 'firmware_version_v2.json';

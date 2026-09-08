@@ -7,7 +7,7 @@ Regles suivies (memes valeurs que drc.py) : isolation 0.2 mm (+0.02 de marge de 
 cuivre-bord 0.5, trou-cuivre 0.25, via 0.6/0.3. B.Cu (plan de masse, face avant) coute
 le double et un via coute 3 mm de piste : les pistes restent sur F.Cu tant que possible.
 
-Usage : python3 halo/gen_kicad_pcb.py && python3 halo/route_center.py && python3 halo/drc.py
+Usage : python3 halo/gen_kicad_pcb.py && python3 halo/route_center.py && python3 halo/drc.py && python3 halo/gen_kicad_libs.py
 """
 import math
 import sys
@@ -33,8 +33,8 @@ WIDTH = {"5V": 0.5, "VBUS": 0.5, "3V3": 0.35, "GND": 0.3,
          "USB_DP": 0.2, "USB_DM": 0.2, "CC1": 0.2, "CC2": 0.2}
 DEFAULT_W = 0.25
 ANT = drc.ANT                                             # encoche antenne (cf. ANT_NOTCH)
-THERMAL_VIAS = ("36", "38", "51", "53")                   # vias dans le pave thermique de U1
-KEEP_U1 = box(150 - 5.6, 105 - 28.2, 150 + 5.6, 105 - 24 + 7.1)   # sous le corps de U1 (F.Cu) : rien d'autre que GND
+THERMAL_VIAS = ("49",)                                    # un via dans chacune des 9 pastilles de la masse centrale de U1
+KEEP_U1 = box(150 - 5.4, 105 - 24 - 1.7, 150 + 5.4, 105 - 24 + 7.1)   # sous U1, a l'interieur de la couronne de broches (F.Cu) : rien d'autre que GND
 
 NS = uuid.UUID("7a1d2c3b-4e5f-4a6b-8c7d-9e0f1a2b3c4d")
 _n = [0]
