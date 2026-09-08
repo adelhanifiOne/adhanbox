@@ -2,7 +2,7 @@
 // - Starts an AP when a long-press is detected on CONFIG_BUTTON_PIN
 // - Serves a small webpage that requests navigator.geolocation and POSTs lat/lon
 // - Stores lat/lon/accuracy/timestamp in Preferences (NVS)
-//Version: 3.0.19 (AdhanBox V3 / HW v3)
+//Version: 3.0.20 (AdhanBox V3 / HW v3)
 #include <Arduino.h>
 #include <esp_mac.h>   // esp_read_mac() : MAC eFuse, lisible sans Wi-Fi
 #include <Wire.h>
@@ -507,7 +507,7 @@ class I2SAudio {
   // POURQUOI C'EST DANGEREUX : ces deux appels sont sous assert() dans la
   // bibliotheque, et le noyau Arduino ESP32 compile SANS -DNDEBUG. Une seule
   // allocation ratee = abort = la carte redemarre, en pleine priere. C'est
-  // exactement ce qui est arrive avec la 3.0.19 : elle visait 16 x 4092 o, et
+  // exactement ce qui est arrive avec la 3.0.20 : elle visait 16 x 4092 o, et
   // se contentait de verifier la memoire TOTALE libre plus UN bloc. Or le
   // pilote demande 16 blocs SEPARES : apres des heures de Wi-Fi, de TLS et de
   // BLE, la RAM interne est fragmentee, le total suffit, les blocs non.
@@ -1696,7 +1696,7 @@ void handleOtaUploadComplete() {
 // GET /api/firmware/version
 void handleFirmwareVersion() {
   server.send(200, "application/json",
-              "{\"version\":\"3.0.19\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
+              "{\"version\":\"3.0.20\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
 }
 
 // Returns true if the request carries the correct API key (or if token not yet set).
@@ -1787,11 +1787,11 @@ void handleDeviceInfo() {
   char buf[512];
   if (pairingWindow || hasValidToken) {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.19\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
+             "{\"version\":\"3.0.20\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
              OTA_HOSTNAME, deviceIdHex().c_str(), _apiToken.c_str(), _otaPass.c_str());
   } else {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.19\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
+             "{\"version\":\"3.0.20\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
              OTA_HOSTNAME, deviceIdHex().c_str());
   }
   server.send(200, "application/json", buf);
@@ -4055,6 +4055,29 @@ int v2SyncContent() {
   String man = http.getString();
   http.end();
 
+  // ── [SYNCHRO] Ce que cette boucle NE FAIT PLUS, et pourquoi ──────────────
+  // Jusqu'en 3.0.20 elle ouvrait une connexion TLS pour CHAQUE fichier, lisait
+  // le Content-Length, et si la taille sur la SD differait, EFFACAIT le fichier
+  // puis le retelechargeait. Or cinq des six adhans precharges sur les cartes SD
+  // n'ont plus la taille des fichiers du serveur (archive.org y a ajoute ~99 Ko
+  // de balise ID3, le son est le meme). Consequence, mesuree le 08/09/2026 sur
+  // une boite cliente : a CHAQUE demarrage connecte, 12 Mo retelecharges sur une
+  // SD a 1 MHz, plusieurs minutes pendant lesquelles la RAM interne tombe a
+  // 30 Ko et la SD sature d'ecritures. Un adhan dans cette fenetre crepite
+  // (coussin DMA reduit a 46 ms) ou, en 3.0.17, plantait. Et un telechargement
+  // rate (-10, ecriture SD) laissait l'adhan ABSENT : le Fajr manquait.
+  //
+  // Nouvelles regles :
+  //  1. Un fichier PRESENT est laisse tel quel, sans aucune connexion. Seuls les
+  //     fichiers ABSENTS sont telecharges. Le "reparateur de fichiers tronques"
+  //     n'a plus de raison d'etre : voir 2.
+  //  2. On telecharge dans <chemin>.part, et on ne renomme qu'une fois la taille
+  //     verifiee. Un echec ne laisse ni fichier tronque, ni trou : l'ancien
+  //     fichier, s'il existait, n'a jamais ete touche.
+  //  3. On ecrit par morceaux de 4 Ko, et on S'ARRETE D'ECRIRE tant que l'audio
+  //     joue : la SD n'est pas partageable, chaque ecriture de la synchro gelait
+  //     les lectures du decodeur (gels de 100 a 300 ms mesures).
+  static uint8_t morceau[4096];            // statique : pas sur la pile de la tache
   int added = 0, start = 0;
   while (start < (int)man.length()) {
     int nl = man.indexOf('\n', start);
@@ -4066,29 +4089,11 @@ int v2SyncContent() {
     if (bar < 0) continue;
     String path = line.substring(0, bar); path.trim();
     String url  = line.substring(bar + 1); url.trim();
-    // On ne skippe plus betement si le fichier existe : on lit le Content-Length
-    // et on ne (re)telecharge que si la taille sur SD ne correspond pas. Repare
-    // automatiquement les fichiers tronques par une sync precedente ratee.
-    WiFiClientSecure c2; c2.setInsecure();
-    HTTPClient h2;
-    if (!h2.begin(c2, url)) { _syncMsg += " " + path + "=beginFail"; continue; }
-    h2.setConnectTimeout(15000);
-    h2.setTimeout(60000);                    // 60s pour les gros fichiers archive.org (26Mo+)
-    h2.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
-    int gc = h2.GET();
-    int expected = h2.getSize();             // Content-Length (-1 si inconnu)
-    if (gc != 200) { _syncMsg += " " + path + "=" + String(gc); h2.end(); continue; }
 
-    // Deja present ET complet -> on saute
-    if (SD.exists(path)) {
-      File ex = SD.open(path, FILE_READ);
-      size_t have = ex ? ex.size() : 0;
-      if (ex) ex.close();
-      if (expected > 0 && have == (size_t)expected) {
-        _syncMsg += " " + path + "=present(" + String(have) + ")"; h2.end(); continue;
-      }
-      SD.remove(path);                       // version tronquee/incomplete -> on jette
-    }
+    if (SD.exists(path)) { _syncMsg += " " + path + "=present"; continue; }   // regle 1
+
+    const String part = path + ".part";
+    if (SD.exists(part)) SD.remove(part);    // reste d'une tentative precedente
     // creer les dossiers parents un par un (/a puis /a/b etc.)
     for (int i = 1; i < (int)path.length(); i++) {
       if (path[i] == '/') {
@@ -4098,19 +4103,51 @@ int v2SyncContent() {
         }
       }
     }
-    File f = SD.open(path, FILE_WRITE);
+
+    WiFiClientSecure c2; c2.setInsecure();
+    HTTPClient h2;
+    if (!h2.begin(c2, url)) { _syncMsg += " " + path + "=beginFail"; continue; }
+    h2.setConnectTimeout(15000);
+    h2.setTimeout(60000);
+    h2.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
+    int gc = h2.GET();
+    int expected = h2.getSize();             // Content-Length (-1 si inconnu)
+    if (gc != 200) { _syncMsg += " " + path + "=" + String(gc); h2.end(); continue; }
+
+    File f = SD.open(part, FILE_WRITE);
     if (!f) { _syncMsg += " " + path + "=openFail"; h2.end(); continue; }
-    int written = h2.writeToStream(&f);      // streaming -> pas de gros buffer RAM
-    f.close();
-    if (expected > 0 && written != expected) {
-      SD.remove(path);                       // download incomplet -> on ne garde PAS de fichier tronque
-      _syncMsg += " " + path + "=TRUNC(" + String(written) + "/" + String(expected) + ")";
-      Serial.printf("[sync] TRONQUE %s (%d/%d octets) -> supprime\n", path.c_str(), written, expected);
-    } else {
-      added++; _syncMsg += " " + path + "=ok(" + String(written) + ")";
-      Serial.printf("[sync] + %s (%d octets)\n", path.c_str(), written);
+    WiFiClient *flux = h2.getStreamPtr();
+    int written = 0; bool ok = true;
+    unsigned long dernierOctet = millis();
+    while (expected < 0 || written < expected) {
+      while (audio.isRunning()) {            // regle 3 : l'adhan d'abord
+        vTaskDelay(pdMS_TO_TICKS(250));
+        dernierOctet = millis();
+      }
+      if (!h2.connected() && !flux->available()) break;
+      size_t dispo = flux->available();
+      if (!dispo) {
+        if (millis() - dernierOctet > 60000UL) { ok = false; break; }   // 60 s sans un octet
+        vTaskDelay(pdMS_TO_TICKS(20));
+        continue;
+      }
+      int n = flux->read(morceau, dispo > sizeof(morceau) ? sizeof(morceau) : dispo);
+      if (n <= 0) { vTaskDelay(pdMS_TO_TICKS(20)); continue; }
+      if ((int)f.write(morceau, n) != n) { ok = false; break; }   // la SD a refuse
+      written += n; dernierOctet = millis();
+      vTaskDelay(1);                          // laisse respirer loop() et l'audio
     }
-    h2.end();
+    f.close(); h2.end();
+
+    if (!ok || (expected > 0 && written != expected)) {          // regle 2
+      SD.remove(part);
+      _syncMsg += " " + path + "=TRUNC(" + String(written) + "/" + String(expected) + ")";
+      Serial.printf("[sync] TRONQUE %s (%d/%d octets) -> .part supprime, rien touche\n", path.c_str(), written, expected);
+      continue;
+    }
+    if (!SD.rename(part, path)) { SD.remove(part); _syncMsg += " " + path + "=renameFail"; continue; }
+    added++; _syncMsg += " " + path + "=ok(" + String(written) + ")";
+    Serial.printf("[sync] + %s (%d octets)\n", path.c_str(), written);
   }
   Serial.printf("[sync] %d fichier(s) ajoute(s)\n", added);
   return added;
@@ -4160,7 +4197,10 @@ void v2Tick() {
   static unsigned long lastCheck = 0;
   static int fSabah = -1, fMasaa = -1, fKahf = -1, fMulk = -1;
   if (!inited) { v2LoadSettings(); inited = true; }
-  if (!synced && WiFi.status() == WL_CONNECTED) {  // sync auto au boot, en tache de fond
+  // Sync auto au boot, en tache de fond, mais pas dans la premiere minute : le
+  // TLS et la pile de 32 Ko de la tache pesent lourd, on laisse d'abord passer
+  // l'appairage, une eventuelle mise a jour, et un adhan qui tomberait pile.
+  if (!synced && WiFi.status() == WL_CONNECTED && millis() > 60000UL) {
     synced = true;
     if (!_syncRunning) xTaskCreate(_v2SyncTask, "v2sync", 32768, nullptr, 1, nullptr);
   }
@@ -4197,7 +4237,7 @@ void setup() {
   // IMPERATIVEMENT AVANT Serial.begin() : begin() ne cree le tampon que s'il
   // n'existe pas encore, alors que setTxBufferSize() appele APRES supprime le
   // tampon en service pour en recreer un, sous le nez de l'interruption
-  // d'emission. La 3.0.19 le faisait apres, et la carte ne repondait plus.
+  // d'emission. La 3.0.20 le faisait apres, et la carte ne repondait plus.
   Serial.setTxBufferSize(2048);
 #endif
   Serial.begin(115200);
@@ -4735,7 +4775,7 @@ static void bancCommande(String c) {
 
   if (verbe == "info") {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.19\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
+             "{\"version\":\"3.0.20\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
              deviceIdHex().c_str());
     bancRep(buf);
 
