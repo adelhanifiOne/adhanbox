@@ -7,7 +7,7 @@ TestPoint, Conn_01x02, PWR_FLAG) sont copies verbatim depuis la V3 ; les
 symboles propres au Halo (ESP32-C3-MINI-1, WS2812B, USBLC6-2SC6, 74AHCT1G125,
 Polyfuse, phototransistor) sont definis ici au format compact.
 
-Usage : python3 halo/gen_kicad_sch.py   (a lancer depuis la racine du repo)
+Usage : python3 halo/gen_kicad_sch.py && python3 halo/gen_kicad_libs.py   (a lancer depuis la racine du repo)
 """
 import re
 import uuid
@@ -120,12 +120,12 @@ lib_symbols["Halo:ESP32-C3-MINI-1"] = compact_symbol(
 
 lib_symbols["Halo:WS2812B"] = compact_symbol(
     "Halo:WS2812B", "LED", "WS2812B",
-    "LED RGB adressable, 4 broches : VDD, DOUT, GND, DIN",
+    "LED RGB adressable WS2812B-2020 Worldsemi, 4 broches : 1 DO, 2 GND, 3 DI, 4 VDD (datasheet V1.4)",
     5.08, 5.08, [
-        pin("power_in", 0, 7.62, 270, "VDD", "1"),
-        pin("output", 7.62, 0, 180, "DOUT", "2"),
-        pin("power_in", 0, -7.62, 90, "GND", "3"),
-        pin("input", -7.62, 0, 0, "DIN", "4"),
+        pin("output", 7.62, 0, 180, "DO", "1"),
+        pin("power_in", 0, -7.62, 90, "GND", "2"),
+        pin("input", -7.62, 0, 0, "DI", "3"),
+        pin("power_in", 0, 7.62, 270, "VDD", "4"),
     ])
 
 lib_symbols["Halo:USBLC6-2SC6"] = compact_symbol(
@@ -229,7 +229,7 @@ P("#FLG1", "power:PWR_FLAG", "PWR_FLAG", "", 25.4, 30.48, {"1": "5V"}, in_bom=Fa
 P("#FLG2", "power:PWR_FLAG", "PWR_FLAG", "", 40.64, 30.48, {"1": "GND"}, in_bom=False)
 
 # ---- Feuille 2 : module, strapping, boutons, capteur (zone milieu) ----
-P("U1", "Halo:ESP32-C3-MINI-1", "ESP32-C3-MINI-1-N4", "RF_Module:ESP32-C3-MINI-1", 68.58, 157.48,
+P("U1", "Halo:ESP32-C3-MINI-1", "ESP32-C3-MINI-1-N4", "Halo:ESP32-C3-MINI-1", 68.58, 157.48,
   {"3": "3V3", "1": "GND", "2": "GND", "11": "GND", "14": "GND", "8": "EN", "5": "STRAP_IO2", "22": "STRAP_IO8", "23": "BOOT",
    "6": "BTN_USER", "18": "ALS", "16": "LED_DATA_3V3", "26": "USB_DM", "27": "USB_DP",
    "12": "NC", "13": "NC", "19": "NC", "20": "NC", "21": "NC", "30": "NC", "31": "NC"})
@@ -255,7 +255,7 @@ for i in range(1, 25):
     row, col = divmod(i - 1, 12)
     x, y = 106.68 + col * 25.4, 226.06 + row * 27.94
     P(f"LED{i}", "Halo:WS2812B", "WS2812B-2020", "Halo:LED_WS2812B-2020_PLCC4_2.0x2.0mm",
-      x, y, {"1": "5V", "4": f"LED_DIN{i}", "2": (f"LED_DIN{i + 1}" if i < 24 else "NC"), "3": "GND"})
+      x, y, {"4": "5V", "3": f"LED_DIN{i}", "1": (f"LED_DIN{i + 1}" if i < 24 else "NC"), "2": "GND"})
 for i in range(1, 25):
     P(f"C{9 + i}", "Device:C", "100nF", FP["C0603"], 40.64 + (i - 1) * 12.7, 283.21, {"1": "5V", "2": "GND"})
 

@@ -35,3 +35,6 @@ _maptest_tmp/
 build_banc_v3/
 
 __pycache__/
+
+# KiCad : etat local de l editeur
+*.kicad_prl

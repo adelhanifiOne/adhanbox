@@ -27,7 +27,7 @@ from shapely import affinity
 PCB = Path(__file__).resolve().parent / "Halo.kicad_pcb"
 CLEARANCE, MIN_TRACK, EDGE_CL, HOLE_CL = 0.2, 0.2, 0.5, 0.25
 ZONE_CL, ZONE_MIN_W = 0.25, 0.2
-ANT = box(150 - 8, 105 - 35, 150 + 8, 105 - 28.2)     # encoche antenne, = ANT_NOTCH de gen_kicad_pcb.py
+ANT = box(150 - 8, 105 - 35, 150 + 8, 105 - 26.9)     # encoche antenne, = ANT_NOTCH de gen_kicad_pcb.py
 EPS = 1e-3
 
 # ---------------------------------------------------------------- S-expressions

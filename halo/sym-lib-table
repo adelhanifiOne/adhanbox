@@ -1,0 +1,4 @@
+(sym_lib_table
+	(version 7)
+	(lib (name "Halo")(type "KiCad")(uri "${KIPRJMOD}/Halo.kicad_sym")(options "")(descr "Symboles du Halo, extraits du schema genere"))
+)

@@ -12,11 +12,13 @@ Le centre (module, USB, LDO, boutons) est place ici et route ensuite par
 route_center.py ; drc.py verifie le tout. Enchainement complet : build.sh.
 
 Empreintes copiees depuis la V3 : R/C 0805, CP 6.3x5.4, SOT-223, TL3342,
-USB-C HRO, test point, pin header, trou de fixation. Empreintes dessinees ici
-(cotes nominales, a remplacer par la bibliotheque KiCad avant les Gerbers) :
-ESP32-C3-MINI-1, SOT-23-5/6, 1206, 0603, WS2812B-2020, LED 0805, trou 2.2.
+USB-C HRO, test point, pin header, trou de fixation. Empreintes dessinees ici :
+ESP32-C3-MINI-1 (land pattern datasheet Espressif fig. 11-1, verifie contre
+espressif/kicad-libraries), WS2812B-2020 (datasheet Worldsemi : 1 DO, 2 GND,
+3 DI, 4 VDD, pastilles 0.7 x 0.7), SOT-23-5/6, 1206, 0603, LED 0805 aux cotes
+des bibliotheques KiCad 10, trou 2.2.
 
-Usage : python3 halo/gen_kicad_pcb.py && python3 halo/route_center.py && python3 halo/drc.py
+Usage : python3 halo/gen_kicad_pcb.py && python3 halo/route_center.py && python3 halo/drc.py && python3 halo/gen_kicad_libs.py
 """
 import math
 import re
@@ -50,14 +52,16 @@ TAB_W, TAB_BOTTOM = 14.0, 50.5   # languette USB-C : largeur, y max (depuis le c
 R_LED = 38.0                 # rayon des centres de LED
 R_5V = 40.6                  # anneau 5V, largeur 0.8
 W_5V = 0.8
-R_CAP = 39.8                 # centres des 100nF (radiales, a +/-5 deg de leur LED)
+R_CAP = 40.0                 # centres des 100nF (radiales, a +/-5 deg de leur LED) ; pad 2 a 0.4 mm de la piste de data
 R_HOLE = 30.0                # trous de fixation D2.2
-LED_ANGLE0 = 262.5           # LED1 en bas a gauche ; LED i a 262.5 - 15 (i-1) ; haut = entre LED12 et LED13
+LED_ANGLE0 = 277.5           # LED1 en bas a droite ; LED i a 277.5 + 15 (i-1), sens trigonometrique vu cote composants
+                             # (impose par le WS2812B-2020 : VDD et DI du meme cote) ; haut = entre LED12 et LED13
 GAP_5V = (266.0, 274.0)      # ouverture de l'anneau 5V en bas, passage des pistes USB
-ANT_NOTCH = (-8.0, -35.0, 8.0, -28.2)   # zone sans cuivre sous l'antenne (x1, y1, x2, y2) ; s'arrete avant la broche 1 (y = -27.7)
+ANT_NOTCH = (-8.0, -35.0, 8.0, -26.9)   # zone sans cuivre sous l'antenne (x1, y1, x2, y2) : zone antenne du module y < -2.9 (datasheet),
+                                        # la rangee 36-48 (GND) est a y = -2.2
 
 def led_angle(i):            # degres, sens trigonometrique, 0 = droite, 90 = haut
-    return LED_ANGLE0 - 15.0 * (i - 1)
+    return LED_ANGLE0 + 15.0 * (i - 1)
 
 def polar(r, a_deg):         # coordonnees absolues sur la feuille (y vers le bas)
     a = math.radians(a_deg)
@@ -175,51 +179,62 @@ def fp_two_pad(name, descr, ref, value, x, y, R, nets, pitch, psx, psy, body, co
     return custom_fp(name, descr, ref, value, x, y, R, pads, gfx, ref_y=-(court[1] / 2 + 0.8))
 
 def fp_sot23(n, ref, value, x, y, R, nets):
-    """SOT-23-5 / SOT-23-6 : pas 0.95, rangees a +/-1.1, pastilles 1.06 x 0.65."""
-    pos = {1: (-1.1, -0.95), 2: (-1.1, 0), 3: (-1.1, 0.95), 4: (1.1, 0.95), 5: (1.1, 0), 6: (1.1, -0.95)}
+    """SOT-23-5 / SOT-23-6 : pas 0.95, rangees a +/-1.1375, pastilles 1.325 x 0.6 (= Package_TO_SOT_SMD de KiCad 10)."""
+    pos = {1: (-1.1375, -0.95), 2: (-1.1375, 0), 3: (-1.1375, 0.95), 4: (1.1375, 0.95), 5: (1.1375, 0), 6: (1.1375, -0.95)}
     if n == 5:
-        del pos[5]; pos[5] = (1.1, -0.95)
+        del pos[5]; pos[5] = (1.1375, -0.95)
         pos = {1: pos[1], 2: pos[2], 3: pos[3], 4: pos[4], 5: pos[5]}
-    pads = [smd_pad(str(k), px, py, 1.06, 0.65, R, nets.get(str(k))) for k, (px, py) in pos.items()]
+    pads = [smd_pad(str(k), px, py, 1.325, 0.6, R, nets.get(str(k))) for k, (px, py) in pos.items()]
     gfx = [fp_rect(-0.8, -1.45, 0.8, 1.45, "F.Fab", 0.1), fp_rect(-1.9, -1.75, 1.9, 1.75, "F.CrtYd", 0.05),
            fp_line(-0.8, -1.45, -1.9, -1.45, "F.SilkS", 0.12)]
-    return custom_fp(f"Package_TO_SOT_SMD:SOT-23-{n}", f"SOT-23-{n}, cotes nominales", ref, value, x, y, R, pads, gfx, ref_y=-2.6)
+    return custom_fp(f"Package_TO_SOT_SMD:SOT-23-{n}", f"SOT-23-{n}, cotes KiCad", ref, value, x, y, R, pads, gfx, ref_y=-2.6)
 
 def fp_ws2812b_2020(ref, value, x, y, R, nets):
-    """WS2812B-2020 : corps 2 x 2, 4 pastilles 0.9 x 0.7 aux coins.
-    1 VDD (-x, +y) 2 DOUT (-x, -y) 3 GND (+x, +y) 4 DIN (+x, -y). A verifier sur la datasheet XL-2020RGBC."""
-    pos = {"1": (-0.9, 0.6), "2": (-0.9, -0.6), "3": (0.9, 0.6), "4": (0.9, -0.6)}
-    pads = [smd_pad(k, px, py, 0.9, 0.7, R, nets.get(k)) for k, (px, py) in pos.items()]
-    gfx = [fp_rect(-1.0, -1.0, 1.0, 1.0, "F.Fab", 0.1), fp_rect(-1.6, -1.3, 1.6, 1.3, "F.CrtYd", 0.05),
-           fp_line(-1.6, 0.4, -1.6, 1.3, "F.SilkS", 0.12), fp_line(-1.6, 1.3, -0.9, 1.3, "F.SilkS", 0.12)]
-    return custom_fp("Halo:LED_WS2812B-2020_PLCC4_2.0x2.0mm", "WS2812B-2020 XL-2020RGBC, cotes nominales", ref, value, x, y, R, pads, gfx, ref_y=-2.0)
+    """WS2812B-2020 Worldsemi (LCSC C965555), datasheet p.2 : corps 2.2 x 2.0, 4 pastilles 0.7 x 0.7,
+    ecart 1.13 entre les deux colonnes, 0.40 entre les deux rangees. Vue de dessus :
+    3 DI (-x, -y)  2 GND (+x, -y)
+    4 VDD (-x, +y) 1 DO (+x, +y)
+    Sur l'anneau : +y local = radial exterieur (VDD et DO dehors), +x local = vers la LED suivante (DO, GND)."""
+    pos = {"1": (0.915, 0.55), "2": (0.915, -0.55), "3": (-0.915, -0.55), "4": (-0.915, 0.55)}
+    pads = [smd_pad(k, px, py, 0.7, 0.7, R, nets.get(k)) for k, (px, py) in pos.items()]
+    gfx = [fp_rect(-1.1, -1.0, 1.1, 1.0, "F.Fab", 0.1), fp_rect(-1.5, -1.4, 1.5, 1.4, "F.CrtYd", 0.05),
+           fp_line(1.5, 0.3, 1.5, 1.4, "F.SilkS", 0.12), fp_line(1.5, 1.4, 0.4, 1.4, "F.SilkS", 0.12),   # coin broche 1 (DO)
+           fp_line(-1.5, -1.4, -1.5, -0.3, "F.SilkS", 0.12), fp_line(-1.5, -1.4, -0.4, -1.4, "F.SilkS", 0.12)]
+    return custom_fp("Halo:LED_WS2812B-2020_PLCC4_2.0x2.0mm", "WS2812B-2020 Worldsemi, datasheet V1.4", ref, value, x, y, R, pads, gfx, ref_y=-2.1)
 
 def fp_esp32c3_mini1(ref, value, x, y, R, nets):
-    """ESP32-C3-MINI-1 : 13.2 x 16.6, antenne en -y. 35 broches en U au pas 0.8 + 18 pastilles GND centrales.
-    Cotes nominales de memoire : A REMPLACER par RF_Module:ESP32-C3-MINI-1 de la bibliotheque KiCad."""
+    """ESP32-C3-MINI-1 : corps 13.2 x 16.6, antenne en -y (zone y < -2.9, sans cuivre sous le module ni autour).
+    Land pattern de la datasheet Espressif v2.2 fig. 11-1, identique a espressif/kicad-libraries :
+    48 broches 0.4 x 0.8 en retrait sous le module (colonnes x = +/-5.9, rangees y = -2.2 et 7.6, pas 0.8),
+    masse centrale 3 x 3 pastilles 1.45 (pad 49, un via thermique par pastille), 4 pastilles d'angle 0.7 (50-53)."""
     pads = []
-    for k in range(13):                                   # 1..13 colonne gauche, de haut en bas
-        pads.append(smd_pad(str(1 + k), -6.35, -3.7 + 0.8 * k, 1.0, 0.5, R, nets.get(str(1 + k)), "rect"))
-    for k in range(9):                                    # 14..22 rangee basse, de gauche a droite
-        pads.append(smd_pad(str(14 + k), -3.2 + 0.8 * k, 7.9, 0.5, 1.0, R, nets.get(str(14 + k)), "rect"))
-    for k in range(13):                                   # 23..35 colonne droite, de bas en haut
-        pads.append(smd_pad(str(23 + k), 6.35, 5.9 - 0.8 * k, 1.0, 0.5, R, nets.get(str(23 + k)), "rect"))
-    n = 36
-    for row in range(6):                                  # 36..53 grille GND 3 x 6
-        for col in range(3):
-            pads.append(smd_pad(str(n), -1.4 + 1.4 * col, -1.5 + 1.4 * row, 0.9, 0.9, R, nets.get(str(n), "GND"), "rect"))
-            n += 1
-    gfx = [fp_rect(-6.6, -8.3, 6.6, 8.3, "F.Fab", 0.1), fp_rect(-7.1, -8.8, 7.1, 8.8, "F.CrtYd", 0.05),
-           fp_rect(-6.6, -8.3, 6.6, -4.7, "F.Fab", 0.1),       # zone antenne
-           fp_line(-6.6, -8.3, 6.6, -8.3, "F.SilkS", 0.12), fp_line(-6.6, -8.3, -6.6, -4.7, "F.SilkS", 0.12),
-           fp_line(6.6, -8.3, 6.6, -4.7, "F.SilkS", 0.12)]
-    return custom_fp("RF_Module:ESP32-C3-MINI-1", "ESP32-C3-MINI-1, cotes nominales", ref, value, x, y, R, pads, gfx, ref_y=-9.6)
+    for k in range(11):                                   # 1..11 colonne gauche, de haut en bas
+        pads.append(smd_pad(str(1 + k), -5.9, -1.3 + 0.8 * k, 0.8, 0.4, R, nets.get(str(1 + k)), "rect"))
+    for k in range(13):                                   # 12..24 rangee basse, de gauche a droite
+        pads.append(smd_pad(str(12 + k), -4.8 + 0.8 * k, 7.6, 0.4, 0.8, R, nets.get(str(12 + k)), "rect"))
+    for k in range(11):                                   # 25..35 colonne droite, de bas en haut
+        pads.append(smd_pad(str(25 + k), 5.9, 6.7 - 0.8 * k, 0.8, 0.4, R, nets.get(str(25 + k)), "rect"))
+    for k in range(13):                                   # 36..48 rangee haute sous la zone antenne, de droite a gauche (GND)
+        pads.append(smd_pad(str(36 + k), 4.8 - 0.8 * k, -2.2, 0.4, 0.8, R, nets.get(str(36 + k), "GND"), "rect"))
+    for py in (0.725, 2.7, 4.675):                        # 49 : grille 3 x 3 de la masse centrale
+        for px in (-1.975, 0, 1.975):
+            pads.append(smd_pad("49", px, py, 1.45, 1.45, R, nets.get("49", "GND"), "rect"))
+    for n, (px, py) in zip(("50", "51", "52", "53"), ((5.95, -2.25), (5.95, 7.65), (-5.95, 7.65), (-5.95, -2.25))):
+        pads.append(smd_pad(n, px, py, 0.7, 0.7, R, nets.get(n, "GND"), "rect"))
+    gfx = [fp_rect(-6.6, -8.3, 6.6, 8.3, "F.Fab", 0.1), fp_rect(-6.8, -8.5, 6.8, 8.5, "F.CrtYd", 0.05),
+           fp_line(-6.6, -2.9, 6.6, -2.9, "F.Fab", 0.1),       # limite de la zone antenne
+           fp_line(-6.8, -8.5, 6.8, -8.5, "F.SilkS", 0.12), fp_line(-6.8, -8.5, -6.8, -2.9, "F.SilkS", 0.12),
+           fp_line(6.8, -8.5, 6.8, -2.9, "F.SilkS", 0.12),
+           fp_line(-6.8, 8.5, -6.8, 7.7, "F.SilkS", 0.12), fp_line(-6.8, 8.5, -6.0, 8.5, "F.SilkS", 0.12),
+           fp_line(6.8, 8.5, 6.8, 7.7, "F.SilkS", 0.12), fp_line(6.8, 8.5, 6.0, 8.5, "F.SilkS", 0.12),
+           fp_line(-7.2, -1.3, -6.8, -1.3, "F.SilkS", 0.12)]   # repere broche 1
+    return custom_fp("Halo:ESP32-C3-MINI-1", "ESP32-C3-MINI-1, land pattern datasheet Espressif fig. 11-1", ref, value, x, y, R, pads, gfx, ref_y=-9.5)
 
 def fp_hole(ref, x, y, d):
     pad = (f'\t\t(pad "" np_thru_hole circle\n\t\t\t(at 0 0)\n\t\t\t(size {fmt(d)} {fmt(d)})\n\t\t\t(drill {fmt(d)})'
            f'\n\t\t\t(layers "*.Cu" "*.Mask")\n\t\t\t(uuid "{uid()}")\n\t\t)')
     gfx = [fp_circle(0, 0, d / 2 + 0.25, "F.CrtYd", 0.05), fp_circle(0, 0, d / 2, "Cmts.User", 0.15)]
-    return custom_fp(f"MountingHole:MountingHole_{d}mm", f"Trou de fixation {d} mm, vis autotaraudeuse M2", ref, f"MountingHole_{d}mm",
+    return custom_fp(f"MountingHole:MountingHole_{d}mm_M2", f"Trou de fixation {d} mm, vis autotaraudeuse M2", ref, f"MountingHole_{d}mm_M2",
                      x, y, 0, [pad], gfx, attr="exclude_from_pos_files exclude_from_bom", ref_y=-(d / 2 + 1.2))
 
 
@@ -231,22 +246,23 @@ VALUE = {p["ref"]: p["value"] for p in parts}
 
 PLACE = {   # ref: (x, y, rot)
     "U1": (0, -24, 0),
-    "C5": (-10.5, -32, 90), "C4": (-10.5, -28.4, 90), "R1": (-10.5, -24.8, 90), "C6": (-10.5, -21.2, 90),
-    "R4": (10.5, -32, 90), "R3": (10.5, -28.4, 90), "R2": (10.5, -24.8, 90),
-    "SW1": (-14, -14, 0), "SW2": (-14, -6, 0), "SW3": (14, -14, 0),
+    "C5": (-10.5, -30, 90), "C4": (-10.5, -26.4, 90), "R1": (-10.5, -22.8, 90), "C6": (-10.5, -19.2, 90),   # le long des broches 3 (3V3) et 8 (EN)
+    "R4": (-14, -21, 90),                                                                                  # IO2 (broche 5, colonne gauche)
+    "R3": (10.5, -22.8, 90), "R2": (10.5, -19.2, 90),                                                      # IO8, IO9 (rangee basse, a droite)
+    "SW1": (-14, -14, 0), "SW2": (-14, -6, 0), "SW3": (14, -14, 0),                                        # positions reprises par gen_coque_pied.py
     "Q1": (-17, -29.4, 0), "R8": (-17, -25.5, 0), "TP4": (-20, -8, 0),
     "J1": (0, 46.6, 0),
-    "F1": (8, 30, 0), "C7": (-7, 28, 0), "D1": (0, 27, 0),
+    "F1": (-8, 30, 0), "C7": (7, 28, 0), "D1": (0, 27, 0),
     "U2": (-12, 20, 0), "C1": (-18, 14, 90), "C3": (-15, 14, 90), "C2": (-9, 14, 90),
     "R5": (14, 20, 0), "R6": (14, 23.5, 0),
     "TP1": (20, 8, 0), "TP2": (20, 11, 0), "TP3": (20, 14, 0), "J2": (25, 14, 0),
-    "U3": (-9.5, 33.5, 0), "R7": (-3, 33.5, 0), "C8": (-14, 30, 90),
+    "U3": (9.5, 33.5, 0), "R7": (3, 33.5, 0), "C8": (14, 30, 90),   # a droite, sous LED1 (en bas a droite)
 }
 for i in range(1, 25):
     a = led_angle(i)
     x, y = polar(R_LED, a)
-    PLACE[f"LED{i}"] = (x - CX, y - CY, (a + 90) % 360)     # +y local = radial vers l'exterieur, DOUT vers la LED suivante
-    ac = a - 5 if i <= 12 else a + 5                          # 100nF a 5 deg de sa LED, jamais dans l'ouverture du bas
+    PLACE[f"LED{i}"] = (x - CX, y - CY, (a + 90) % 360)     # +y local = radial vers l'exterieur, +x local = vers la LED suivante (DO)
+    ac = a + 5 if i <= 12 else a - 5                          # 100nF a 5 deg de sa LED, jamais dans l'ouverture du bas
     xc, yc = polar(R_CAP, ac)
     PLACE[f"C{9 + i}"] = (xc - CX, yc - CY, (ac + 180) % 360)  # pad 1 (5V) vers l'exterieur, sur l'anneau 5V
 
@@ -262,7 +278,7 @@ def footprint_of(ref):
     if ref == "J1":
         return instantiate(TEMPLATES["USB-C"], ref, val, x, y, R, nets)
     if ref == "F1":
-        return fp_two_pad("Fuse:Fuse_1206_3216Metric", "Fusible 1206, cotes nominales", ref, val, x, y, R, nets, 2.9, 1.15, 1.8, (3.2, 1.6), (4.5, 2.3))
+        return fp_two_pad("Fuse:Fuse_1206_3216Metric", "Fusible 1206, cotes KiCad", ref, val, x, y, R, nets, 2.8, 1.25, 1.75, (3.2, 1.6), (4.5, 2.3))
     if ref == "D1":
         return fp_sot23(6, ref, val, x, y, R, nets)
     if ref == "U3":
@@ -360,38 +376,38 @@ def gnd_polygon():
 zones.append(zone("GND", "F.Cu", gnd_polygon()))
 zones.append(zone("GND", "B.Cu", gnd_polygon()))
 
-# Anneau 5V ouvert en bas, alimente par F1 (pad 2) a son extremite droite
+# Anneau 5V ouvert en bas, alimente par F1 (pad 2) a son extremite gauche (266 deg)
 tracks.append(arc_track(R_5V, GAP_5V[1], GAP_5V[1] + 120, W_5V, "5V"))
 tracks.append(arc_track(R_5V, GAP_5V[1] + 120, GAP_5V[1] + 240, W_5V, "5V"))
 tracks.append(arc_track(R_5V, GAP_5V[1] + 240, GAP_5V[0] + 360, W_5V, "5V"))
-f1x, f1y = CX + PLACE["F1"][0] + 1.45, CY + PLACE["F1"][1]
-tracks.append(segment((f1x, f1y), (CX + 2.5, CY + 36), 0.6, "5V"))
-tracks.append(segment((CX + 2.5, CY + 36), polar(R_5V, GAP_5V[1]), 0.6, "5V"))
+f1x, f1y = CX + PLACE["F1"][0] + 1.4, CY + PLACE["F1"][1]
+tracks.append(segment((f1x, f1y), (CX - 2.5, CY + 36), 0.6, "5V"))
+tracks.append(segment((CX - 2.5, CY + 36), polar(R_5V, GAP_5V[0]), 0.6, "5V"))
 
-# LEDs : stub VDD vers l'anneau, arc DOUT -> DIN suivante
-for i in range(1, 25):
+# LEDs : stub VDD vers l'anneau, piste DO -> DI de la suivante
+LED_PAD = {"DO": (0.915, 0.55), "GND": (0.915, -0.55), "DI": (-0.915, -0.55), "VDD": (-0.915, 0.55)}
+def led_pad(i, name):
     x, y, R = PLACE[f"LED{i}"]
-    dx, dy = rot_local(-0.9, 0.6, R)                       # pad 1 VDD
-    vdd = (CX + x + dx, CY + y + dy)
+    dx, dy = rot_local(*LED_PAD[name], R)
+    return CX + x + dx, CY + y + dy
+for i in range(1, 25):
+    vdd = led_pad(i, "VDD")
     a_vdd = math.degrees(math.atan2(CY - vdd[1], vdd[0] - CX))
     tracks.append(segment(vdd, polar(R_5V, a_vdd), 0.4, "5V"))
     if i < 24:
-        dx, dy = rot_local(-0.9, -0.6, R)                  # pad 2 DOUT
-        dout = (CX + x + dx, CY + y + dy)
-        xn, yn, Rn = PLACE[f"LED{i + 1}"]
-        dxn, dyn = rot_local(0.9, -0.6, Rn)                # pad 4 DIN de la suivante
-        din = (CX + xn + dxn, CY + yn + dyn)
-        r_d = math.hypot(dout[0] - CX, dout[1] - CY)
-        a1 = math.degrees(math.atan2(CY - dout[1], dout[0] - CX))
-        a2 = math.degrees(math.atan2(CY - din[1], din[0] - CX))
-        if a2 > a1:
-            a2 -= 360
-        tracks.append(arc_track(r_d, a1, a2, 0.3, f"LED_DIN{i + 1}"))
+        # DO (rangee exterieure, cote suivante) -> DI (rangee interieure, cote precedente) : segment droit,
+        # 8 mm de long, pente 1.1 mm, qui passe a 0.4 mm du pad 2 du 100nF intercale
+        tracks.append(segment(led_pad(i, "DO"), led_pad(i + 1, "DI"), 0.3, f"LED_DIN{i + 1}"))
 
-# R7 -> DIN de LED1
-x, y, R = PLACE["LED1"]
-dx, dy = rot_local(0.9, -0.6, R)
-tracks.append(segment((CX + PLACE["R7"][0] + 0.9125, CY + PLACE["R7"][1]), (CX + x + dx, CY + y + dy), 0.3, "LED_DIN1"))
+# Pastilles d'angle GND du module (50-53) : coincees entre deux broches, la zone ne les atteint pas ;
+# petit segment vers la pastille GND voisine, ou vers l'exterieur pour 51 (entre deux NC)
+u1x, u1y = CX + PLACE["U1"][0], CY + PLACE["U1"][1]
+for (x1, y1), (x2, y2) in (((5.95, -2.25), (4.8, -2.2)), ((-5.95, -2.25), (-4.8, -2.2)),
+                           ((-5.95, 7.65), (-5.9, 6.7)), ((5.95, 7.65), (7.05, 8.75))):
+    tracks.append(segment((u1x + x1, u1y + y1), (u1x + x2, u1y + y2), 0.3, "GND"))
+
+# R7 -> DI de LED1
+tracks.append(segment((CX + PLACE["R7"][0] + 0.9125, CY + PLACE["R7"][1]), led_pad(1, "DI"), 0.3, "LED_DIN1"))
 
 
 # --------------------------------------------------------------------------

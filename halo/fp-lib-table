@@ -1,0 +1,4 @@
+(fp_lib_table
+	(version 7)
+	(lib (name "Halo")(type "KiCad")(uri "${KIPRJMOD}/Halo.pretty")(options "")(descr "Empreintes du Halo, extraites du PCB genere"))
+)
