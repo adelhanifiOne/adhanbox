@@ -106,7 +106,7 @@ def composants_enveloppe():
     """Volumes majorants des composants cote arriere, pour le test de collision."""
     usb = cq.Workplane("XY").box(USB["w"], USB["d"], USB["h"], centered=(True, False, False)) \
         .translate((0, USB["y_face"] - USB["d"], T_PCB))
-    c7 = cq.Workplane("XY").center(-8, 28.5).rect(7.0, 7.0).extrude(H_COMP).translate((0, 0, T_PCB))
+    c7 = cq.Workplane("XY").center(-7, 28).rect(7.0, 7.0).extrude(H_COMP).translate((0, 0, T_PCB))
     esp = cq.Workplane("XY").center(0, -24).rect(13.2, 16.6).extrude(2.4).translate((0, 0, T_PCB))
     leds = cq.Workplane("XY").circle(41.2).circle(36.0).extrude(1.2).translate((0, 0, T_PCB))
     sw = None

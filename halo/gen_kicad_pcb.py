@@ -8,15 +8,15 @@ masse plein + logo en serigraphie).
 
 Ce qui est route ici : l'anneau 5V, les 24 arcs de data DOUT -> DIN, les
 stubs VDD de chaque LED, l'alimentation de l'anneau depuis F1, R7 -> LED1.
-Tout le centre (module, USB, LDO, boutons) est place mais laisse en chevelu :
-a router dans KiCad.
+Le centre (module, USB, LDO, boutons) est place ici et route ensuite par
+route_center.py ; drc.py verifie le tout. Enchainement complet : build.sh.
 
 Empreintes copiees depuis la V3 : R/C 0805, CP 6.3x5.4, SOT-223, TL3342,
 USB-C HRO, test point, pin header, trou de fixation. Empreintes dessinees ici
 (cotes nominales, a remplacer par la bibliotheque KiCad avant les Gerbers) :
 ESP32-C3-MINI-1, SOT-23-5/6, 1206, 0603, WS2812B-2020, LED 0805, trou 2.2.
 
-Usage : python3 halo/gen_kicad_pcb.py   (a lancer depuis la racine du repo)
+Usage : python3 halo/gen_kicad_pcb.py && python3 halo/route_center.py && python3 halo/drc.py
 """
 import math
 import re
@@ -54,7 +54,7 @@ R_CAP = 39.8                 # centres des 100nF (radiales, a +/-5 deg de leur L
 R_HOLE = 30.0                # trous de fixation D2.2
 LED_ANGLE0 = 262.5           # LED1 en bas a gauche ; LED i a 262.5 - 15 (i-1) ; haut = entre LED12 et LED13
 GAP_5V = (266.0, 274.0)      # ouverture de l'anneau 5V en bas, passage des pistes USB
-ANT_NOTCH = (-8.0, -35.0, 8.0, -27.0)   # zone sans cuivre sous l'antenne (x1, y1, x2, y2)
+ANT_NOTCH = (-8.0, -35.0, 8.0, -28.2)   # zone sans cuivre sous l'antenne (x1, y1, x2, y2) ; s'arrete avant la broche 1 (y = -27.7)
 
 def led_angle(i):            # degres, sens trigonometrique, 0 = droite, 90 = haut
     return LED_ANGLE0 - 15.0 * (i - 1)
@@ -231,16 +231,16 @@ VALUE = {p["ref"]: p["value"] for p in parts}
 
 PLACE = {   # ref: (x, y, rot)
     "U1": (0, -24, 0),
-    "C5": (-10.5, -31, 90), "C4": (-10.5, -27.8, 90), "R1": (-10.5, -24.6, 90), "C6": (-10.5, -21.4, 90),
-    "R4": (10.5, -31, 90), "R3": (10.5, -27.8, 90), "R2": (10.5, -24.6, 90),
+    "C5": (-10.5, -32, 90), "C4": (-10.5, -28.4, 90), "R1": (-10.5, -24.8, 90), "C6": (-10.5, -21.2, 90),
+    "R4": (10.5, -32, 90), "R3": (10.5, -28.4, 90), "R2": (10.5, -24.8, 90),
     "SW1": (-14, -14, 0), "SW2": (-14, -6, 0), "SW3": (14, -14, 0),
     "Q1": (-17, -29.4, 0), "R8": (-17, -25.5, 0), "TP4": (-20, -8, 0),
     "J1": (0, 46.6, 0),
-    "F1": (8, 30, 0), "C7": (-8, 28.5, 0), "D1": (0, 27, 0),
+    "F1": (8, 30, 0), "C7": (-7, 28, 0), "D1": (0, 27, 0),
     "U2": (-12, 20, 0), "C1": (-18, 14, 90), "C3": (-15, 14, 90), "C2": (-9, 14, 90),
     "R5": (14, 20, 0), "R6": (14, 23.5, 0),
     "TP1": (20, 8, 0), "TP2": (20, 11, 0), "TP3": (20, 14, 0), "J2": (25, 14, 0),
-    "U3": (-9.5, 33, 0), "R7": (-3, 33, 0), "C8": (-14, 30, 90),
+    "U3": (-9.5, 33.5, 0), "R7": (-3, 33.5, 0), "C8": (-14, 30, 90),
 }
 for i in range(1, 25):
     a = led_angle(i)
@@ -348,9 +348,10 @@ def gnd_polygon():
     r = R_EDGE - 1.0
     a = 270 + half + 2
     while a < 270 - half + 358:
-        if 91 < a % 360 <= 96:                         # detour par l'encoche antenne
-            pts += [(CX - 0.3, CY - r), (CX - 0.3, CY + y1), (CX + x1, CY + y1), (CX + x1, CY + y2),
-                    (CX + x2, CY + y2), (CX + x2, CY + y1), (CX + 0.3, CY + y1), (CX + 0.3, CY - r)]
+        if 91 < a % 360 <= 96:                         # detour par l'encoche antenne (a croissant = x decroissant)
+            top = CY - r - 1.0                          # depart hors carte : KiCad rogne la zone au contour
+            pts += [(CX + 0.3, top), (CX + 0.3, CY + y1), (CX + x2, CY + y1), (CX + x2, CY + y2),
+                    (CX + x1, CY + y2), (CX + x1, CY + y1), (CX - 0.3, CY + y1), (CX - 0.3, top)]
         else:
             pts.append(polar(r, a))
         a += 5
@@ -391,121 +392,6 @@ for i in range(1, 25):
 x, y, R = PLACE["LED1"]
 dx, dy = rot_local(0.9, -0.6, R)
 tracks.append(segment((CX + PLACE["R7"][0] + 0.9125, CY + PLACE["R7"][1]), (CX + x + dx, CY + y + dy), 0.3, "LED_DIN1"))
-
-# ---- Routage du centre : USB, alimentation, signaux de commande ----
-
-# Fonction helper pour calculer la position d'une broche
-def pad_pos(ref, pad_num, local_pos, rot=None):
-    if rot is None:
-        x, y, rot = PLACE[ref]
-    else:
-        x, y = rot
-    dx, dy = rot_local(local_pos[0], local_pos[1], PLACE[ref][2])
-    return (CX + x + dx, CY + y + dy)
-
-# F1 (fuse) pad 2 VBUS: pos 1.45 localement, vers D1
-f1_pad2 = (CX + PLACE["F1"][0] + 1.45, CY + PLACE["F1"][1])
-
-# D1 (SN65DP131 SOT-23-6) pad positions: 1=USB_DP, 2=GND, 3=USB_DM, 4=GND, 5=5V_IN, 6=5V_OUT
-# pos de chaque pad en local: 1:(-1.1, -0.95), 2:(-1.1, 0), 3:(-1.1, 0.95), 4:(1.1, 0.95), 5:(1.1, 0), 6:(1.1, -0.95)
-d1_pos = {
-    1: pad_pos("D1", 1, (-1.1, -0.95)),  # USB_DP
-    3: pad_pos("D1", 3, (-1.1, 0.95)),   # USB_DM
-    5: pad_pos("D1", 5, (1.1, 0)),       # 5V_IN
-    6: pad_pos("D1", 6, (1.1, -0.95)),   # 5V_OUT
-}
-
-# F1 pad 2 (VBUS) -> D1 pad 5 (5V_IN)
-tracks.append(segment(f1_pad2, d1_pos[5], 0.6, "VBUS"))
-
-# D1 pad 6 (5V) sortie -> vers U2 (regul 3V3) et vers l'anneau 5V
-d1_5vout = d1_pos[6]
-tracks.append(segment(d1_5vout, (CX + PLACE["U2"][0] + 1.5, CY + PLACE["U2"][1]), 0.6, "5V"))
-
-# U1 (ESP32) positions des broches pour USB: 26=USB_DP, 27=USB_DM
-# ESP32-C3-MINI-1: broches 1-13 en colonne gauche, 14-22 en bas, 23-35 en colonne droite
-# Les broches de USB sont vers le bas du chip
-# Broche 26 est dans la rangee droite (col droite, rangee basse)
-# Broche 27 est juste a coté
-# Positions en local pour U1 (6.35 de chaque coté):
-# - rangee droite (col 23-35): x=6.35
-# - broche 26: 26-23 = 3, donc y = 5.9 - 0.8*3 = 2.55
-# - broche 27: 27-23 = 4, donc y = 5.9 - 0.8*4 = 1.75
-
-u1_base_x, u1_base_y = CX + PLACE["U1"][0], CY + PLACE["U1"][1]
-u1_usb_dp = (u1_base_x + 6.35, u1_base_y + 2.55)  # broche 26
-u1_usb_dm = (u1_base_x + 6.35, u1_base_y + 1.75)  # broche 27
-
-# D1 pad 1 (USB_DP) -> U1 pin 26
-tracks.append(segment(d1_pos[1], u1_usb_dp, 0.3, "USB_DP"))
-
-# D1 pad 3 (USB_DM) -> U1 pin 27
-tracks.append(segment(d1_pos[3], u1_usb_dm, 0.3, "USB_DM"))
-
-# R5/R6 (CC1/CC2 pullups): vers U1 pins 5 et 23
-# Broche 5: col gauche (x = -6.35), rangee gauche, broche 5 = -(90 - 5) = -85
-# Broche 5: position 1 + 4 = 5eme broche en colonne gauche, y = -3.7 + 0.8*4 = -0.1
-# Broche 23: col droite, broche 23 = dernier de la col droite, position 0, y = 5.9
-
-u1_pin5 = (u1_base_x - 6.35, u1_base_y - 0.1)   # CC1 pullup
-u1_pin23 = (u1_base_x + 6.35, u1_base_y + 5.9)  # CC2 pullup
-
-r5_pad = (CX + PLACE["R5"][0], CY + PLACE["R5"][1])
-r6_pad = (CX + PLACE["R6"][0], CY + PLACE["R6"][1])
-
-tracks.append(segment(r5_pad, u1_pin5, 0.3, "CC1"))
-tracks.append(segment(r6_pad, u1_pin23, 0.3, "CC2"))
-
-# Boutons: SW1, SW2, SW3 vers U1
-# SW1 (ENABLE): broche 24, position 1 (col droite), y = 5.9 - 0.8*1 = 5.1
-# SW2 (BOOT): broche 25, position 2 (col droite), y = 5.9 - 0.8*2 = 4.3
-# SW3 (BTN_USER): broche 9, position 8 (col gauche), y = -3.7 + 0.8*8 = 2.7
-
-u1_pin24 = (u1_base_x + 6.35, u1_base_y + 5.1)   # EN
-u1_pin25 = (u1_base_x + 6.35, u1_base_y + 4.3)   # BOOT
-u1_pin9 = (u1_base_x - 6.35, u1_base_y + 2.7)    # GPIO9
-
-sw1_pad = (CX + PLACE["SW1"][0], CY + PLACE["SW1"][1])
-sw2_pad = (CX + PLACE["SW2"][0], CY + PLACE["SW2"][1])
-sw3_pad = (CX + PLACE["SW3"][0], CY + PLACE["SW3"][1])
-
-tracks.append(segment(sw1_pad, u1_pin24, 0.4, "EN"))
-tracks.append(segment(sw2_pad, u1_pin25, 0.4, "BOOT"))
-tracks.append(segment(sw3_pad, u1_pin9, 0.3, "BTN_USER"))
-
-# Q1/R8 (phototransistor ALS) vers U1 GPIO1 (broche 10)
-# Broche 10: col gauche, position 9, y = -3.7 + 0.8*9 = 3.5
-u1_pin10 = (u1_base_x - 6.35, u1_base_y + 3.5)  # GPIO1 (ALS)
-
-q1_pad = (CX + PLACE["Q1"][0], CY + PLACE["Q1"][1])
-r8_pad = (CX + PLACE["R8"][0], CY + PLACE["R8"][1])
-
-tracks.append(segment(q1_pad, r8_pad, 0.2, "ALS"))
-tracks.append(segment(r8_pad, u1_pin10, 0.3, "ALS"))
-
-# U3 (RT9013 regul 3.3V) sortie (pin 5) vers U1 VDDA (broche 11)
-# Broche 11: col gauche, position 10, y = -3.7 + 0.8*10 = 4.3
-u1_pin11 = (u1_base_x - 6.35, u1_base_y + 4.3)  # VDDA
-
-u3_pad5 = pad_pos("U3", 5, (1.1, 0))  # sortie de U3
-tracks.append(segment(u3_pad5, u1_pin11, 0.4, "3V3"))
-
-# U2 (LDO) sortie 3.3V vers les bypass caps et U1 VDDA
-u2_pad_out = (CX + PLACE["U2"][0] + 1.5, CY + PLACE["U2"][1])
-c1_pad = (CX + PLACE["C1"][0], CY + PLACE["C1"][1] + 0.75)  # pad 1 (3V3)
-c2_pad = (CX + PLACE["C2"][0], CY + PLACE["C2"][1] + 0.75)
-c3_pad = (CX + PLACE["C3"][0], CY + PLACE["C3"][1] + 0.75)
-
-tracks.append(segment(u2_pad_out, c1_pad, 0.4, "3V3"))
-tracks.append(segment(c1_pad, c2_pad, 0.4, "3V3"))
-tracks.append(segment(c2_pad, c3_pad, 0.4, "3V3"))
-
-# Alias 3V3 sur le bypass de U3: entre pad 4 (sortie filtrée) et pad 5 (sortie)
-u3_pad4 = pad_pos("U3", 4, (1.1, 0.95))
-u3_pad5 = pad_pos("U3", 5, (1.1, 0))
-c8_pad = (CX + PLACE["C8"][0], CY + PLACE["C8"][1] + 0.9)  # 100nF bypass de U3
-tracks.append(segment(u3_pad4, c8_pad, 0.2, "3V3"))
-tracks.append(segment(c8_pad, u3_pad5, 0.2, "3V3"))
 
 
 # --------------------------------------------------------------------------

@@ -13,8 +13,12 @@ Fichiers du dossier :
 | `Halo.kicad_pro` | Projet KiCad : à ouvrir en premier, il relie le schéma et le PCB |
 | `Halo.kicad_sch` | Schéma KiCad 10, même structure que la V3 : symboles + labels globaux, prêt pour le PCB |
 | `gen_kicad_sch.py` | Générateur du `.kicad_sch`, à relancer après toute modification de placement ou de net |
-| `Halo.kicad_pcb` | PCB KiCad 10 : disque D85 + languette USB-C, composants placés, anneau LED routé, centre en chevelu |
-| `gen_kicad_pcb.py` | Générateur du `.kicad_pcb`, importe la liste des composants et des nets de `gen_kicad_sch.py` |
+| `Halo.kicad_pcb` | PCB KiCad 10 : disque D85 + languette USB-C, entièrement routé (anneau LED + centre), DRC à zéro erreur |
+| `gen_kicad_pcb.py` | Générateur du `.kicad_pcb` : placement, anneau 5V, arcs de data. Importe composants et nets de `gen_kicad_sch.py` |
+| `route_center.py` | Routeur du centre : Dijkstra sur grille 0,1 mm, F.Cu + B.Cu, vias, stitching GND. Réécrit `Halo.kicad_pcb` |
+| `drc.py` | DRC programmatique (règles par défaut KiCad, connectivité, courtyards, antenne). Code retour 1 si erreur |
+| `build.sh` | Enchaîne schéma, PCB, routage, DRC, 3D |
+| `Halo_routage.png` | Rendu des deux couches de cuivre après routage |
 | `gen_coque_pied.py` | Coque et pied en CadQuery, avec contrôles de collision ; écrit `3d/` |
 | `3d/Halo_coque.step` `.stl` | Coque arrière translucide, à imprimer fond sur le plateau |
 | `3d/Halo_pied.step` `.stl` | Pied incliné à 65°, à imprimer à plat |
@@ -291,7 +295,7 @@ l'extérieur, DOUT vers la LED suivante. Routage déjà fait dans le fichier :
 
 ### 6.3 Centre de la carte
 
-Placé mais non routé, à faire dans KiCad :
+Routé par `route_center.py` (voir 6.4). Placement :
 
 - U1 en haut, centre à (0, -24), antenne vers le haut. L'antenne est à 5 mm
   des LEDs les plus proches, LED12 et LED13. Point à vérifier sur le proto :
@@ -361,6 +365,36 @@ contrôle sont mesurées à l'exécution.
 - Anneau aimanté MagSafe adhésif collé en face avant, centré à 20 mm sous le
   centre du disque pour que l'appareil photo de l'iPhone ne dépasse pas.
 
+### 6.4 Routage du centre et DRC
+
+kicad-cli n'étant pas disponible dans l'environnement de génération, le centre
+est routé par `route_center.py` et vérifié par `drc.py`, tous deux en Python
+(shapely, numpy, scipy).
+
+Routeur : grille de 0,1 mm sur les deux couches, plus court chemin (Dijkstra)
+entre les îlots de chaque net, les cellules à moins de 0,225 mm + w/2 d'un
+cuivre étranger sont interdites. B.Cu (plan de masse, face avant) coûte le
+double et un via coûte 3 mm de piste, pour garder le plan de masse aussi
+entier que possible. Largeurs : 5V et VBUS 0,5 mm, 3V3 0,35, GND 0,3, USB et
+CC 0,2 (pads du connecteur à 0,5 mm de pas), le reste 0,25 ; repli sur une
+largeur plus fine si un net ne passe pas. Ordre : USB, CC, VBUS, 5V, 3V3 et
+les nets longs, puis les nets locaux. Interdits : encoche antenne (aucun
+cuivre, y compris vias) et corps du module U1 sur F.Cu (rien d'autre que GND).
+
+GND : 4 vias dans le pavé thermique de U1, puis le remplissage des zones est
+recalculé et chaque îlot GND isolé (pad enfermé par des pistes) reçoit un via
+vers le plan B.Cu ou une courte piste vers la zone principale.
+
+DRC (`drc.py`), mêmes valeurs que les règles par défaut de KiCad : isolation
+0,2 mm, piste mini 0,2, cuivre-bord 0,5, trou-cuivre 0,25, courtyards
+disjoints, contours de zone valides, chaque net en un seul îlot (zones GND
+remplies comprises), pas de cuivre sous l'antenne. Résultat : 0 erreur,
+44 vias, 88 mm de piste sur B.Cu.
+
+Le résultat est brut de routeur : angles à 45°, quelques détours. Il est
+correct électriquement et passe le DRC, mais on peut le retoucher dans KiCad
+avant les Gerbers, en relançant le DRC de KiCad ensuite.
+
 ## 7. Le fichier KiCad
 
 `Halo.kicad_sch` est généré par `gen_kicad_sch.py`, avec la même structure que
@@ -390,8 +424,11 @@ arcs de data et les stubs VDD tombent toujours sur les bons pads. Vérifier
 aussi le brochage du module contre la datasheet, voir 3.3.
 
 Ordre conseillé ensuite : Mettre à jour le PCB depuis le schéma (les
-références et nets sont déjà cohérents), remplir les zones (B), router le
-centre, lancer le DRC.
+références et nets sont déjà cohérents), remplir les zones (B), lancer le DRC
+de KiCad (le centre est déjà routé par `route_center.py`, voir 6.4).
+
+Pour tout regénérer : `halo/build.sh` (schéma, PCB, routage, DRC, 3D). Le
+routage prend environ 3 minutes.
 
 Pour modifier le schéma : éditer la liste `parts` du générateur (référence,
 symbole, valeur, empreinte, position, nets par broche), relancer le script.
