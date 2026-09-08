@@ -33,3 +33,5 @@ _maptest_tmp/
 
 # compilation du banc de production (jamais publiee)
 build_banc_v3/
+
+__pycache__/
