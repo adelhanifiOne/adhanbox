@@ -1142,7 +1142,8 @@ def t_sd(ctx):
     # A ne jamais laisser passer : le client entend l'adhan se couper.
     red = d.get('redemarrage')
     avant = d.get('avant_plantage')
-    if red and red not in ('allumage', 'logiciel', 'reset externe'):
+    # « usb » et « jtag » : reset provoque par le cable au flashage, normal au banc.
+    if red and red not in ('allumage', 'logiciel', 'reset externe', 'usb', 'jtag'):
         msg = detail + ' → dernier demarrage : %s' % red
         # La miette de pain dit CE QUE FAISAIT la carte au moment de mourir.
         # « ouverture canal audio » = l'allocation DMA ; l'info porte alors la
@@ -1229,7 +1230,7 @@ def t_adhans(ctx):
     if not pistes:
         return False, 'contenu de reference introuvable (%s)' % SD_SOURCE
 
-    bons, mauvais = 0, []
+    bons, mauvais, plus_gros = 0, [], 0
     for nom in pistes:
         chemin = '/mp3/' + nom
         attendu = taille_reference(chemin)
@@ -1244,14 +1245,26 @@ def t_adhans(ctx):
             continue
         finally:
             ctx.stop_lecture()
-        if taille != attendu:
-            mauvais.append('%s : %d octets au lieu de %d' % (nom, taille, attendu))
+        # Ce qu'on cherche : un fichier ABSENT, VIDE ou TRONQUE — il ne ferait
+        # aucun bruit sans lever d'erreur. Pas une taille au caractere pres :
+        # depuis que la synchro telecharge les adhans depuis archive.org, cinq
+        # des six pistes font ~99 ko de plus que la reference de sd_preload
+        # (balise ID3 ajoutee par la source, meme son). Une piste plus GROSSE
+        # que la reference est donc normale ; seule une piste plus PETITE est
+        # une copie ratee.
+        if taille < attendu:
+            mauvais.append('%s : %d octets, il en manque %d' % (nom, taille, attendu - taille))
         else:
             bons += 1
+            if taille > attendu:
+                plus_gros += 1
 
     if mauvais:
         return False, 'copie incomplete — ' + ' ; '.join(mauvais)
-    return True, '%d pistes conformes a la reference' % bons
+    detail = '%d pistes completes' % bons
+    if plus_gros:
+        detail += ', dont %d en version serveur (balise ID3, meme son)' % plus_gros
+    return True, detail
 
 
 def _jumeau_fantome(chemin):
