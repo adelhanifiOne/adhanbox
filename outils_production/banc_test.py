@@ -1115,8 +1115,6 @@ def t_sd(ctx):
     # duree d'appui longue = le capteur declenche par le son (nappe de HP trop
     # pres) ; « decodeur » = la carte SD ne repond plus ; « nouvelle lecture »
     # = un azkar programme a pris la place de l'adhan.
-    if red and red.startswith('inconnu'):
-        detail += ' · dernier demarrage : %s' % red
     coupe = d.get('coupure')
     if coupe and coupe != '-' and coupe != 'diagnostic':
         detail += ' · derniere coupure : %s' % coupe
@@ -1148,6 +1146,8 @@ def t_sd(ctx):
     # normal au banc. « inconnu (n) » porte le numero brut : on le montre plutot
     # que de le juger, il faut voir n avant de decider s'il est anormal.
     NORMAUX = ('allumage', 'logiciel', 'reset externe', 'usb', 'jtag', 'sdio')
+    if red and red.startswith('inconnu'):
+        detail += ' · dernier demarrage : %s' % red      # montre, pas juge
     if red and red not in NORMAUX and not red.startswith('inconnu'):
         msg = detail + ' → dernier demarrage : %s' % red
         # La miette de pain dit CE QUE FAISAIT la carte au moment de mourir.
