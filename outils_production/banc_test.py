@@ -1111,6 +1111,19 @@ def t_sd(ctx):
     veille = d.get('wifi_veille')
     if veille and veille not in ('aucune', 'hors-ligne'):
         detail += ' · veille du modem Wi-Fi ACTIVE (%s)' % veille
+    # [COUPURE] Qui a arrete la derniere lecture. « bouton tactile » avec une
+    # duree d'appui longue = le capteur declenche par le son (nappe de HP trop
+    # pres) ; « decodeur » = la carte SD ne repond plus ; « nouvelle lecture »
+    # = un azkar programme a pris la place de l'adhan.
+    coupe = d.get('coupure')
+    if coupe and coupe != '-' and coupe != 'diagnostic':
+        detail += ' · derniere coupure : %s' % coupe
+        if d.get('coupure_fichier') and d['coupure_fichier'] != '-':
+            detail += ' sur %s' % d['coupure_fichier']
+        if d.get('coupure_apres_ms'):
+            detail += ' apres %.1f s (%d %% du fichier)' % (d['coupure_apres_ms'] / 1000.0, d.get('coupure_pct', 0))
+        if coupe.startswith('bouton') and d.get('coupure_bouton_ms', 0) > 1:
+            detail += ', appui tenu %d ms' % d['coupure_bouton_ms']
     sup = None
     if d.get('audio_tours'):
         sup = d.get('audio_sup_dma', 0)
