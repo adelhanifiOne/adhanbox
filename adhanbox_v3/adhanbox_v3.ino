@@ -2,7 +2,7 @@
 // - Starts an AP when a long-press is detected on CONFIG_BUTTON_PIN
 // - Serves a small webpage that requests navigator.geolocation and POSTs lat/lon
 // - Stores lat/lon/accuracy/timestamp in Preferences (NVS)
-//Version: 3.0.24 (AdhanBox V3 / HW v3)
+//Version: 3.0.25 (AdhanBox V3 / HW v3)
 #include <Arduino.h>
 #include <esp_mac.h>   // esp_read_mac() : MAC eFuse, lisible sans Wi-Fi
 #include <Wire.h>
@@ -375,35 +375,31 @@ static inline void _plusHaut(uint32_t &m, uint32_t v) { if (v > m) m = v; }
 // c'est ce que produit un assert de la bibliotheque audio quand elle n'obtient
 // pas sa memoire DMA. « TENSION INSUFFISANTE » = alimentation. Le banc l'affiche.
 static const char* raisonRedemarrage() {
-  switch (esp_reset_reason()) {
-    case ESP_RST_POWERON:   return "allumage";
-    case ESP_RST_EXT:       return "reset externe";
-    case ESP_RST_SW:        return "logiciel";
-    case ESP_RST_PANIC:     return "PANIQUE";
-    case ESP_RST_INT_WDT:   return "chien de garde interruptions";
-    case ESP_RST_TASK_WDT:  return "chien de garde tache";
-    case ESP_RST_WDT:       return "chien de garde";
-    case ESP_RST_DEEPSLEEP: return "sortie de veille";
-    case ESP_RST_BROWNOUT:  return "TENSION INSUFFISANTE";
-    case ESP_RST_SDIO:      return "sdio";
-    // Ceux-la manquaient : un flashage par le cable USB laisse ESP_RST_USB ou
-    // ESP_RST_JTAG, et le banc les lisait « inconnu », donc anormal, donc echec.
-#ifdef ESP_RST_USB
-    case ESP_RST_USB:       return "usb";
-#endif
-#ifdef ESP_RST_JTAG
-    case ESP_RST_JTAG:      return "jtag";
-#endif
-#ifdef ESP_RST_EFUSE
-    case ESP_RST_EFUSE:     return "efuse";
-#endif
-#ifdef ESP_RST_PWR_GLITCH
+  // ATTENTION : ce sont des valeurs d'enumeration, PAS des macros. Un
+  // #ifdef ESP_RST_USB est donc toujours FAUX et supprimerait le cas au lieu de
+  // le proteger — c'est ce qui laissait le banc lire « inconnu » sur une carte
+  // fraichement flashee (le flashage par cable laisse ESP_RST_USB ou _JTAG).
+  // La liste complete existe depuis l'IDF 5 ; le defaut rend le numero brut
+  // pour qu'un cas inattendu reste identifiable au lieu de disparaitre.
+  static char autre[20];
+  const esp_reset_reason_t r = esp_reset_reason();
+  switch (r) {
+    case ESP_RST_POWERON:    return "allumage";
+    case ESP_RST_EXT:        return "reset externe";
+    case ESP_RST_SW:         return "logiciel";
+    case ESP_RST_PANIC:      return "PANIQUE";
+    case ESP_RST_INT_WDT:    return "chien de garde interruptions";
+    case ESP_RST_TASK_WDT:   return "chien de garde tache";
+    case ESP_RST_WDT:        return "chien de garde";
+    case ESP_RST_DEEPSLEEP:  return "sortie de veille";
+    case ESP_RST_BROWNOUT:   return "TENSION INSUFFISANTE";
+    case ESP_RST_SDIO:       return "sdio";
+    case ESP_RST_USB:        return "usb";
+    case ESP_RST_JTAG:       return "jtag";
+    case ESP_RST_EFUSE:      return "efuse";
     case ESP_RST_PWR_GLITCH: return "COUPURE D ALIMENTATION";
-#endif
-#ifdef ESP_RST_CPU_LOCKUP
     case ESP_RST_CPU_LOCKUP: return "PROCESSEUR BLOQUE";
-#endif
-    default:                return "inconnu";
+    default:                 snprintf(autre, sizeof(autre), "inconnu (%d)", (int)r); return autre;
   }
 }
 
@@ -563,7 +559,7 @@ class I2SAudio {
   // POURQUOI C'EST DANGEREUX : ces deux appels sont sous assert() dans la
   // bibliotheque, et le noyau Arduino ESP32 compile SANS -DNDEBUG. Une seule
   // allocation ratee = abort = la carte redemarre, en pleine priere. C'est
-  // exactement ce qui est arrive avec la 3.0.24 : elle visait 16 x 4092 o, et
+  // exactement ce qui est arrive avec la 3.0.25 : elle visait 16 x 4092 o, et
   // se contentait de verifier la memoire TOTALE libre plus UN bloc. Or le
   // pilote demande 16 blocs SEPARES : apres des heures de Wi-Fi, de TLS et de
   // BLE, la RAM interne est fragmentee, le total suffit, les blocs non.
@@ -1770,7 +1766,7 @@ void handleOtaUploadComplete() {
 // GET /api/firmware/version
 void handleFirmwareVersion() {
   server.send(200, "application/json",
-              "{\"version\":\"3.0.24\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
+              "{\"version\":\"3.0.25\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
 }
 
 // Returns true if the request carries the correct API key (or if token not yet set).
@@ -1861,11 +1857,11 @@ void handleDeviceInfo() {
   char buf[512];
   if (pairingWindow || hasValidToken) {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.24\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
+             "{\"version\":\"3.0.25\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
              OTA_HOSTNAME, deviceIdHex().c_str(), _apiToken.c_str(), _otaPass.c_str());
   } else {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.24\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
+             "{\"version\":\"3.0.25\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
              OTA_HOSTNAME, deviceIdHex().c_str());
   }
   server.send(200, "application/json", buf);
@@ -4165,7 +4161,7 @@ int v2SyncContent() {
   if (_syncAbandon || audio.isRunning()) { _syncAFaire = true; _syncPasAvant = millis() + 120000UL; return 0; }
 
   // ── [SYNCHRO] Ce que cette boucle NE FAIT PLUS, et pourquoi ──────────────
-  // Jusqu'en 3.0.24 elle ouvrait une connexion TLS pour CHAQUE fichier, lisait
+  // Jusqu'en 3.0.25 elle ouvrait une connexion TLS pour CHAQUE fichier, lisait
   // le Content-Length, et si la taille sur la SD differait, EFFACAIT le fichier
   // puis le retelechargeait. Or cinq des six adhans precharges sur les cartes SD
   // n'ont plus la taille des fichiers du serveur (archive.org y a ajoute ~99 Ko
@@ -4351,7 +4347,7 @@ void setup() {
   // IMPERATIVEMENT AVANT Serial.begin() : begin() ne cree le tampon que s'il
   // n'existe pas encore, alors que setTxBufferSize() appele APRES supprime le
   // tampon en service pour en recreer un, sous le nez de l'interruption
-  // d'emission. La 3.0.24 le faisait apres, et la carte ne repondait plus.
+  // d'emission. La 3.0.25 le faisait apres, et la carte ne repondait plus.
   Serial.setTxBufferSize(2048);
 #endif
   Serial.begin(115200);
@@ -4889,7 +4885,7 @@ static void bancCommande(String c) {
 
   if (verbe == "info") {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.24\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
+             "{\"version\":\"3.0.25\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
              deviceIdHex().c_str());
     bancRep(buf);
 
