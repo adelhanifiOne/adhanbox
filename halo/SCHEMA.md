@@ -8,8 +8,8 @@ Fichiers du dossier :
 
 | Fichier | Contenu |
 |---|---|
-| `Halo_BOM.csv` | BOM PCB au format JLCPCB (mêmes colonnes que `AdhanBoxPCBV3_BOM.csv`), écrite à la main |
-| `GERBER_HALO/` | Dossier de fabrication : Gerbers, perçage Excellon, `Halo_CPL.csv` (positions JLCPCB) |
+| `Halo_BOM.csv` | BOM de travail, écrite à la main : références LCSC, plages de désignateurs, notes |
+| `GERBER_HALO/` | Dossier de fabrication : Gerbers, perçage, `Halo_CPL.csv` et `Halo_BOM_JLCPCB.csv`, les deux fichiers à téléverser |
 | `Halo_GERBER.zip` | Les Gerbers et le perçage seuls, l'archive à téléverser chez JLCPCB |
 | `export_fab.py` | Produit `GERBER_HALO/` et le zip, et vérifie que BOM, CPL et PCB concordent |
 | `Halo_BOM_produit.csv` | BOM complète du produit fini : coque, pied, câble, boîte |
@@ -453,6 +453,13 @@ composants du schéma, avec les bonnes empreintes et les bonnes quantités.
 Les composants DNP (Q1 le phototransistor, J2 les pads d'alimentation, TP1 à
 TP4) portent le drapeau « ne pas monter » sur le PCB comme au schéma : ils
 sortent de la BOM à poser et du CPL.
+
+Chez JLCPCB, téléverser `GERBER_HALO/Halo_BOM_JLCPCB.csv` et
+`GERBER_HALO/Halo_CPL.csv`, pas `Halo_BOM.csv`. Leur outil ne développe pas les
+plages de désignateurs : `C10-C33` lui est incompréhensible et il refuse le lot
+avec « designators don't exist in the BOM file ». `export_fab.py` développe les
+plages, retire les DNP et vérifie que les deux fichiers portent exactement les
+mêmes 73 désignateurs.
 
 Ordre conseillé ensuite : Mettre à jour le PCB depuis le schéma (les
 références et nets sont déjà cohérents), remplir les zones (B), lancer le DRC

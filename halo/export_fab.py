@@ -6,9 +6,15 @@ Sorties dans halo/GERBER_HALO/ plus halo/Halo_GERBER.zip (a envoyer a JLCPCB) :
   - Halo.drl : percage Excellon, memes coordonnees absolues que les Gerbers
   - Halo_CPL.csv : positions au format JLCPCB (Designator, Mid X, Mid Y, Layer,
     Rotation), DNP exclus (Q1, J2, TP1-TP4)
-La BOM (halo/Halo_BOM.csv) est ecrite a la main, avec les references LCSC : le
-script ne la genere pas, il verifie qu'elle couvre exactement les composants du
-schema, avec les bonnes quantites et les bonnes empreintes.
+  - Halo_BOM_JLCPCB.csv : la BOM telle que JLCPCB l'attend, c'est CE fichier qu'on
+    televerse. Les plages de references y sont developpees (C10-C33 devient
+    C10,C11,...,C33) : l'outil de JLCPCB ne les comprend pas et refuse le lot
+    (« designators don't exist in the BOM file »). Les DNP en sont retires, sinon
+    il les cherche en vain dans le CPL.
+La BOM de travail (halo/Halo_BOM.csv) est ecrite a la main, avec les references
+LCSC et les notes ; c'est la source. Le script en derive la version JLCPCB et
+verifie qu'elle couvre exactement les composants du schema, avec les bonnes
+quantites et les bonnes empreintes.
 
 Usage : python3 halo/export_fab.py   (a lancer apres build.sh, code retour 1 si erreur)
 """
@@ -29,6 +35,7 @@ OUT = HALO / "GERBER_HALO"
 ZIP = HALO / "Halo_GERBER.zip"
 BOM = HALO / "Halo_BOM.csv"
 CPL = OUT / "Halo_CPL.csv"
+BOM_JLC = OUT / "Halo_BOM_JLCPCB.csv"
 CLI = "/Applications/KiCad/KiCad.app/Contents/MacOS/kicad-cli"
 LAYERS = "F.Cu,B.Cu,F.Paste,B.Paste,F.SilkS,B.SilkS,F.Mask,B.Mask,Edge.Cuts"
 
@@ -104,6 +111,24 @@ for ref, row in sorted(seen.items()):
     if ref in sch and row["Footprint"].split(":")[-1] not in fp_of.get(ref, ""):
         errors.append(f"{ref} : BOM dit '{row['Footprint']}', le PCB porte '{fp_of.get(ref, '?')}'")
 
+# ---------------------------------------------------------------- BOM au format JLCPCB
+with BOM_JLC.open("w", newline="") as f:
+    w = csv.writer(f)
+    w.writerow(["Comment", "Designator", "Footprint", "Quantity", "LCSC Part #"])
+    n_jlc = 0
+    for row in csv.DictReader(BOM.open()):
+        refs = [r for r in expand(row["Designator"]) if r in placed]
+        if not refs:
+            continue                      # ligne entierement DNP : hors du lot d'assemblage
+        n_jlc += len(refs)
+        w.writerow([row["Comment"], ",".join(refs), row["Footprint"], len(refs), row["LCSC Part #"]])
+
+jlc_refs = {r for row in csv.DictReader(BOM_JLC.open()) for r in row["Designator"].split(",")}
+for ref in sorted(placed - jlc_refs):
+    errors.append(f"{ref} est dans le CPL mais absent de la BOM JLCPCB")
+for ref in sorted(jlc_refs - placed):
+    errors.append(f"{ref} est dans la BOM JLCPCB mais absent du CPL")
+
 to_place = {r for r in sch if not sch[r]["dnp"] and not r.startswith("TP")}
 for ref in sorted(to_place - placed):
     errors.append(f"{ref} est a poser mais absent du CPL")
@@ -120,7 +145,7 @@ print(f"{OUT.relative_to(HALO.parent)} : {len(list(OUT.iterdir()))} fichiers, "
       f"{ZIP.name} {ZIP.stat().st_size // 1024} Ko")
 print(f"{CPL.name} : {len(placed)} composants a poser "
       f"({', '.join(sorted(r for r in sch if sch[r]['dnp']))} en DNP, non poses)")
-print(f"{BOM.name} : {len(seen)} references, {sum(1 for r in seen.values() if not r['Comment'].startswith('DNP'))} a poser")
+print(f"{BOM.name} : {len(seen)} references ; {BOM_JLC.name} : {n_jlc} references a poser, plages developpees")
 if todo:
     print(f"\n{len(todo)} reference(s) LCSC a completer avant de commander l'assemblage :")
     for t in todo:
