@@ -120,7 +120,7 @@ lib_symbols["Halo:ESP32-C3-MINI-1"] = compact_symbol(
 
 lib_symbols["Halo:WS2812B"] = compact_symbol(
     "Halo:WS2812B", "LED", "WS2812B",
-    "LED RGB adressable WS2812B-2020 Worldsemi, 4 broches : 1 DO, 2 GND, 3 DI, 4 VDD (datasheet V1.4)",
+    "LED RGB adressable 2 x 2 Worldsemi, 4 broches : 1 DO, 2 GND, 3 DI, 4 VDD.\n    WS2812C-2020-V1 (le WS2812B-2020 est arrete) : meme boitier, meme brochage",
     5.08, 5.08, [
         pin("output", 7.62, 0, 180, "DO", "1"),
         pin("power_in", 0, -7.62, 90, "GND", "2"),
@@ -254,7 +254,7 @@ P("R7", "Device:R", "330R", FP["R"], 76.2, 226.06, {"1": "LED_DATA_5V", "2": "LE
 for i in range(1, 25):
     row, col = divmod(i - 1, 12)
     x, y = 106.68 + col * 25.4, 226.06 + row * 27.94
-    P(f"LED{i}", "Halo:WS2812B", "WS2812B-2020", "Halo:LED_WS2812B-2020_PLCC4_2.0x2.0mm",
+    P(f"LED{i}", "Halo:WS2812B", "WS2812C-2020-V1", "Halo:LED_WS2812B-2020_PLCC4_2.0x2.0mm",
       x, y, {"4": "5V", "3": f"LED_DIN{i}", "1": (f"LED_DIN{i + 1}" if i < 24 else "NC"), "2": "GND"})
 for i in range(1, 25):
     P(f"C{9 + i}", "Device:C", "100nF", FP["C0603"], 40.64 + (i - 1) * 12.7, 283.21, {"1": "5V", "2": "GND"})

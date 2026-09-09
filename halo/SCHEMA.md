@@ -168,10 +168,13 @@ flashe directement. Après le premier firmware, l'OTA de la V3 fait le reste.
 | LED1 | 2 GND | GND | |
 | LED2 à LED24 | idem | LED_DINn / LED_DINn+1 | chaîne en série, DO de LED24 en l'air |
 
-Brochage WS2812B-2020 Worldsemi (datasheet V1.4, LCSC C965555) : 1 DO, 2 GND,
-3 DI, 4 VDD ; vu de dessus, DI et VDD d'un côté, GND et DO de l'autre.
+Brochage WS2812C-2020-V1 Worldsemi (LCSC C2976072) : 1 DO, 2 GND, 3 DI,
+4 VDD ; vu de dessus, DI et VDD d'un côté, GND et DO de l'autre. Le
+WS2812B-2020 (C965555) d'origine a le même boîtier, la même empreinte et le
+même brochage, mais Worldsemi l'a arrêté : il n'en restait que 4 en stock chez
+JLCPCB le 09/09/2026, d'où la bascule sur le C.
 
-Pourquoi un translateur : le WS2812B-2020 demande un niveau haut d'au moins
+Pourquoi un translateur : le WS2812 demande un niveau haut d'au moins
 0,7 x VDD, soit 3,5 V sous 5 V. Les 3,3 V du C3 sont juste en dessous. La V3
 s'en sort avec des SK6812 plus tolérants, mais sur un produit vendu en série
 on ne parie pas là-dessus. Le 74AHCT1G125 coûte moins de 0,10 EUR et supprime
@@ -218,14 +221,22 @@ du C3 est supporté par Adafruit_NeoPixel.
 |---|---|
 | ESP32-C3 en émission Wi-Fi, crête | 350 mA sur 3V3, soit 250 mA sur 5V |
 | ESP32-C3 en veille légère, moyenne | 20 mA |
-| 24 LED WS2812B-2020 blanc à 100 % | 24 x 36 mA = 860 mA |
-| 24 LED une seule couleur à 100 % | 24 x 12 mA = 290 mA |
-| 24 LED une couleur à 40 % (réglage usine) | 115 mA |
+| 24 LED WS2812C-2020-V1 blanc à 100 % | 24 x 15 mA = 360 mA |
+| 24 LED une seule couleur à 100 % | 24 x 5 mA = 120 mA |
+| 24 LED une couleur à 40 % (réglage usine) | 48 mA |
 
 Le halo n'affiche qu'une couleur à la fois et le firmware plafonne la
-luminosité à 60 %. Le pire cas réaliste reste sous 500 mA, ce qui passe sur
+luminosité à 60 %. Le pire cas réaliste reste sous 300 mA, ce qui passe sur
 n'importe quel port USB, même un vieux port USB-A avec un câble A vers C. Le
 fusible F1 à 1,1 A protège si l'app force le blanc plein.
+
+Ces chiffres valent pour le WS2812C-2020-V1, à 5 mA par canal. Le
+WS2812B-2020 d'origine tirait 12 mA par canal, soit 860 mA en blanc plein :
+c'est lui qui avait dicté le fusible à 1,1 A. Le C laisse donc beaucoup plus
+de marge, au prix d'un halo moins lumineux. À juger sur le premier proto, à
+travers la lèvre PETG : si c'est trop faible, le seul boîtier 2 x 2 plus
+puissant encore fabriqué est le SK6812-EC20 (LCSC C2909058), dont le brochage
+est à revérifier avant de l'adopter.
 
 Avec R5/R6 à 5.1k, un chargeur USB-C annonce 5 V jusqu'à 3 A : il n'y a donc
 aucune négociation à faire côté firmware.
@@ -474,11 +485,14 @@ Les UUID sont déterministes, le diff git reste lisible.
 
 ## 8. À confirmer avant de commander
 
-1. Deux références LCSC manquent encore dans la BOM, `export_fab.py` les
-   rappelle à chaque exécution : F1 (PTC 1206 1,1 A, type MF-MSMF110-2) et
-   U3 (SN74AHCT1G125DBVR ou 74AHCT1G125GW). Les réf marquées "A CONFIRMER"
-   (U1, D1, R7, LED, Q1) sont renseignées mais à revérifier en stock et en
-   prix sur jlcpcb.com/parts le jour de la commande.
+1. Toutes les références LCSC de la BOM sont renseignées et vérifiées en
+   stock chez JLCPCB le 09/09/2026. Les vérifier à nouveau le jour de la
+   commande : c'est justement en préparant le devis qu'on a découvert que le
+   WS2812B-2020 était arrêté. Les moins confortables sont F1 (SMD1206P110TF,
+   1894 en stock) et U3 (74AHCT1G125GV, 5183). Le champ "Comment" de la BOM
+   porte la référence fabricant et rien d'autre : c'est cette chaîne que
+   l'outil de JLCPCB envoie dans sa recherche, une description en français
+   ne donne aucun résultat.
 2. RSSI avec le téléphone posé, sur le premier proto. Décide entre MINI-1 et MINI-1U.
 3. Rendu du halo à travers la lèvre PETG : tester deux épaisseurs, 1,2 et 1,6 mm.
 4. Consommation réelle à 60 % sur une seule couleur, pour valider F1 à 1,1 A.

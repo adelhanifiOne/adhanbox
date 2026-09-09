@@ -1794,7 +1794,8 @@
 			(property "Value" "WS2812B" (at 0 -8.89 0) (effects (font (size 1.27 1.27))))
 			(property "Footprint" "" (at 0 0 0) (effects (font (size 1.27 1.27)) (hide yes)))
 			(property "Datasheet" "~" (at 0 0 0) (effects (font (size 1.27 1.27)) (hide yes)))
-			(property "Description" "LED RGB adressable WS2812B-2020 Worldsemi, 4 broches : 1 DO, 2 GND, 3 DI, 4 VDD (datasheet V1.4)" (at 0 0 0) (effects (font (size 1.27 1.27)) (hide yes)))
+			(property "Description" "LED RGB adressable 2 x 2 Worldsemi, 4 broches : 1 DO, 2 GND, 3 DI, 4 VDD.
+    WS2812C-2020-V1 (le WS2812B-2020 est arrete) : meme boitier, meme brochage" (at 0 0 0) (effects (font (size 1.27 1.27)) (hide yes)))
 			(symbol "WS2812B_0_1" (rectangle (start -5.08 5.08) (end 5.08 -5.08) (stroke (width 0.254) (type default)) (fill (type background))))
 			(symbol "WS2812B_1_1"
 				(pin output line (at 7.62 0 180) (length 2.54) (name "DO" (effects (font (size 1.27 1.27)))) (number "1" (effects (font (size 1.27 1.27)))))
@@ -3626,7 +3627,7 @@
 			(at 106.68 214.06 0)
 			(effects (font (size 1.27 1.27)))
 		)
-		(property "Value" "WS2812B-2020"
+		(property "Value" "WS2812C-2020-V1"
 			(at 106.68 238.06 0)
 			(effects (font (size 1.27 1.27)))
 		)
@@ -3677,7 +3678,7 @@
 			(at 132.08 214.06 0)
 			(effects (font (size 1.27 1.27)))
 		)
-		(property "Value" "WS2812B-2020"
+		(property "Value" "WS2812C-2020-V1"
 			(at 132.08 238.06 0)
 			(effects (font (size 1.27 1.27)))
 		)
@@ -3728,7 +3729,7 @@
 			(at 157.48 214.06 0)
 			(effects (font (size 1.27 1.27)))
 		)
-		(property "Value" "WS2812B-2020"
+		(property "Value" "WS2812C-2020-V1"
 			(at 157.48 238.06 0)
 			(effects (font (size 1.27 1.27)))
 		)
@@ -3779,7 +3780,7 @@
 			(at 182.88 214.06 0)
 			(effects (font (size 1.27 1.27)))
 		)
-		(property "Value" "WS2812B-2020"
+		(property "Value" "WS2812C-2020-V1"
 			(at 182.88 238.06 0)
 			(effects (font (size 1.27 1.27)))
 		)
@@ -3830,7 +3831,7 @@
 			(at 208.28 214.06 0)
 			(effects (font (size 1.27 1.27)))
 		)
-		(property "Value" "WS2812B-2020"
+		(property "Value" "WS2812C-2020-V1"
 			(at 208.28 238.06 0)
 			(effects (font (size 1.27 1.27)))
 		)
@@ -3881,7 +3882,7 @@
 			(at 233.68 214.06 0)
 			(effects (font (size 1.27 1.27)))
 		)
-		(property "Value" "WS2812B-2020"
+		(property "Value" "WS2812C-2020-V1"
 			(at 233.68 238.06 0)
 			(effects (font (size 1.27 1.27)))
 		)
@@ -3932,7 +3933,7 @@
 			(at 259.08 214.06 0)
 			(effects (font (size 1.27 1.27)))
 		)
-		(property "Value" "WS2812B-2020"
+		(property "Value" "WS2812C-2020-V1"
 			(at 259.08 238.06 0)
 			(effects (font (size 1.27 1.27)))
 		)
@@ -3983,7 +3984,7 @@
 			(at 284.48 214.06 0)
 			(effects (font (size 1.27 1.27)))
 		)
-		(property "Value" "WS2812B-2020"
+		(property "Value" "WS2812C-2020-V1"
 			(at 284.48 238.06 0)
 			(effects (font (size 1.27 1.27)))
 		)
@@ -4034,7 +4035,7 @@
 			(at 309.88 214.06 0)
 			(effects (font (size 1.27 1.27)))
 		)
-		(property "Value" "WS2812B-2020"
+		(property "Value" "WS2812C-2020-V1"
 			(at 309.88 238.06 0)
 			(effects (font (size 1.27 1.27)))
 		)
@@ -4085,7 +4086,7 @@
 			(at 335.28 214.06 0)
 			(effects (font (size 1.27 1.27)))
 		)
-		(property "Value" "WS2812B-2020"
+		(property "Value" "WS2812C-2020-V1"
 			(at 335.28 238.06 0)
 			(effects (font (size 1.27 1.27)))
 		)
@@ -4136,7 +4137,7 @@
 			(at 360.68 214.06 0)
 			(effects (font (size 1.27 1.27)))
 		)
-		(property "Value" "WS2812B-2020"
+		(property "Value" "WS2812C-2020-V1"
 			(at 360.68 238.06 0)
 			(effects (font (size 1.27 1.27)))
 		)
@@ -4187,7 +4188,7 @@
 			(at 386.08 214.06 0)
 			(effects (font (size 1.27 1.27)))
 		)
-		(property "Value" "WS2812B-2020"
+		(property "Value" "WS2812C-2020-V1"
 			(at 386.08 238.06 0)
 			(effects (font (size 1.27 1.27)))
 		)
@@ -4238,7 +4239,7 @@
 			(at 106.68 242 0)
 			(effects (font (size 1.27 1.27)))
 		)
-		(property "Value" "WS2812B-2020"
+		(property "Value" "WS2812C-2020-V1"
 			(at 106.68 266 0)
 			(effects (font (size 1.27 1.27)))
 		)
@@ -4289,7 +4290,7 @@
 			(at 132.08 242 0)
 			(effects (font (size 1.27 1.27)))
 		)
-		(property "Value" "WS2812B-2020"
+		(property "Value" "WS2812C-2020-V1"
 			(at 132.08 266 0)
 			(effects (font (size 1.27 1.27)))
 		)
@@ -4340,7 +4341,7 @@
 			(at 157.48 242 0)
 			(effects (font (size 1.27 1.27)))
 		)
-		(property "Value" "WS2812B-2020"
+		(property "Value" "WS2812C-2020-V1"
 			(at 157.48 266 0)
 			(effects (font (size 1.27 1.27)))
 		)
@@ -4391,7 +4392,7 @@
 			(at 182.88 242 0)
 			(effects (font (size 1.27 1.27)))
 		)
-		(property "Value" "WS2812B-2020"
+		(property "Value" "WS2812C-2020-V1"
 			(at 182.88 266 0)
 			(effects (font (size 1.27 1.27)))
 		)
@@ -4442,7 +4443,7 @@
 			(at 208.28 242 0)
 			(effects (font (size 1.27 1.27)))
 		)
-		(property "Value" "WS2812B-2020"
+		(property "Value" "WS2812C-2020-V1"
 			(at 208.28 266 0)
 			(effects (font (size 1.27 1.27)))
 		)
@@ -4493,7 +4494,7 @@
 			(at 233.68 242 0)
 			(effects (font (size 1.27 1.27)))
 		)
-		(property "Value" "WS2812B-2020"
+		(property "Value" "WS2812C-2020-V1"
 			(at 233.68 266 0)
 			(effects (font (size 1.27 1.27)))
 		)
@@ -4544,7 +4545,7 @@
 			(at 259.08 242 0)
 			(effects (font (size 1.27 1.27)))
 		)
-		(property "Value" "WS2812B-2020"
+		(property "Value" "WS2812C-2020-V1"
 			(at 259.08 266 0)
 			(effects (font (size 1.27 1.27)))
 		)
@@ -4595,7 +4596,7 @@
 			(at 284.48 242 0)
 			(effects (font (size 1.27 1.27)))
 		)
-		(property "Value" "WS2812B-2020"
+		(property "Value" "WS2812C-2020-V1"
 			(at 284.48 266 0)
 			(effects (font (size 1.27 1.27)))
 		)
@@ -4646,7 +4647,7 @@
 			(at 309.88 242 0)
 			(effects (font (size 1.27 1.27)))
 		)
-		(property "Value" "WS2812B-2020"
+		(property "Value" "WS2812C-2020-V1"
 			(at 309.88 266 0)
 			(effects (font (size 1.27 1.27)))
 		)
@@ -4697,7 +4698,7 @@
 			(at 335.28 242 0)
 			(effects (font (size 1.27 1.27)))
 		)
-		(property "Value" "WS2812B-2020"
+		(property "Value" "WS2812C-2020-V1"
 			(at 335.28 266 0)
 			(effects (font (size 1.27 1.27)))
 		)
@@ -4748,7 +4749,7 @@
 			(at 360.68 242 0)
 			(effects (font (size 1.27 1.27)))
 		)
-		(property "Value" "WS2812B-2020"
+		(property "Value" "WS2812C-2020-V1"
 			(at 360.68 266 0)
 			(effects (font (size 1.27 1.27)))
 		)
@@ -4799,7 +4800,7 @@
 			(at 386.08 242 0)
 			(effects (font (size 1.27 1.27)))
 		)
-		(property "Value" "WS2812B-2020"
+		(property "Value" "WS2812C-2020-V1"
 			(at 386.08 266 0)
 			(effects (font (size 1.27 1.27)))
 		)

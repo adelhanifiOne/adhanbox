@@ -16,7 +16,7 @@
 			)
 		)
 	)
-	(property "Value" "WS2812B-2020"
+	(property "Value" "WS2812C-2020-V1"
 		(at 0 2.1 352.5)
 		(layer "F.Fab")
 		(uuid "0ac83f60-dc5f-5aea-8131-900778d66093")

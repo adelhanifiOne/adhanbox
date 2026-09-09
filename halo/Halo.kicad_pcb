@@ -6695,7 +6695,7 @@
 				)
 			)
 		)
-		(property "Value" "WS2812B-2020"
+		(property "Value" "WS2812C-2020-V1"
 			(at 0 2.1 0)
 			(layer "F.Fab")
 			(uuid "0ac83f60-dc5f-5aea-8131-900778d66093")
@@ -6845,7 +6845,7 @@
 				)
 			)
 		)
-		(property "Value" "WS2812B-2020"
+		(property "Value" "WS2812C-2020-V1"
 			(at 0 2.1 0)
 			(layer "F.Fab")
 			(uuid "afdee318-d84e-5415-915e-6cd8c5e030a0")
@@ -6995,7 +6995,7 @@
 				)
 			)
 		)
-		(property "Value" "WS2812B-2020"
+		(property "Value" "WS2812C-2020-V1"
 			(at 0 2.1 0)
 			(layer "F.Fab")
 			(uuid "55dfd22f-69ae-501f-be35-44afd4a78833")
@@ -7145,7 +7145,7 @@
 				)
 			)
 		)
-		(property "Value" "WS2812B-2020"
+		(property "Value" "WS2812C-2020-V1"
 			(at 0 2.1 0)
 			(layer "F.Fab")
 			(uuid "6e9df448-1e0d-5142-b82b-5c67f9b20b03")
@@ -7295,7 +7295,7 @@
 				)
 			)
 		)
-		(property "Value" "WS2812B-2020"
+		(property "Value" "WS2812C-2020-V1"
 			(at 0 2.1 0)
 			(layer "F.Fab")
 			(uuid "70798e10-2c68-5c46-b6f4-7f5e0195038b")
@@ -7445,7 +7445,7 @@
 				)
 			)
 		)
-		(property "Value" "WS2812B-2020"
+		(property "Value" "WS2812C-2020-V1"
 			(at 0 2.1 0)
 			(layer "F.Fab")
 			(uuid "bb5a5b19-65a8-5e7a-8670-42cc9ded8788")
@@ -7595,7 +7595,7 @@
 				)
 			)
 		)
-		(property "Value" "WS2812B-2020"
+		(property "Value" "WS2812C-2020-V1"
 			(at 0 2.1 0)
 			(layer "F.Fab")
 			(uuid "e92708cc-456d-5092-9b4e-e115f413779f")
@@ -7745,7 +7745,7 @@
 				)
 			)
 		)
-		(property "Value" "WS2812B-2020"
+		(property "Value" "WS2812C-2020-V1"
 			(at 0 2.1 0)
 			(layer "F.Fab")
 			(uuid "181fbf36-31f3-57c9-87df-e60ac688c08f")
@@ -7895,7 +7895,7 @@
 				)
 			)
 		)
-		(property "Value" "WS2812B-2020"
+		(property "Value" "WS2812C-2020-V1"
 			(at 0 2.1 0)
 			(layer "F.Fab")
 			(uuid "f791b368-504b-53e2-ac11-2faf27ccd7f8")
@@ -8045,7 +8045,7 @@
 				)
 			)
 		)
-		(property "Value" "WS2812B-2020"
+		(property "Value" "WS2812C-2020-V1"
 			(at 0 2.1 0)
 			(layer "F.Fab")
 			(uuid "430b6462-39ce-56e5-8439-7bf69e0fb5e1")
@@ -8195,7 +8195,7 @@
 				)
 			)
 		)
-		(property "Value" "WS2812B-2020"
+		(property "Value" "WS2812C-2020-V1"
 			(at 0 2.1 0)
 			(layer "F.Fab")
 			(uuid "b6e32ea9-88c8-5a0e-a4bc-a5436af86fb9")
@@ -8345,7 +8345,7 @@
 				)
 			)
 		)
-		(property "Value" "WS2812B-2020"
+		(property "Value" "WS2812C-2020-V1"
 			(at 0 2.1 0)
 			(layer "F.Fab")
 			(uuid "3f531034-0a0c-5bbc-b9b5-8e9eda2953f6")
@@ -8495,7 +8495,7 @@
 				)
 			)
 		)
-		(property "Value" "WS2812B-2020"
+		(property "Value" "WS2812C-2020-V1"
 			(at 0 2.1 0)
 			(layer "F.Fab")
 			(uuid "731ec55c-21dc-51f8-9799-e7c374ce8d55")
@@ -8645,7 +8645,7 @@
 				)
 			)
 		)
-		(property "Value" "WS2812B-2020"
+		(property "Value" "WS2812C-2020-V1"
 			(at 0 2.1 0)
 			(layer "F.Fab")
 			(uuid "28e08bbc-5638-57cd-a5c3-c6a673181048")
@@ -8795,7 +8795,7 @@
 				)
 			)
 		)
-		(property "Value" "WS2812B-2020"
+		(property "Value" "WS2812C-2020-V1"
 			(at 0 2.1 0)
 			(layer "F.Fab")
 			(uuid "eb6e399d-12f3-58e4-a538-982940f5cd1d")
@@ -8945,7 +8945,7 @@
 				)
 			)
 		)
-		(property "Value" "WS2812B-2020"
+		(property "Value" "WS2812C-2020-V1"
 			(at 0 2.1 0)
 			(layer "F.Fab")
 			(uuid "c25e02c3-143b-5477-9df0-93da8df90ad2")
@@ -9095,7 +9095,7 @@
 				)
 			)
 		)
-		(property "Value" "WS2812B-2020"
+		(property "Value" "WS2812C-2020-V1"
 			(at 0 2.1 0)
 			(layer "F.Fab")
 			(uuid "11eac528-124e-5a83-a4c5-f6966347f886")
@@ -9245,7 +9245,7 @@
 				)
 			)
 		)
-		(property "Value" "WS2812B-2020"
+		(property "Value" "WS2812C-2020-V1"
 			(at 0 2.1 0)
 			(layer "F.Fab")
 			(uuid "4dc0a882-7737-5b85-bcdb-4a877db01ebb")
@@ -9395,7 +9395,7 @@
 				)
 			)
 		)
-		(property "Value" "WS2812B-2020"
+		(property "Value" "WS2812C-2020-V1"
 			(at 0 2.1 0)
 			(layer "F.Fab")
 			(uuid "eb68b9de-f73d-5835-b9b3-fe30b32de616")
@@ -9545,7 +9545,7 @@
 				)
 			)
 		)
-		(property "Value" "WS2812B-2020"
+		(property "Value" "WS2812C-2020-V1"
 			(at 0 2.1 0)
 			(layer "F.Fab")
 			(uuid "a36f7c97-a007-5506-82bb-eb278b08e08a")
@@ -9695,7 +9695,7 @@
 				)
 			)
 		)
-		(property "Value" "WS2812B-2020"
+		(property "Value" "WS2812C-2020-V1"
 			(at 0 2.1 0)
 			(layer "F.Fab")
 			(uuid "2fb38ed3-07b4-5cad-a41e-2510928d33aa")
@@ -9845,7 +9845,7 @@
 				)
 			)
 		)
-		(property "Value" "WS2812B-2020"
+		(property "Value" "WS2812C-2020-V1"
 			(at 0 2.1 0)
 			(layer "F.Fab")
 			(uuid "9f5099cc-65cb-58ef-aecb-0548916fc435")
@@ -9995,7 +9995,7 @@
 				)
 			)
 		)
-		(property "Value" "WS2812B-2020"
+		(property "Value" "WS2812C-2020-V1"
 			(at 0 2.1 0)
 			(layer "F.Fab")
 			(uuid "d4dcdded-2974-5fb7-ad61-2485df2217e3")
@@ -10145,7 +10145,7 @@
 				)
 			)
 		)
-		(property "Value" "WS2812B-2020"
+		(property "Value" "WS2812C-2020-V1"
 			(at 0 2.1 0)
 			(layer "F.Fab")
 			(uuid "f3da0a39-ac14-59ab-844d-ca3ad338c60f")
