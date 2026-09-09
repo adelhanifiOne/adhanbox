@@ -16,13 +16,22 @@ LCSC et les notes ; c'est la source. Le script en derive la version JLCPCB et
 verifie qu'elle couvre exactement les composants du schema, avec les bonnes
 quantites et les bonnes empreintes.
 
-Usage : python3 halo/export_fab.py   (a lancer apres build.sh, code retour 1 si erreur)
+Le script interroge aussi le catalogue JLCPCB pour chaque reference LCSC et
+affiche le composant qu'elle designe reellement. C'est ce controle qui a
+rattrape le 09/09/2026 un U1 commande en bornier a vis (C2838111) au lieu du
+module ESP32 : la reference etait plausible, le nom ne l'etait pas. Sans reseau,
+le controle est saute avec un avertissement.
+
+Usage : python3 halo/export_fab.py [--sans-reseau]   (apres build.sh, code retour 1 si erreur)
 """
 import csv
+import json
 import re
 import shutil
 import subprocess
 import sys
+import urllib.error
+import urllib.request
 import zipfile
 from pathlib import Path
 
@@ -37,6 +46,8 @@ BOM = HALO / "Halo_BOM.csv"
 CPL = OUT / "Halo_CPL.csv"
 BOM_JLC = OUT / "Halo_BOM_JLCPCB.csv"
 CLI = "/Applications/KiCad/KiCad.app/Contents/MacOS/kicad-cli"
+JLC = "https://jlcpcb.com/api/overseas-pcb-order/v1/shoppingCart/smtGood/selectSmtComponentList"
+BOITIERS = ("0402", "0603", "0805", "1206", "1812", "SOT-23-5", "SOT-23-6", "SOT-223")
 LAYERS = "F.Cu,B.Cu,F.Paste,B.Paste,F.SilkS,B.SilkS,F.Mask,B.Mask,Edge.Cuts"
 
 
@@ -135,6 +146,53 @@ for ref in sorted(to_place - placed):
 for ref in sorted(placed - to_place):
     errors.append(f"{ref} est dans le CPL alors qu'il est DNP")
 
+# ---------------------------------------------------------------- ce que designent vraiment les references LCSC
+catalogue = []
+if "--sans-reseau" in sys.argv:
+    todo.append("controle du catalogue JLCPCB saute (--sans-reseau)")
+else:
+    def cherche(code):
+        req = urllib.request.Request(JLC, data=json.dumps({"currentPage": 1, "pageSize": 5, "keyword": code}).encode(),
+                                     headers={"Content-Type": "application/json", "User-Agent": "Mozilla/5.0"})
+        for c in json.loads(urllib.request.urlopen(req, timeout=25).read())["data"]["componentPageInfo"]["list"]:
+            if c.get("componentCode") == code:
+                return c
+        return None
+
+    def sansponct(t):
+        return re.sub(r"[^A-Z0-9]", "", t.upper())
+
+    vus = {}
+    for row in csv.DictReader(BOM.open()):
+        code = row["LCSC Part #"].strip()
+        if not code or code in vus:
+            continue
+        try:
+            vus[code] = cherche(code)
+        except (urllib.error.URLError, TimeoutError, OSError) as e:
+            todo.append(f"catalogue JLCPCB injoignable ({e}), references non verifiees")
+            vus = None
+            break
+    if vus is not None:
+        for row in csv.DictReader(BOM.open()):
+            code = row["LCSC Part #"].strip()
+            if not code:
+                continue
+            c = vus.get(code)
+            if c is None:
+                errors.append(f"{row['Designator']} : la reference {code} n'existe pas au catalogue JLCPCB")
+                continue
+            modele, boitier = c.get("componentModelEn") or "?", c.get("componentSpecificationEn") or ""
+            catalogue.append((code, row["Designator"], row["Comment"], modele, boitier, c.get("stockCount", 0)))
+            attendu = next((b for b in BOITIERS if sansponct(b) in sansponct(row["Footprint"])), None)
+            if attendu and sansponct(attendu) not in sansponct(boitier):
+                errors.append(f"{row['Designator']} : {code} est un boitier '{boitier}', "
+                              f"l'empreinte du PCB attend du {attendu} ({modele})")
+            besoin = len(expand(row["Designator"]))
+            if c.get("stockCount", 0) < besoin * 25:
+                todo.append(f"{row['Designator']} : {code} ({modele}) n'a que {c.get('stockCount', 0)} en stock, "
+                            f"il en faut {besoin} par carte")
+
 # ---------------------------------------------------------------- archive et rapport
 with zipfile.ZipFile(ZIP, "w", zipfile.ZIP_DEFLATED) as z:
     for f in sorted(OUT.iterdir()):
@@ -146,6 +204,10 @@ print(f"{OUT.relative_to(HALO.parent)} : {len(list(OUT.iterdir()))} fichiers, "
 print(f"{CPL.name} : {len(placed)} composants a poser "
       f"({', '.join(sorted(r for r in sch if sch[r]['dnp']))} en DNP, non poses)")
 print(f"{BOM.name} : {len(seen)} references ; {BOM_JLC.name} : {n_jlc} references a poser, plages developpees")
+if catalogue:
+    print("\nCe que JLCPCB livrera pour chaque reference :")
+    for code, desig, comment, modele, boitier, stock in catalogue:
+        print(f"  {code:>10} {desig[:12]:12} {comment[:24]:24} -> {modele[:24]:24} {boitier[:16]:16} stock {stock}")
 if todo:
     print(f"\n{len(todo)} reference(s) LCSC a completer avant de commander l'assemblage :")
     for t in todo:

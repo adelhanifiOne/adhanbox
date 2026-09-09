@@ -1,5 +1,5 @@
 Comment,Designator,Footprint,Quantity,LCSC Part #,Note
-ESP32-C3-MINI-1-N4,U1,Halo:ESP32-C3-MINI-1,1,C2838111,"module pre-certifie RED, USB natif (pas de CP2102), antenne PCB integree : bord de carte + keep-out 15 mm ; A CONFIRMER sur jlcpcb.com/parts"
+ESP32-C3-MINI-1-N4,U1,Halo:ESP32-C3-MINI-1,1,C2838502,"module pre-certifie RED, USB natif (pas de CP2102), antenne PCB integree : bord de carte + keep-out ; Espressif, SMD 16.6 x 13.2, stock JLCPCB 17261 au 09/09/2026. ATTENTION : C2838111, qui figurait ici avant le 09/09/2026, est un bornier a vis DORABO, pas le module"
 AMS1117-3.3,U2,Package_TO_SOT_SMD:SOT-223-3_TabPin2,1,C6186,identique V3
 74AHCT1G125GV,U3,Package_TO_SOT_SMD:SOT-23-5,1,C52140417,"translateur 3V3 -> 5V pour la data WS2812 ; MDD, SOT-23-5L, stock JLCPCB 5183 au 09/09/2026"
 USBLC6-2SC6,D1,Package_TO_SOT_SMD:SOT-23-6,1,C7519,protection ESD D+/D- ; A CONFIRMER

@@ -485,14 +485,14 @@ Les UUID sont déterministes, le diff git reste lisible.
 
 ## 8. À confirmer avant de commander
 
-1. Toutes les références LCSC de la BOM sont renseignées et vérifiées en
-   stock chez JLCPCB le 09/09/2026. Les vérifier à nouveau le jour de la
-   commande : c'est justement en préparant le devis qu'on a découvert que le
-   WS2812B-2020 était arrêté. Les moins confortables sont F1 (SMD1206P110TF,
-   1894 en stock) et U3 (74AHCT1G125GV, 5183). Le champ "Comment" de la BOM
-   porte la référence fabricant et rien d'autre : c'est cette chaîne que
-   l'outil de JLCPCB envoie dans sa recherche, une description en français
-   ne donne aucun résultat.
+1. Toutes les références LCSC de la BOM sont vérifiées : `export_fab.py`
+   interroge le catalogue JLCPCB et affiche, pour chaque code, le composant
+   qu'il désigne réellement. C'est ce contrôle qui a rattrapé le 09/09/2026 un
+   U1 commandé en bornier à vis DORABO (C2838111) au lieu du module ESP32 : la
+   référence était plausible, le nom ne l'était pas. La bonne est **C2838502**.
+   Une seule ligne reste à l'œil : SW1 à SW3, où C318884 livre un TS-1187A-B-A-B
+   de 5,1 x 5,1 mm et non un TL3342 ; c'est le couple déjà utilisé et validé sur
+   l'AdhanBox V3, on le garde.
 2. RSSI avec le téléphone posé, sur le premier proto. Décide entre MINI-1 et MINI-1U.
 3. Rendu du halo à travers la lèvre PETG : tester deux épaisseurs, 1,2 et 1,6 mm.
 4. Consommation réelle à 60 % sur une seule couleur, pour valider F1 à 1,1 A.
