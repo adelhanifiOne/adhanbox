@@ -2,7 +2,7 @@
 // - Starts an AP when a long-press is detected on CONFIG_BUTTON_PIN
 // - Serves a small webpage that requests navigator.geolocation and POSTs lat/lon
 // - Stores lat/lon/accuracy/timestamp in Preferences (NVS)
-//Version: 3.0.22 (AdhanBox V3 / HW v3)
+//Version: 3.0.23 (AdhanBox V3 / HW v3)
 #include <Arduino.h>
 #include <esp_mac.h>   // esp_read_mac() : MAC eFuse, lisible sans Wi-Fi
 #include <Wire.h>
@@ -545,7 +545,7 @@ class I2SAudio {
   // POURQUOI C'EST DANGEREUX : ces deux appels sont sous assert() dans la
   // bibliotheque, et le noyau Arduino ESP32 compile SANS -DNDEBUG. Une seule
   // allocation ratee = abort = la carte redemarre, en pleine priere. C'est
-  // exactement ce qui est arrive avec la 3.0.22 : elle visait 16 x 4092 o, et
+  // exactement ce qui est arrive avec la 3.0.23 : elle visait 16 x 4092 o, et
   // se contentait de verifier la memoire TOTALE libre plus UN bloc. Or le
   // pilote demande 16 blocs SEPARES : apres des heures de Wi-Fi, de TLS et de
   // BLE, la RAM interne est fragmentee, le total suffit, les blocs non.
@@ -1752,7 +1752,7 @@ void handleOtaUploadComplete() {
 // GET /api/firmware/version
 void handleFirmwareVersion() {
   server.send(200, "application/json",
-              "{\"version\":\"3.0.22\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
+              "{\"version\":\"3.0.23\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
 }
 
 // Returns true if the request carries the correct API key (or if token not yet set).
@@ -1843,11 +1843,11 @@ void handleDeviceInfo() {
   char buf[512];
   if (pairingWindow || hasValidToken) {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.22\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
+             "{\"version\":\"3.0.23\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
              OTA_HOSTNAME, deviceIdHex().c_str(), _apiToken.c_str(), _otaPass.c_str());
   } else {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.22\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
+             "{\"version\":\"3.0.23\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
              OTA_HOSTNAME, deviceIdHex().c_str());
   }
   server.send(200, "application/json", buf);
@@ -3110,10 +3110,13 @@ void checkConfigButton(){
     bool pressed = true;
     if(pressed){
       if(isPlaying){
-        stopPlay("bouton tactile");
+        stopPlay("bouton tactile");               // remet lui-meme le scenario d'avant l'adhan
         g_coupure.boutonMs = 1;                      // sera remplace par la duree a la relache
-        ledScenario = 0; ledCustomActive = false; setLedDuty(0);
-        if(useAddressableLEDs) stripSetAll(0,0,0);
+        // [LED] On ne coupe PLUS la lumiere ici. stopPlay() vient de restaurer le
+        // scenario qu'il y avait avant la scene de priere, et la couleur libre
+        // (ledCustomActive) n'est jamais touchee pendant l'adhan : elle revient
+        // d'elle-meme. Eteindre effacait le choix de l'utilisateur, et rendait un
+        // appui volontaire indiscernable d'un redemarrage (demande d'Adel, 09/09).
       } else {
         ledCustomActive = false;   // le bouton reprend la main sur la couleur libre
         do {
@@ -4144,7 +4147,7 @@ int v2SyncContent() {
   if (_syncAbandon || audio.isRunning()) { _syncAFaire = true; _syncPasAvant = millis() + 120000UL; return 0; }
 
   // ── [SYNCHRO] Ce que cette boucle NE FAIT PLUS, et pourquoi ──────────────
-  // Jusqu'en 3.0.22 elle ouvrait une connexion TLS pour CHAQUE fichier, lisait
+  // Jusqu'en 3.0.23 elle ouvrait une connexion TLS pour CHAQUE fichier, lisait
   // le Content-Length, et si la taille sur la SD differait, EFFACAIT le fichier
   // puis le retelechargeait. Or cinq des six adhans precharges sur les cartes SD
   // n'ont plus la taille des fichiers du serveur (archive.org y a ajoute ~99 Ko
@@ -4330,7 +4333,7 @@ void setup() {
   // IMPERATIVEMENT AVANT Serial.begin() : begin() ne cree le tampon que s'il
   // n'existe pas encore, alors que setTxBufferSize() appele APRES supprime le
   // tampon en service pour en recreer un, sous le nez de l'interruption
-  // d'emission. La 3.0.22 le faisait apres, et la carte ne repondait plus.
+  // d'emission. La 3.0.23 le faisait apres, et la carte ne repondait plus.
   Serial.setTxBufferSize(2048);
 #endif
   Serial.begin(115200);
@@ -4868,7 +4871,7 @@ static void bancCommande(String c) {
 
   if (verbe == "info") {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.22\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
+             "{\"version\":\"3.0.23\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
              deviceIdHex().c_str());
     bancRep(buf);
 
