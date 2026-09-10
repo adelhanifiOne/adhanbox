@@ -1115,6 +1115,14 @@ def t_sd(ctx):
     # duree d'appui longue = le capteur declenche par le son (nappe de HP trop
     # pres) ; « decodeur » = la carte SD ne repond plus ; « nouvelle lecture »
     # = un azkar programme a pris la place de l'adhan.
+    # [BOUTON] Sante du capteur tactile. Des « rejetes » qui montent sans que
+    # personne ne touche la boite, ou un maintien de plusieurs secondes (le
+    # TTP223 recalibre sa base et relache seul), signent un capteur marginal :
+    # aimant trop pres du pad, fil de signal trop long, module bas de gamme.
+    if d.get('btn_actions') is not None:
+        act, ign, mx = d.get('btn_actions', 0), d.get('btn_ignores', 0), d.get('btn_max_ms', 0)
+        if act or ign or mx:
+            detail += ' · bouton : %d retenu(s), %d rejete(s), maintien max %d ms' % (act, ign, mx)
     coupe = d.get('coupure')
     if coupe and coupe != '-' and coupe != 'diagnostic':
         detail += ' · derniere coupure : %s' % coupe

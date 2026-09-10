@@ -2,7 +2,7 @@
 // - Starts an AP when a long-press is detected on CONFIG_BUTTON_PIN
 // - Serves a small webpage that requests navigator.geolocation and POSTs lat/lon
 // - Stores lat/lon/accuracy/timestamp in Preferences (NVS)
-//Version: 3.0.25 (AdhanBox V3 / HW v3)
+//Version: 3.0.26 (AdhanBox V3 / HW v3)
 #include <Arduino.h>
 #include <esp_mac.h>   // esp_read_mac() : MAC eFuse, lisible sans Wi-Fi
 #include <Wire.h>
@@ -559,7 +559,7 @@ class I2SAudio {
   // POURQUOI C'EST DANGEREUX : ces deux appels sont sous assert() dans la
   // bibliotheque, et le noyau Arduino ESP32 compile SANS -DNDEBUG. Une seule
   // allocation ratee = abort = la carte redemarre, en pleine priere. C'est
-  // exactement ce qui est arrive avec la 3.0.25 : elle visait 16 x 4092 o, et
+  // exactement ce qui est arrive avec la 3.0.26 : elle visait 16 x 4092 o, et
   // se contentait de verifier la memoire TOTALE libre plus UN bloc. Or le
   // pilote demande 16 blocs SEPARES : apres des heures de Wi-Fi, de TLS et de
   // BLE, la RAM interne est fragmentee, le total suffit, les blocs non.
@@ -1766,7 +1766,7 @@ void handleOtaUploadComplete() {
 // GET /api/firmware/version
 void handleFirmwareVersion() {
   server.send(200, "application/json",
-              "{\"version\":\"3.0.25\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
+              "{\"version\":\"3.0.26\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
 }
 
 // Returns true if the request carries the correct API key (or if token not yet set).
@@ -1857,11 +1857,11 @@ void handleDeviceInfo() {
   char buf[512];
   if (pairingWindow || hasValidToken) {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.25\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
+             "{\"version\":\"3.0.26\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
              OTA_HOSTNAME, deviceIdHex().c_str(), _apiToken.c_str(), _otaPass.c_str());
   } else {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.25\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
+             "{\"version\":\"3.0.26\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
              OTA_HOSTNAME, deviceIdHex().c_str());
   }
   server.send(200, "application/json", buf);
@@ -3089,6 +3089,15 @@ void ledFlushSave(){
   }
 }
 
+// ── [BOUTON] Compteurs de diagnostic du capteur tactile ────────────────────
+// Un TTP223 marginal se voit a ses chiffres : des appuis retenus alors que
+// personne n'a touche la boite, des maintiens de plusieurs secondes (le chip
+// recalibre sa base et relache tout seul), des rejets en rafale. Le banc les
+// affiche : laisser la boite seule dix minutes et regarder si ca bouge.
+uint32_t g_btnActions = 0;    // appuis retenus (une action a ete faite)
+uint32_t g_btnIgnores = 0;    // appuis rejetes (trop courts, ou fenetre bruyante)
+uint32_t g_btnMaxMs   = 0;    // plus long maintien observe, en ms
+
 void checkConfigButton(){
   static bool inited = false;
   static int idleLevel = HIGH;      // niveau de repos capture au 1er passage
@@ -3106,20 +3115,43 @@ void checkConfigButton(){
   // APPUI_MIN_MS d'affilee (un doigt tient bien plus ; le TTP223 lui-meme ne
   // sort jamais moins de ~60 ms), et on mesure sa duree totale : un faux appui
   // induit par le son dure tant que le son dure, un doigt lache.
-  const unsigned long APPUI_MIN_MS = 80;
+  //
+  // [BOUTON] Deux durees, parce que les deux gestes n'ont pas le meme cout.
+  // Changer de scenario lumineux doit rester vif : 80 ms suffisent, et une
+  // erreur se corrige d'un second appui. ARRETER L'ADHAN, non : un faux appui
+  // vole la priere, et on en a mesure un de 345 ms le 09/09/2026 sur une boite
+  // sans aucun fil pres du capteur. Pendant la lecture on exige donc un appui
+  // franchement TENU, que personne ne produit par accident et qu'un doigt fait
+  // sans y penser.
+  const unsigned long APPUI_MIN_MS = isPlaying ? 500 : 80;
   static unsigned long appuiDepuis = 0;   // debut de l'appui en cours, 0 = relache
   static bool appuiTraite = false;        // deja agi pour cet appui
   int val = digitalRead(CONFIG_BUTTON_PIN);
   bool pressedNow = (val != idleLevel);
   if (!pressedNow) {
-    if (appuiDepuis && appuiTraite && g_coupure.boutonMs == 1) g_coupure.boutonMs = millis() - appuiDepuis;
+    if (appuiDepuis) {
+      const uint32_t tenu = millis() - appuiDepuis;
+      if (tenu > g_btnMaxMs) g_btnMaxMs = tenu;
+      if (appuiTraite && g_coupure.boutonMs == 1) g_coupure.boutonMs = tenu;
+      else if (!appuiTraite) g_btnIgnores++;
+    }
     appuiDepuis = 0; appuiTraite = false; lastState = val;
     return;
   }
   if (!appuiDepuis) appuiDepuis = millis();
+  // [BOUTON] Fenetres ou le capteur ment. La connexion Wi-Fi fait des salves
+  // d'emission de plusieurs centaines de mA : le 3V3 plonge, la base du TTP223
+  // se decale, et sa sortie part toute seule — Adel l'a vu s'allumer pile au
+  // moment de l'association, sans que personne ne touche la boite. Idem les
+  // premieres secondes apres le demarrage, pendant que le chip se calibre.
+  // Personne n'appuie a ces instants-la : on ignore, et on compte.
+  if (wifiConnectState == WCS_CONNECTING || millis() < 5000) {
+    if (!appuiTraite) { appuiTraite = true; g_btnIgnores++; }
+    return;
+  }
   if (appuiTraite || millis() - appuiDepuis < APPUI_MIN_MS) return;
   if (millis() - debounceTime <= DEBOUNCE_MS) return;
-  debounceTime = millis(); appuiTraite = true; lastState = val;
+  debounceTime = millis(); appuiTraite = true; lastState = val; g_btnActions++;
   {
     bool pressed = true;
     if(pressed){
@@ -4097,13 +4129,14 @@ void handleDiag() {
   stopPlay("diagnostic");  // mesure au repos (pas de contention SPI avec l'audio)
   g_coupure = coupureAvant;
   int kBs = audio.sdBenchKBs("/quran/afs/001.mp3", 256 * 1024);
-  char buf[768];
+  char buf[896];
   snprintf(buf, sizeof(buf),
     "{\"sd_clock_hz\":%lu,\"sd_read_kBs\":%d,\"need_kBs\":16,"
     "\"lecture_max_ms\":%lu,\"gels\":%lu,\"wifi_veille\":\"%s\","
     "\"gel_cpu_max_ms\":%lu,\"dma_ms\":%lu,\"dma_libre\":%lu,\"redemarrage\":\"%s\","
     "\"avant_plantage\":\"%s\",\"avant_plantage_info\":%lu,"
     "\"coupure\":\"%s\",\"coupure_fichier\":\"%s\",\"coupure_apres_ms\":%lu,\"coupure_pct\":%u,\"coupure_bouton_ms\":%lu,"
+    "\"btn_actions\":%lu,\"btn_ignores\":%lu,\"btn_max_ms\":%lu,\"btn_niveau\":%d,"
     "\"audio_tours\":%lu,\"audio_ecart_max_ms\":%lu,\"audio_sup_dma\":%lu,"
     "\"audio_n50_90\":%lu,\"audio_n90_200\":%lu,\"audio_n200_500\":%lu,\"audio_n500\":%lu,"
     "\"audio_pump_max_ms\":%lu,\"audio_tick_max_ms\":%lu,\"audio_http_max_ms\":%lu,"
@@ -4116,6 +4149,7 @@ void handleDiag() {
     (unsigned long)g_blocage.dmaLibre, raisonRedemarrage(),
     g_mietteAvant[0] ? g_mietteAvant : "-", (unsigned long)g_mietteAvantInfo,
     g_coupure.cause, g_coupure.fichier, (unsigned long)g_coupure.apresMs, (unsigned)g_coupure.positionPct, (unsigned long)g_coupure.boutonMs,
+    (unsigned long)g_btnActions, (unsigned long)g_btnIgnores, (unsigned long)g_btnMaxMs, digitalRead(CONFIG_BUTTON_PIN),
     (unsigned long)g_blocage.tours, (unsigned long)(g_blocage.ecartMaxUs / 1000),
     (unsigned long)g_blocage.supDma,
     (unsigned long)g_blocage.n50_90, (unsigned long)g_blocage.n90_200,
@@ -4161,7 +4195,7 @@ int v2SyncContent() {
   if (_syncAbandon || audio.isRunning()) { _syncAFaire = true; _syncPasAvant = millis() + 120000UL; return 0; }
 
   // ── [SYNCHRO] Ce que cette boucle NE FAIT PLUS, et pourquoi ──────────────
-  // Jusqu'en 3.0.25 elle ouvrait une connexion TLS pour CHAQUE fichier, lisait
+  // Jusqu'en 3.0.26 elle ouvrait une connexion TLS pour CHAQUE fichier, lisait
   // le Content-Length, et si la taille sur la SD differait, EFFACAIT le fichier
   // puis le retelechargeait. Or cinq des six adhans precharges sur les cartes SD
   // n'ont plus la taille des fichiers du serveur (archive.org y a ajoute ~99 Ko
@@ -4347,7 +4381,7 @@ void setup() {
   // IMPERATIVEMENT AVANT Serial.begin() : begin() ne cree le tampon que s'il
   // n'existe pas encore, alors que setTxBufferSize() appele APRES supprime le
   // tampon en service pour en recreer un, sous le nez de l'interruption
-  // d'emission. La 3.0.25 le faisait apres, et la carte ne repondait plus.
+  // d'emission. La 3.0.26 le faisait apres, et la carte ne repondait plus.
   Serial.setTxBufferSize(2048);
 #endif
   Serial.begin(115200);
@@ -4881,11 +4915,11 @@ static void bancCommande(String c) {
   String verbe = (esp < 0) ? c : c.substring(0, esp);
   String arg   = (esp < 0) ? String("") : c.substring(esp + 1);
   arg.trim();
-  char buf[768];
+  char buf[896];
 
   if (verbe == "info") {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.25\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
+             "{\"version\":\"3.0.26\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
              deviceIdHex().c_str());
     bancRep(buf);
 
@@ -4900,6 +4934,7 @@ static void bancCommande(String c) {
              "\"gel_cpu_max_ms\":%lu,\"dma_ms\":%lu,\"dma_libre\":%lu,\"redemarrage\":\"%s\","
              "\"avant_plantage\":\"%s\",\"avant_plantage_info\":%lu,"
              "\"coupure\":\"%s\",\"coupure_fichier\":\"%s\",\"coupure_apres_ms\":%lu,\"coupure_pct\":%u,\"coupure_bouton_ms\":%lu,"
+             "\"btn_actions\":%lu,\"btn_ignores\":%lu,\"btn_max_ms\":%lu,\"btn_niveau\":%d,"
              "\"audio_tours\":%lu,\"audio_ecart_max_ms\":%lu,\"audio_sup_dma\":%lu,"
              "\"audio_n50_90\":%lu,\"audio_n90_200\":%lu,\"audio_n200_500\":%lu,\"audio_n500\":%lu,"
              "\"audio_pump_max_ms\":%lu,\"audio_tick_max_ms\":%lu,\"audio_http_max_ms\":%lu,"
@@ -4912,6 +4947,7 @@ static void bancCommande(String c) {
              (unsigned long)g_blocage.dmaLibre, raisonRedemarrage(),
              g_mietteAvant[0] ? g_mietteAvant : "-", (unsigned long)g_mietteAvantInfo,
              g_coupure.cause, g_coupure.fichier, (unsigned long)g_coupure.apresMs, (unsigned)g_coupure.positionPct, (unsigned long)g_coupure.boutonMs,
+             (unsigned long)g_btnActions, (unsigned long)g_btnIgnores, (unsigned long)g_btnMaxMs, digitalRead(CONFIG_BUTTON_PIN),
              (unsigned long)g_blocage.tours, (unsigned long)(g_blocage.ecartMaxUs / 1000),
              (unsigned long)g_blocage.supDma,
              (unsigned long)g_blocage.n50_90, (unsigned long)g_blocage.n90_200,
