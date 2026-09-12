@@ -41,20 +41,12 @@ La réponse te redonne tout, avec `device_id` et `prefixe` : c'est la preuve que
 c'est bien pris. Vérifie que `connecte` passe à `true` dans les secondes qui
 suivent.
 
-**e. Imprime l'affiche AVEC l'identifiant.** Ouvre dans Chrome :
+**e. Imprime l'affiche.** `affiche-mosquee-demo.pdf` est prêt pour la boîte de
+démonstration : A5, marges *aucune*, une seule page.
 
-```
-store_assets/marketing/affiche-mosquee-demo.html?id=B0937AF61B44
-```
-
-en remplaçant par ton identifiant, puis Imprimer, format A5, marges *aucune*.
-Une seule page.
-
-Le fichier `affiche-mosquee-demo-EXEMPLE.pdf` du dépôt est **un exemple** gravé
-sur une autre carte : ne l'imprime pas tel quel, son QR ne pilotera pas ta
-boîte. Sans identifiant dans l'adresse, l'affiche imprime volontairement un QR
-mort et te prévient en rouge à l'écran — plutôt qu'un QR qui mènerait nulle part
-devant les fidèles.
+Pour une AUTRE boîte, ouvre `affiche-mosquee-demo.html?id=SON_IDENTIFIANT` dans
+Chrome puis imprime. L'affiche te dit toujours à l'écran, au-dessus, quelle
+boîte son QR pilote — lis cette ligne avant d'imprimer.
 
 **f. Scanne ton propre QR avant de partir**, avec ton téléphone en 4G, Wi-Fi
 coupé. Tu dois voir « Prête — à vous de jouer » et la boîte doit répondre. Si
