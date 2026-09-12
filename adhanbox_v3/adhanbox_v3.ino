@@ -2,7 +2,7 @@
 // - Starts an AP when a long-press is detected on CONFIG_BUTTON_PIN
 // - Serves a small webpage that requests navigator.geolocation and POSTs lat/lon
 // - Stores lat/lon/accuracy/timestamp in Preferences (NVS)
-//Version: 3.0.30 (AdhanBox V3 / HW v3)
+//Version: 3.0.31 (AdhanBox V3 / HW v3)
 #include <Arduino.h>
 #include <esp_mac.h>   // esp_read_mac() : MAC eFuse, lisible sans Wi-Fi
 #include <Wire.h>
@@ -1808,7 +1808,7 @@ void handleOtaUploadComplete() {
 // GET /api/firmware/version
 void handleFirmwareVersion() {
   server.send(200, "application/json",
-              "{\"version\":\"3.0.30\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
+              "{\"version\":\"3.0.31\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
 }
 
 // Returns true if the request carries the correct API key (or if token not yet set).
@@ -1890,8 +1890,22 @@ static String deviceIdHex() {
 // Les 8 premiers caracteres du sujet sont « adhanbox », qu'on remplace par
 // « adhanbox/<id> » : chaque carte a donc ses propres sujets, et deux boites
 // branchees au meme broker ne s'entendent plus.
+// En MINUSCULES, et c'est essentiel : les sujets MQTT sont sensibles a la casse.
+// deviceIdHex() rend du %012llX, donc « B0937AF61B44 », alors que la page web et
+// le QR de l'affiche travaillent en minuscules. La boite se serait abonnee a
+// adhanbox/B09.../adhan/trigger pendant que les telephones publiaient sur
+// adhanbox/b09.../adhan/trigger : rien n'aurait jamais repondu, sans une seule
+// erreur nulle part. On ne touche pas a deviceIdHex() lui-meme : l'application
+// compare cet identifiant pour retrouver la boite quand son IP change, et toutes
+// les boites deja appairees en gardent la forme majuscule.
+static String deviceIdMqtt() {
+  String id = deviceIdHex();
+  id.toLowerCase();
+  return id;
+}
+
 static String topicPour(const char *sujet) {
-  return "adhanbox/" + deviceIdHex() + String(sujet + 8);
+  return "adhanbox/" + deviceIdMqtt() + String(sujet + 8);
 }
 
 void handleDeviceInfo() {
@@ -1907,11 +1921,11 @@ void handleDeviceInfo() {
   char buf[512];
   if (pairingWindow || hasValidToken) {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.30\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
+             "{\"version\":\"3.0.31\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
              OTA_HOSTNAME, deviceIdHex().c_str(), _apiToken.c_str(), _otaPass.c_str());
   } else {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.30\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
+             "{\"version\":\"3.0.31\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
              OTA_HOSTNAME, deviceIdHex().c_str());
   }
   server.send(200, "application/json", buf);
@@ -4066,7 +4080,7 @@ void reconnectMQTT() {
   mqtt.setCallback(mqttCallback);
 
   Serial.printf("[MQTT] Connecting to %s…\n", broker.c_str());
-  const String clientId = String(MQTT_CLIENT_ID_BASE) + "-" + deviceIdHex();
+  const String clientId = String(MQTT_CLIENT_ID_BASE) + "-" + deviceIdMqtt();
   if (mqtt.connect(clientId.c_str())) {
     Serial.println("[MQTT] Connected");
     mqtt.subscribe(topicPour(TOPIC_ADHAN_TRIGGER).c_str());
@@ -4282,7 +4296,7 @@ void handleMosqueeGet() {
            + ",\"broker\":\"" + broker + "\""
            + ",\"connecte\":" + String(mqtt.connected() ? "true" : "false")
            + ",\"device_id\":\"" + deviceIdHex() + "\""
-           + ",\"prefixe\":\"adhanbox/" + deviceIdHex() + "\""
+           + ",\"prefixe\":\"adhanbox/" + deviceIdMqtt() + "\""
            + ",\"dernier_refus\":\"" + demoRefus + "\"}";
   server.send(200, "application/json", j);
 }
@@ -5146,7 +5160,7 @@ static void bancCommande(String c) {
 
   if (verbe == "info") {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.30\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
+             "{\"version\":\"3.0.31\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
              deviceIdHex().c_str());
     bancRep(buf);
 
