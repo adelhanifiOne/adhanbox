@@ -75,12 +75,18 @@ ouvrant les outils du navigateur, un boîtier non.
 | garde-fou | par défaut | règle |
 |---|---|---|
 | volume plafonné | 18 / 30 | `volume_max` |
-| délai entre deux déclenchements | 45 s | `delai_s` |
+| repos après la **fin** d'une lecture | 12 s | `delai_s` |
 | silence avant la prière | 5 min | `avant_priere_min` |
 | silence après la prière | 20 min | `apres_priere_min` |
 
+Tant qu'elle joue, elle refuse un nouveau déclenchement (« elle joue deja ») :
+sinon n'importe qui relancerait un adhan de trois minutes depuis le début, en
+boucle. Le repos de 12 s ne commence qu'une fois le son terminé, pour qu'une
+boîte silencieuse ne réponde jamais « attendez » à quelqu'un qui vient d'arriver.
+
 Quand la boîte refuse, elle le dit, et la page l'affiche au fidèle, mot pour
-mot : « ⏸ patientez 12 s », « ⏸ la priere approche », « ⏸ priere en cours ».
+mot : « ⏸ elle joue deja », « ⏸ patientez 8 s », « ⏸ la priere approche »,
+« ⏸ priere en cours ».
 Il comprend, il attend, il ne croit pas que c'est cassé.
 
 Pour ajuster sur place, refais l'appel du **1.d** avec d'autres valeurs. Le
