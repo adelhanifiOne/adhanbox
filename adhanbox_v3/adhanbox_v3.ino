@@ -2,7 +2,7 @@
 // - Starts an AP when a long-press is detected on CONFIG_BUTTON_PIN
 // - Serves a small webpage that requests navigator.geolocation and POSTs lat/lon
 // - Stores lat/lon/accuracy/timestamp in Preferences (NVS)
-//Version: 3.0.28 (AdhanBox V3 / HW v3)
+//Version: 3.0.29 (AdhanBox V3 / HW v3)
 #include <Arduino.h>
 #include <esp_mac.h>   // esp_read_mac() : MAC eFuse, lisible sans Wi-Fi
 #include <Wire.h>
@@ -291,6 +291,14 @@ static void miette(const char *quoi, uint32_t info = 0) {
   g_mietteInfo = info;
 }
 
+// [CORAN] Vrai pendant le passage d'une sourate a la suivante. L'application
+// sonde /api/audio/status toutes les 2,5 s et avance elle aussi la file des
+// qu'elle voit la lecture s'arreter (playback_provider.dart, autoplay). Sans ce
+// drapeau, le trou de ~400 ms entre deux sourates serait vu une fois sur cinq :
+// les deux enchainements partiraient ensemble et la sourate repartirait du
+// debut. Tant qu'il est leve, la box se declare « en lecture ».
+volatile bool g_enchainement = false;
+
 // ── [SYNCHRO] Etat partage entre la tache de synchro, loop() et playPath ────
 volatile bool _syncRunning  = false;    // la tache de synchro tourne
 volatile bool _syncAbandon  = false;    // playPath lui demande de tout lacher
@@ -559,7 +567,7 @@ class I2SAudio {
   // POURQUOI C'EST DANGEREUX : ces deux appels sont sous assert() dans la
   // bibliotheque, et le noyau Arduino ESP32 compile SANS -DNDEBUG. Une seule
   // allocation ratee = abort = la carte redemarre, en pleine priere. C'est
-  // exactement ce qui est arrive avec la 3.0.28 : elle visait 16 x 4092 o, et
+  // exactement ce qui est arrive avec la 3.0.29 : elle visait 16 x 4092 o, et
   // se contentait de verifier la memoire TOTALE libre plus UN bloc. Or le
   // pilote demande 16 blocs SEPARES : apres des heures de Wi-Fi, de TLS et de
   // BLE, la RAM interne est fragmentee, le total suffit, les blocs non.
@@ -1766,7 +1774,7 @@ void handleOtaUploadComplete() {
 // GET /api/firmware/version
 void handleFirmwareVersion() {
   server.send(200, "application/json",
-              "{\"version\":\"3.0.28\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
+              "{\"version\":\"3.0.29\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
 }
 
 // Returns true if the request carries the correct API key (or if token not yet set).
@@ -1813,7 +1821,7 @@ void handleAudioStatus() {
   char buf[256];
   snprintf(buf, sizeof(buf),
            "{\"playing\":%s,\"paused\":%s,\"file\":\"%s\",\"pos\":%lu,\"size\":%lu,\"volume\":%d}",
-           (isPlaying && audio.isRunning()) ? "true" : "false",
+           ((isPlaying && audio.isRunning()) || g_enchainement) ? "true" : "false",
            audio.isPaused() ? "true" : "false",
            audio.currentPath(),
            (unsigned long)audio.posBytes(),
@@ -1857,11 +1865,11 @@ void handleDeviceInfo() {
   char buf[512];
   if (pairingWindow || hasValidToken) {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.28\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
+             "{\"version\":\"3.0.29\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
              OTA_HOSTNAME, deviceIdHex().c_str(), _apiToken.c_str(), _otaPass.c_str());
   } else {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.28\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
+             "{\"version\":\"3.0.29\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
              OTA_HOSTNAME, deviceIdHex().c_str());
   }
   server.send(200, "application/json", buf);
@@ -3841,7 +3849,6 @@ static bool coranSuivante(const char *fini, char *suivant, size_t n) {
 }
 
 void onPlaybackFinished() {
-  isPlaying = false;
   // [CORAN] Enchainer la sourate suivante. On exige que la lecture se soit
   // terminee NATURELLEMENT : g_coupure porte la cause, et « decodeur : la carte
   // SD ne repond plus » ne doit pas faire sauter a la suivante en masquant le
@@ -3852,10 +3859,14 @@ void onPlaybackFinished() {
       && strcmp(g_coupure.cause, "fin du fichier") == 0
       && coranSuivante(g_coupure.fichier, suivante, sizeof(suivante))) {
     Serial.printf("[Coran] %s termine, enchaine sur %s\n", g_coupure.fichier, suivante);
+    g_enchainement = true;          // la box reste « en lecture » pour l'application
     delay(300);
-    if (audio.playPath(suivante)) { isPlaying = true; return; }
+    const bool ok = audio.playPath(suivante);
+    g_enchainement = false;
+    if (ok) { isPlaying = true; return; }
     Serial.println("[Coran] enchainement refuse, on s'arrete la");
   }
+  isPlaying = false;
   if (shouldPlayDuaaAfterAdhan && adhanTrackBeforeDuaa > 0) {
     int adhanTrack = adhanTrackBeforeDuaa;
     shouldPlayDuaaAfterAdhan = false;
@@ -4221,7 +4232,7 @@ int v2SyncContent() {
   if (_syncAbandon || audio.isRunning()) { _syncAFaire = true; _syncPasAvant = millis() + 120000UL; return 0; }
 
   // ── [SYNCHRO] Ce que cette boucle NE FAIT PLUS, et pourquoi ──────────────
-  // Jusqu'en 3.0.28 elle ouvrait une connexion TLS pour CHAQUE fichier, lisait
+  // Jusqu'en 3.0.29 elle ouvrait une connexion TLS pour CHAQUE fichier, lisait
   // le Content-Length, et si la taille sur la SD differait, EFFACAIT le fichier
   // puis le retelechargeait. Or cinq des six adhans precharges sur les cartes SD
   // n'ont plus la taille des fichiers du serveur (archive.org y a ajoute ~99 Ko
@@ -4407,7 +4418,7 @@ void setup() {
   // IMPERATIVEMENT AVANT Serial.begin() : begin() ne cree le tampon que s'il
   // n'existe pas encore, alors que setTxBufferSize() appele APRES supprime le
   // tampon en service pour en recreer un, sous le nez de l'interruption
-  // d'emission. La 3.0.28 le faisait apres, et la carte ne repondait plus.
+  // d'emission. La 3.0.29 le faisait apres, et la carte ne repondait plus.
   Serial.setTxBufferSize(2048);
 #endif
   Serial.begin(115200);
@@ -4945,7 +4956,7 @@ static void bancCommande(String c) {
 
   if (verbe == "info") {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.28\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
+             "{\"version\":\"3.0.29\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
              deviceIdHex().c_str());
     bancRep(buf);
 
@@ -5056,7 +5067,7 @@ static void bancCommande(String c) {
 
   } else if (verbe == "audiostatus") {
     snprintf(buf, sizeof(buf), "{\"playing\":%s}",
-             (isPlaying && audio.isRunning()) ? "true" : "false");
+             ((isPlaying && audio.isRunning()) || g_enchainement) ? "true" : "false");
     bancRep(buf);
 
   } else if (verbe == "led") {
