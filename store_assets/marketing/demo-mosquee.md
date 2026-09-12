@@ -34,7 +34,7 @@ L'application le fait, ou le point d'accès de configuration.
 ```bash
 curl -X POST http://adhanbox.local/api/mosquee \
   -H "X-API-Key: TON_JETON" -H "Content-Type: application/json" \
-  -d '{"actif":true,"broker":"broker.hivemq.com","volume_max":18,"delai_s":45,"avant_priere_min":5,"apres_priere_min":20}'
+  -d '{"actif":true,"broker":"broker.hivemq.com","volume_max":18,"delai_s":0,"avant_priere_min":5,"apres_priere_min":20}'
 ```
 
 La réponse te redonne tout, avec `device_id` et `prefixe` : c'est la preuve que
@@ -75,18 +75,18 @@ ouvrant les outils du navigateur, un boîtier non.
 | garde-fou | par défaut | règle |
 |---|---|---|
 | volume plafonné | 18 / 30 | `volume_max` |
-| repos après la **fin** d'une lecture | 12 s | `delai_s` |
+| repos après la **fin** d'une lecture | aucun | `delai_s` |
 | silence avant la prière | 5 min | `avant_priere_min` |
 | silence après la prière | 20 min | `apres_priere_min` |
 
-Tant qu'elle joue, elle refuse un nouveau déclenchement (« elle joue deja ») :
-sinon n'importe qui relancerait un adhan de trois minutes depuis le début, en
-boucle. Le repos de 12 s ne commence qu'une fois le son terminé, pour qu'une
-boîte silencieuse ne réponde jamais « attendez » à quelqu'un qui vient d'arriver.
+Aucun délai par défaut : on peut couper et relancer quand on veut, même en plein
+adhan. C'est une démonstration, le visiteur doit pouvoir essayer tout de suite.
+Si un jour un groupe en abuse, `delai_s` remet un repos après la fin d'une
+lecture — mais il compte depuis la **fin**, jamais depuis le déclenchement, sinon
+une boîte silencieuse répond « attendez » à quelqu'un qui vient d'arriver.
 
 Quand la boîte refuse, elle le dit, et la page l'affiche au fidèle, mot pour
-mot : « ⏸ elle joue deja », « ⏸ patientez 8 s », « ⏸ la priere approche »,
-« ⏸ priere en cours ».
+mot : « ⏸ la priere approche », « ⏸ priere en cours ».
 Il comprend, il attend, il ne croit pas que c'est cassé.
 
 Pour ajuster sur place, refais l'appel du **1.d** avec d'autres valeurs. Le
