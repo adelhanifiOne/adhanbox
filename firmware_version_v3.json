@@ -1,6 +1,6 @@
 {
-  "version": "3.0.21",
+  "version": "3.0.29",
   "hardware": "v3",
   "url": "https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/build_temp_v3/adhanbox_v3.ino.bin",
-  "changelog": "Les adhans déjà présents ne sont plus jamais retéléchargés ni effacés au démarrage. Un adhan manquant est récupéré proprement, et la lecture garde toujours la priorité. Corrige les crépitements et les redémarrages en pleine prière."
+  "changelog": "Le Coran enchaîne maintenant les sourates tout seul, sans avoir à les lancer une par une. Un appui sur le bouton pendant l adhan garde votre lumière au lieu de l éteindre. Et le bouton tactile ne se déclenche plus tout seul au moment de la connexion Wi-Fi."
 }
