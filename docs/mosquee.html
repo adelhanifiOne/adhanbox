@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>AdhanBox — essayez-la</title>
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#08402F">
+<link rel="icon" type="image/png" href="logo-app.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Inter:wght@400;500;600;700&family=Amiri:wght@700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --vert:#0C5B45; --vert-fonce:#08402F; --or:#E9C46A; --creme:#FAF6EE;
+    --texte:#F2EFE7; --texte-2:#A9BDB4; --carte:rgba(255,255,255,.07);
+    --bord:rgba(233,196,106,.22);
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{
+    margin:0;min-height:100dvh;
+    background:radial-gradient(120% 80% at 50% 0%,#0F6B51 0%,var(--vert-fonce) 55%,#05261C 100%);
+    color:var(--texte);font-family:Inter,system-ui,sans-serif;
+    padding:max(18px,env(safe-area-inset-top)) 18px calc(24px + env(safe-area-inset-bottom));
+  }
+  .wrap{max-width:520px;margin:0 auto}
+
+  header{text-align:center;padding:6px 0 18px}
+  .ar{font-family:Amiri,serif;font-size:30px;color:var(--or);line-height:1;margin-bottom:6px}
+  h1{font-family:Fraunces,Georgia,serif;font-weight:700;font-size:30px;margin:0;color:var(--or);letter-spacing:.01em}
+  .sous{color:var(--texte-2);font-size:14.5px;margin:8px 0 0;line-height:1.5}
+
+  .etat{
+    display:flex;align-items:center;justify-content:center;gap:8px;
+    margin:16px 0 0;font-size:13px;color:var(--texte-2);
+    background:var(--carte);border:1px solid var(--bord);border-radius:999px;padding:8px 14px;
+  }
+  .pastille{width:8px;height:8px;border-radius:50%;background:#6B7A72;flex:none}
+  .pastille.ok{background:#5FD3A0;box-shadow:0 0 0 4px rgba(95,211,160,.18)}
+  .pastille.ko{background:#E48787}
+
+  h2{font-size:11.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--or);
+     font-weight:700;margin:26px 0 10px;opacity:.9}
+
+  .grille{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  button{font:inherit;color:inherit;cursor:pointer;border:1px solid var(--bord);
+         background:var(--carte);border-radius:16px;padding:16px 12px;
+         display:flex;flex-direction:column;align-items:center;gap:7px;
+         transition:transform .12s ease,background .12s ease}
+  button:active{transform:scale(.96);background:rgba(233,196,106,.16)}
+  button:disabled{opacity:.4;pointer-events:none}
+  button .ico{font-size:24px;line-height:1}
+  button .lbl{font-size:14px;font-weight:600}
+  button .sub{font-size:11.5px;color:var(--texte-2);font-weight:400}
+  button.large{grid-column:1/-1;flex-direction:row;justify-content:center;gap:12px;padding:18px}
+  button.or{background:var(--or);color:#08402F;border-color:var(--or)}
+  button.or .sub{color:rgba(8,64,47,.7)}
+  button.stop{background:rgba(228,135,135,.14);border-color:rgba(228,135,135,.4)}
+
+  .couleurs{display:flex;gap:9px;justify-content:center;flex-wrap:wrap;margin-top:4px}
+  .pot{width:46px;height:46px;border-radius:50%;border:2px solid rgba(255,255,255,.22);cursor:pointer}
+  .pot:active{transform:scale(.9)}
+
+  .msg{min-height:22px;text-align:center;font-size:13.5px;margin:14px 0 0;color:var(--or);font-weight:500}
+
+  .final{margin-top:30px;border-top:1px solid var(--bord);padding-top:22px;text-align:center}
+  .final p{color:var(--texte-2);font-size:14.5px;line-height:1.55;margin:0 0 16px}
+  a.cta{display:block;background:var(--or);color:#08402F;text-decoration:none;
+        font-weight:700;font-size:16.5px;padding:16px;border-radius:14px}
+  .promo{display:inline-block;margin-top:12px;font-size:13.5px;color:var(--texte-2)}
+  .promo b{color:var(--or);font-family:'Fraunces',serif;letter-spacing:.06em}
+  .reseaux{display:flex;gap:10px;margin-top:14px}
+  .reseaux a{flex:1;text-decoration:none;color:var(--texte);background:var(--carte);
+             border:1px solid var(--bord);border-radius:12px;padding:13px;font-size:14px;font-weight:600}
+  footer{text-align:center;color:var(--texte-2);font-size:11.5px;margin-top:24px;line-height:1.6}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="ar">أَذَان</div>
+    <h1>AdhanBox</h1>
+    <p class="sous">Essayez-la. Touchez un bouton, elle répond ici, devant vous.</p>
+    <div class="etat"><span class="pastille" id="pastille"></span><span id="etat">Connexion…</span></div>
+  </header>
+
+  <h2>L'appel à la prière</h2>
+  <div class="grille">
+    <button data-cmd="adhan" data-val="2"><span class="ico">🕌</span><span class="lbl">Adhan</span><span class="sub">La Mecque</span></button>
+    <button data-cmd="adhan" data-val="4"><span class="ico">🕌</span><span class="lbl">Adhan</span><span class="sub">Médine</span></button>
+  </div>
+
+  <h2>Coran et invocations</h2>
+  <div class="grille">
+    <button data-cmd="play" data-val="7"><span class="ico">📖</span><span class="lbl">Al-Fatiha</span></button>
+    <button data-cmd="play" data-val="8"><span class="ico">📖</span><span class="lbl">Al-Kahf</span></button>
+    <button data-cmd="play" data-val="9"><span class="ico">🌅</span><span class="lbl">Azkar du matin</span></button>
+    <button data-cmd="play" data-val="10"><span class="ico">🌙</span><span class="lbl">Azkar du soir</span></button>
+    <button class="large stop" data-cmd="stop"><span class="ico">⏹</span><span class="lbl">Arrêter le son</span></button>
+  </div>
+
+  <h2>La lumière</h2>
+  <div class="couleurs">
+    <div class="pot" style="background:#E9C46A" data-scene="1" title="Doré"></div>
+    <div class="pot" style="background:#5FD3A0" data-scene="2" title="Vert"></div>
+    <div class="pot" style="background:#7FB3E8" data-scene="3" title="Bleu"></div>
+    <div class="pot" style="background:#E4879F" data-scene="4" title="Rose"></div>
+    <div class="pot" style="background:linear-gradient(135deg,#E9C46A,#5FD3A0,#7FB3E8)" data-scene="5" title="Dégradé"></div>
+    <div class="pot" style="background:#1a1a1a" data-scene="0" title="Éteindre"></div>
+  </div>
+
+  <p class="msg" id="msg"></p>
+
+  <div class="final">
+    <p>Fabriquée à la main en France, une par une.<br>L'adhan de <b>votre</b> mosquée, chez vous.</p>
+    <a class="cta" id="cta" href="https://adhanbox.fr/personnaliser.html?promo=RENTREE10&amp;src=mosquee">Commander la mienne →</a>
+    <span class="promo">Code <b>RENTREE10</b> — 10&nbsp;% pour vous</span>
+    <div class="reseaux">
+      <a href="https://www.instagram.com/adhanbox" target="_blank" rel="noopener">Instagram</a>
+      <a href="https://www.tiktok.com/@adhanbox_officiel" target="_blank" rel="noopener">TikTok</a>
+    </div>
+  </div>
+
+  <footer>
+    AdhanBox · Adel Hanifi · Vic-en-Bigorre<br>
+    Merci de laisser la boîte en place pour les frères et sœurs après vous.
+  </footer>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/5.10.1/mqtt.min.js"></script>
+<script>
+// ── Page de démonstration en mosquée ────────────────────────────────────────
+// Le téléphone du fidèle reste sur SA connexion : il garde internet, donc les
+// boutons Instagram et « commander » fonctionnent. C'est toute la raison pour
+// laquelle on ne fait PAS de point d'accès Wi-Fi sur la boîte.
+//
+// Le lien passe par un broker MQTT public. Le préfixe des sujets contient
+// l'identifiant unique de la carte, transmis dans l'adresse (#...), donc seule
+// la boîte de la mosquée réagit, et personne ne devine les sujets.
+//
+// Les garde-fous (plafond de volume, délai entre deux adhans, silence autour
+// des heures de prière) sont DANS LE FIRMWARE, pas ici : une page se contourne,
+// pas le boîtier. Quand il refuse, il le dit, et on l'affiche.
+const BROKER = 'wss://broker.hivemq.com:8884/mqtt';
+const ID = (location.hash || '').replace('#', '').trim().toLowerCase();
+
+const $ = (s) => document.querySelector(s);
+const msg = $('#msg'), etat = $('#etat'), pastille = $('#pastille');
+let client = null, pret = false;
+
+function dire(t, duree = 3200) {
+  msg.textContent = t;
+  if (duree) setTimeout(() => { if (msg.textContent === t) msg.textContent = ''; }, duree);
+}
+
+if (!/^[0-9a-f]{12}$/.test(ID)) {
+  etat.textContent = 'Lien incomplet — rescannez le QR code';
+  pastille.className = 'pastille ko';
+} else {
+  const base = 'adhanbox/' + ID;
+  client = mqtt.connect(BROKER, { connectTimeout: 8000, reconnectPeriod: 4000, clean: true });
+
+  client.on('connect', () => {
+    pret = true;
+    pastille.className = 'pastille ok';
+    etat.textContent = 'Prête — à vous de jouer';
+    client.subscribe(base + '/audio/status');
+    client.subscribe(base + '/status');
+  });
+  client.on('reconnect', () => { pastille.className = 'pastille'; etat.textContent = 'Reconnexion…'; });
+  client.on('error', () => { pastille.className = 'pastille ko'; etat.textContent = 'Connexion impossible'; });
+
+  client.on('message', (sujet, charge) => {
+    const v = charge.toString();
+    // Le firmware répond « refus:<raison> » quand un garde-fou s'applique.
+    if (v.startsWith('refus:')) { dire('⏸ ' + v.slice(6), 4000); return; }
+    if (v === 'playing') dire('▶ En cours de lecture');
+    if (v === 'stopped') dire('⏹ Arrêté');
+  });
+
+  const envoyer = (sujet, valeur) => {
+    if (!pret) { dire('Connexion en cours, un instant…'); return; }
+    client.publish(base + sujet, String(valeur));
+  };
+
+  document.querySelectorAll('button[data-cmd]').forEach((b) => {
+    b.addEventListener('click', () => {
+      const c = b.dataset.cmd;
+      if (c === 'adhan') { envoyer('/adhan/trigger', b.dataset.val); dire('🕌 Adhan lancé'); }
+      if (c === 'play')  { envoyer('/audio/play',    b.dataset.val); dire('▶ Lecture lancée'); }
+      if (c === 'stop')  { envoyer('/audio/stop',    '1'); }
+    });
+  });
+
+  document.querySelectorAll('.pot').forEach((p) => {
+    p.addEventListener('click', () => {
+      envoyer('/led/scenario', p.dataset.scene);
+      dire(p.dataset.scene === '0' ? '💡 Lumière éteinte' : '💡 Lumière changée');
+    });
+  });
+}
+</script>
+</body>
+</html>
