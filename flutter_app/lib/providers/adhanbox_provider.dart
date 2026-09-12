@@ -204,6 +204,37 @@ final autoReconnectProvider = FutureProvider<String?>((ref) async {
     }
   }
 
+  // [ADRESSE] Reporte la nouvelle adresse sur l'entree enregistree, en gardant
+  // le nom et l'identifiant, et deplace le jeton d'API mis en cache sous
+  // l'ancienne cle. Sans ca, reconcileIdentity ne retrouve pas l'entree (elle
+  // porte encore l'ancienne IP), la purge des doublons la supprime, et
+  // l'appareil disparait de la liste apres s'etre reconnecte.
+  Future<void> adopterNouvelleAdresse(String? ancienne, String nouvelle) async {
+    if (ancienne == null || ancienne == nouvelle) return;
+    final jeton = prefs.getString('api_token_$ancienne');
+    if (jeton != null && jeton.isNotEmpty) {
+      await prefs.setString('api_token_$nouvelle', jeton);
+      await prefs.remove('api_token_$ancienne');
+    }
+    final raw = prefs.getString('savedDevices');
+    if (raw == null) return;
+    try {
+      final devices = (jsonDecode(raw) as List)
+          .map((e) => SavedDevice.fromJson(e as Map<String, dynamic>))
+          .toList();
+      final i = devices.indexWhere((d) => d.ip == ancienne);
+      if (i < 0) return;
+      devices[i] = SavedDevice(name: devices[i].name, ip: nouvelle, id: devices[i].id);
+      await prefs.setString(
+          'savedDevices', jsonEncode(devices.map((e) => e.toJson()).toList()));
+      ref.invalidate(savedDevicesProvider);
+    } catch (_) {}
+  }
+
+  // L'adresse memorisee qui vient d'echouer, s'il y en a une : on la remplacera
+  // partout des qu'une des etapes suivantes aura retrouve la carte.
+  String? ancienneAdresse;
+
   // 1. Essayer l'IP sauvegardée D'ABORD
   if (savedIp != null && savedIp.isNotEmpty) {
     try {
@@ -215,9 +246,16 @@ final autoReconnectProvider = FutureProvider<String?>((ref) async {
       await syncRtcTime(savedIp);
       return savedIp;
     } catch (e) {
+      // [ADRESSE] NE PAS abandonner ici. Une adresse IP donnee par une box
+      // internet change toute seule : coupure de courant, redemarrage du
+      // routeur, fin de bail DHCP. La carte est alors parfaitement en ligne,
+      // simplement ailleurs. On tombait pourtant en « Appareil hors ligne »
+      // sans jamais essayer adhanbox.local ni le scan, tous deux ecrits juste
+      // en dessous mais atteints uniquement quand AUCUNE adresse n'etait
+      // memorisee. Rapporte par une cliente le 12/09/2026 : « pourtant je suis
+      // connectee au wifi », carte affichee « Actif » a l'ancienne adresse.
       if (kDebugMode) debugPrint('autoReconnect: $savedIp indisponible — $e');
-      ref.read(currentDeviceIpProvider.notifier).state = savedIp;
-      throw Exception('Appareil hors ligne');
+      ancienneAdresse = savedIp;
     }
   }
 
@@ -230,6 +268,7 @@ final autoReconnectProvider = FutureProvider<String?>((ref) async {
       await prefs.setString('savedDevices',
           jsonEncode([SavedDevice(name: 'AdhanBox', ip: 'adhanbox.local').toJson()]));
     }
+    await adopterNouvelleAdresse(ancienneAdresse, 'adhanbox.local');
     ref.read(currentDeviceIpProvider.notifier).state = 'adhanbox.local';
     await loadApiToken('adhanbox.local');
     await reconcileIdentity('adhanbox.local');
@@ -249,6 +288,7 @@ final autoReconnectProvider = FutureProvider<String?>((ref) async {
         await prefs.setString('savedDevices',
             jsonEncode([SavedDevice(name: 'AdhanBox', ip: device.host).toJson()]));
       }
+      await adopterNouvelleAdresse(ancienneAdresse, device.host);
       ref.read(currentDeviceIpProvider.notifier).state = device.host;
       await loadApiToken(device.host);
       await reconcileIdentity(device.host);
@@ -257,6 +297,14 @@ final autoReconnectProvider = FutureProvider<String?>((ref) async {
     }
   } catch (e) {
     if (kDebugMode) debugPrint('autoReconnect: scan échoué — $e');
+  }
+
+  // Une adresse etait memorisee et AUCUNE des trois voies n'a repondu : la
+  // carte est reellement hors ligne. On restitue l'ancienne adresse pour que
+  // l'ecran continue de la nommer, et on leve l'erreur attendue par l'UI.
+  if (ancienneAdresse != null) {
+    ref.read(currentDeviceIpProvider.notifier).state = ancienneAdresse;
+    throw Exception('Appareil hors ligne');
   }
 
   return null;
@@ -600,6 +648,39 @@ final isV2DeviceProvider = FutureProvider<bool>((ref) async {
 // ne se voit JAMAIS proposer un firmware 3.x (et inversement) : les cartes V2
 // (DS3231) et V3 (RX8025T) ont des drivers RTC differents -> croiser les canaux
 // casserait les alarmes de priere. Une seule app pour tous.
+/// [MAJ] Vrai quand la box gagnerait a etre mise a jour. Sert a la pastille de
+/// la barre de navigation : jusqu'ici la mise a jour n'apparaissait QUE dans
+/// Reglages, sur une petite ligne, et personne n'y allait — des correctifs
+/// publies pendant des semaines ne sont arrives chez aucun client.
+/// Silencieux par construction : box injoignable, manifeste illisible ou
+/// version identique rendent false, jamais d'erreur remontee a l'ecran.
+bool versionPlusRecente(String actuelle, String publiee) {
+  try {
+    final a = actuelle.split('.').map(int.parse).toList();
+    final b = publiee.split('.').map(int.parse).toList();
+    for (int i = 0; i < 3; i++) {
+      final va = i < a.length ? a[i] : 0;
+      final vb = i < b.length ? b[i] : 0;
+      if (vb > va) return true;
+      if (va > vb) return false;
+    }
+  } catch (_) {}
+  return false;
+}
+
+final firmwareUpdateAvailableProvider = FutureProvider<bool>((ref) async {
+  try {
+    final device = await ref.watch(deviceFirmwareVersionProvider.future);
+    final latest = await ref.watch(latestFirmwareVersionProvider.future);
+    final actuelle = device['version']?.toString() ?? '';
+    final publiee = latest['version']?.toString() ?? '';
+    if (actuelle.isEmpty || publiee.isEmpty) return false;
+    return versionPlusRecente(actuelle, publiee);
+  } catch (_) {
+    return false;
+  }
+});
+
 final latestFirmwareVersionProvider =
     FutureProvider<Map<String, dynamic>>((ref) async {
   // 1) Choisir le canal d'après le firmware actuel du device.

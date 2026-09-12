@@ -13,7 +13,6 @@ import 'privacy_policy_screen.dart';
 import 'device_setup_screen.dart';
 import 'audio_content_screen.dart';
 import '../utils/friendly_error.dart';
-import '../utils/autorisation.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({Key? key}) : super(key: key);
@@ -141,7 +140,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         _FirmwareUpdateTile(
                           localVersionAsync: localVersionAsync,
                           latestVersionAsync: latestVersionAsync,
-                          onUpdatePressed: (latestVersion, url) => _runFirmwareUpdate(latestVersion, url),
+                          onUpdatePressed: (latestVersion, url, changelog) =>
+                              _runFirmwareUpdate(latestVersion, url, changelog),
                         ),
                       ],
                     ]);
@@ -204,14 +204,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       title: 'Changer le réseau WiFi',
                       subtitle: "Remettre l'appareil en mode appairage",
                       onTap: _relancerAppairage,
-                    ),
-                    _CardDivider(),
-                    _ActionTile(
-                      icon: Icons.phonelink_lock_rounded,
-                      iconColor: Colors.orange,
-                      title: 'Autoriser ce téléphone',
-                      subtitle: "Si la box refuse LED, azkar ou Coran",
-                      onTap: _autoriserTelephone,
                     ),
                     _CardDivider(),
                     _ActionTile(
@@ -357,11 +349,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   /// interdit le scan Wi-Fi aux applications, et une fois la box partie sur le
   /// nouveau reseau son ancienne adresse IP ne repond plus. On repasse donc par
   /// le meme chemin que le premier appairage, qui lui est eprouve.
-  /// Le parcours vit dans utils/autorisation.dart : il est aussi declenche
-  /// automatiquement des qu'une commande est refusee, depuis n'importe quel
-  /// ecran. Cette tuile n'est que la porte d'entree manuelle.
-  Future<void> _autoriserTelephone() => autoriserCeTelephone(context, ref);
-
   Future<void> _relancerAppairage() async {
     final api = ref.read(adhanboxApiProvider);
     if (api == null) {
@@ -524,14 +511,35 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
   }
 
-  Future<void> _runFirmwareUpdate(String latestVersion, String url) async {
+  Future<void> _runFirmwareUpdate(String latestVersion, String url,
+      [String changelog = '']) async {
+    // [MAJ] Le changelog du manifeste n'etait affiche NULLE PART : il est
+    // redige a chaque publication et personne ne le lisait. C'est pourtant la
+    // seule chose qui donne envie d'installer — « le Coran enchaine les
+    // sourates » parle, « version 3.0.29 » non.
     final confirm = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
         title: Text('Mise à jour v$latestVersion'),
-        content: Text(
-          'Voulez-vous télécharger et installer la version $latestVersion sur votre AdhanBox ?\n\n'
-          'Ne débranchez pas le boîtier pendant l\'opération. L\'appareil redémarrera automatiquement.',
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (changelog.trim().isNotEmpty) ...[
+                const Text('Ce qui change',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                const SizedBox(height: 6),
+                Text(changelog.trim(), style: const TextStyle(fontSize: 14, height: 1.45)),
+                const SizedBox(height: 16),
+              ],
+              const Text(
+                'Ne débranchez pas le boîtier pendant l\'opération. '
+                'Il redémarrera tout seul à la fin.',
+                style: TextStyle(fontSize: 13),
+              ),
+            ],
+          ),
         ),
         actions: [
           TextButton(
@@ -802,7 +810,7 @@ class _StatusBadge extends StatelessWidget {
 class _FirmwareUpdateTile extends ConsumerWidget {
   final AsyncValue<Map<String, dynamic>> localVersionAsync;
   final AsyncValue<Map<String, dynamic>> latestVersionAsync;
-  final Function(String version, String url) onUpdatePressed;
+  final Function(String version, String url, String changelog) onUpdatePressed;
 
   const _FirmwareUpdateTile({
     required this.localVersionAsync,
@@ -878,6 +886,7 @@ class _FirmwareUpdateTile extends ConsumerWidget {
           data: (latestData) {
             final latestVer = latestData['version']?.toString() ?? '1.0.0';
             final updateUrl = latestData['url']?.toString() ?? '';
+            final changelog = latestData['changelog']?.toString() ?? '';
             
             final hasUpdate = _isNewerVersion(currentVer, latestVer);
             
@@ -919,7 +928,7 @@ class _FirmwareUpdateTile extends ConsumerWidget {
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
                       ),
-                      onPressed: () => onUpdatePressed(latestVer, updateUrl),
+                      onPressed: () => onUpdatePressed(latestVer, updateUrl, changelog),
                       icon: const Icon(Icons.system_update_alt_rounded, size: 14),
                       label: Text('Installer v$latestVer', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                     ),

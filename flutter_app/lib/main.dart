@@ -9,6 +9,7 @@ import 'screens/azkar_coran_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/tutorial_screen.dart';
 import 'theme/app_theme.dart';
+import 'providers/adhanbox_provider.dart';
 import 'widgets/now_playing_bar.dart';
 
 final themeModeProvider = StateProvider<ThemeMode>((ref) => ThemeMode.dark);
@@ -225,10 +226,21 @@ class _MainNavState extends ConsumerState<MainNav> {
           backgroundColor: isDark ? AppTheme.darkSurface : AppTheme.lightSurface,
           height: 64,
           labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-          destinations: _items.map((item) => NavigationDestination(
-            icon: Icon(item.icon),
-            label: item.label,
-          )).toList(),
+          // [MAJ] Pastille sur « Reglages » quand une mise a jour attend. C'est
+          // le seul endroit ou elle etait visible, et il fallait y aller
+          // expres : des correctifs publies restaient inconnus des clients.
+          destinations: _items.asMap().entries.map((e) {
+            final item = e.value;
+            final derniere = e.key == _items.length - 1;
+            final aMaj = derniere &&
+                (ref.watch(firmwareUpdateAvailableProvider).value ?? false);
+            return NavigationDestination(
+              icon: aMaj
+                  ? Badge(backgroundColor: AppTheme.gold, child: Icon(item.icon))
+                  : Icon(item.icon),
+              label: item.label,
+            );
+          }).toList(),
         ),
           ),
         ],
