@@ -30,7 +30,14 @@ class _AudioContentScreenState extends ConsumerState<AudioContentScreen> {
       _error = null;
     });
     try {
-      final api = ref.read(adhanboxApiProvider);
+      // Attendre que l'appareil soit pret (IP renseignee de facon asynchrone au
+      // lancement, ~1-3s) au lieu d'echouer au 1er affichage.
+      var api = ref.read(adhanboxApiProvider);
+      for (int i = 0; api == null && i < 20; i++) {
+        await Future.delayed(const Duration(milliseconds: 300));
+        if (!mounted) return;
+        api = ref.read(adhanboxApiProvider);
+      }
       if (api == null) throw Exception('Aucun appareil connecté');
       final files = await api.listAudio();
       files.sort();
