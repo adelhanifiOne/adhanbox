@@ -2,7 +2,7 @@
 // - Starts an AP when a long-press is detected on CONFIG_BUTTON_PIN
 // - Serves a small webpage that requests navigator.geolocation and POSTs lat/lon
 // - Stores lat/lon/accuracy/timestamp in Preferences (NVS)
-//Version: 3.0.21 (AdhanBox V3 / HW v3)
+//Version: 3.0.29 (AdhanBox V3 / HW v3)
 #include <Arduino.h>
 #include <esp_mac.h>   // esp_read_mac() : MAC eFuse, lisible sans Wi-Fi
 #include <Wire.h>
@@ -291,11 +291,45 @@ static void miette(const char *quoi, uint32_t info = 0) {
   g_mietteInfo = info;
 }
 
+// [CORAN] Vrai pendant le passage d'une sourate a la suivante. L'application
+// sonde /api/audio/status toutes les 2,5 s et avance elle aussi la file des
+// qu'elle voit la lecture s'arreter (playback_provider.dart, autoplay). Sans ce
+// drapeau, le trou de ~400 ms entre deux sourates serait vu une fois sur cinq :
+// les deux enchainements partiraient ensemble et la sourate repartirait du
+// debut. Tant qu'il est leve, la box se declare « en lecture ».
+volatile bool g_enchainement = false;
+
 // ── [SYNCHRO] Etat partage entre la tache de synchro, loop() et playPath ────
 volatile bool _syncRunning  = false;    // la tache de synchro tourne
 volatile bool _syncAbandon  = false;    // playPath lui demande de tout lacher
 bool          _syncAFaire   = true;     // une synchro est due (boot, ou reprise)
 unsigned long _syncPasAvant = 0;        // millis() avant lequel on ne relance pas
+
+// ── [COUPURE] Qui a arrete la derniere lecture, et quand ────────────────────
+// « L'adhan coupe peu apres le debut » peut venir du bouton tactile (une
+// nappe de haut-parleur qui passe pres du capteur le declenche au son : observe
+// au montage), de l'application, de la fin du fichier, du decodeur qui renonce
+// (lectures SD a zero octet), ou d'une nouvelle lecture qui prend la place
+// (azkar programmes juste apres l'adhan). Meme symptome, cinq causes : on note
+// laquelle, avec le fichier, le temps ecoule et la position dans le fichier.
+struct Coupure {
+  char     cause[40];
+  char     fichier[32];
+  uint32_t apresMs;       // temps entre le debut de la lecture et l'arret
+  uint8_t  positionPct;   // ou en etait le fichier (0-100)
+  uint32_t boutonMs;      // pour le bouton : duree totale de l'appui
+};
+Coupure g_coupure = {"-", "-", 0, 0, 0};
+static void noterCoupure(const char *cause, const char *fichier, uint32_t debutMs, uint32_t pos, uint32_t taille) {
+  strncpy(g_coupure.cause, cause, sizeof(g_coupure.cause) - 1); g_coupure.cause[sizeof(g_coupure.cause) - 1] = 0;
+  strncpy(g_coupure.fichier, (fichier && fichier[0]) ? fichier : "-", sizeof(g_coupure.fichier) - 1);
+  g_coupure.fichier[sizeof(g_coupure.fichier) - 1] = 0;
+  g_coupure.apresMs = debutMs ? (millis() - debutMs) : 0;
+  g_coupure.positionPct = taille ? (uint8_t)((uint64_t)pos * 100 / taille) : 0;
+  g_coupure.boutonMs = 0;
+  Serial.printf("[Audio] coupure : %s, %s apres %lu ms (%u %%)\n", g_coupure.cause, g_coupure.fichier,
+                (unsigned long)g_coupure.apresMs, g_coupure.positionPct);
+}
 
 struct BlocageAudio {
   // Tout est mesure PENDANT la lecture, et seulement passe les 3 premieres
@@ -349,17 +383,31 @@ static inline void _plusHaut(uint32_t &m, uint32_t v) { if (v > m) m = v; }
 // c'est ce que produit un assert de la bibliotheque audio quand elle n'obtient
 // pas sa memoire DMA. « TENSION INSUFFISANTE » = alimentation. Le banc l'affiche.
 static const char* raisonRedemarrage() {
-  switch (esp_reset_reason()) {
-    case ESP_RST_POWERON:   return "allumage";
-    case ESP_RST_EXT:       return "reset externe";
-    case ESP_RST_SW:        return "logiciel";
-    case ESP_RST_PANIC:     return "PANIQUE";
-    case ESP_RST_INT_WDT:   return "chien de garde interruptions";
-    case ESP_RST_TASK_WDT:  return "chien de garde tache";
-    case ESP_RST_WDT:       return "chien de garde";
-    case ESP_RST_DEEPSLEEP: return "sortie de veille";
-    case ESP_RST_BROWNOUT:  return "TENSION INSUFFISANTE";
-    default:                return "inconnu";
+  // ATTENTION : ce sont des valeurs d'enumeration, PAS des macros. Un
+  // #ifdef ESP_RST_USB est donc toujours FAUX et supprimerait le cas au lieu de
+  // le proteger — c'est ce qui laissait le banc lire « inconnu » sur une carte
+  // fraichement flashee (le flashage par cable laisse ESP_RST_USB ou _JTAG).
+  // La liste complete existe depuis l'IDF 5 ; le defaut rend le numero brut
+  // pour qu'un cas inattendu reste identifiable au lieu de disparaitre.
+  static char autre[20];
+  const esp_reset_reason_t r = esp_reset_reason();
+  switch (r) {
+    case ESP_RST_POWERON:    return "allumage";
+    case ESP_RST_EXT:        return "reset externe";
+    case ESP_RST_SW:         return "logiciel";
+    case ESP_RST_PANIC:      return "PANIQUE";
+    case ESP_RST_INT_WDT:    return "chien de garde interruptions";
+    case ESP_RST_TASK_WDT:   return "chien de garde tache";
+    case ESP_RST_WDT:        return "chien de garde";
+    case ESP_RST_DEEPSLEEP:  return "sortie de veille";
+    case ESP_RST_BROWNOUT:   return "TENSION INSUFFISANTE";
+    case ESP_RST_SDIO:       return "sdio";
+    case ESP_RST_USB:        return "usb";
+    case ESP_RST_JTAG:       return "jtag";
+    case ESP_RST_EFUSE:      return "efuse";
+    case ESP_RST_PWR_GLITCH: return "COUPURE D ALIMENTATION";
+    case ESP_RST_CPU_LOCKUP: return "PROCESSEUR BLOQUE";
+    default:                 snprintf(autre, sizeof(autre), "inconnu (%d)", (int)r); return autre;
   }
 }
 
@@ -469,7 +517,13 @@ class I2SAudio {
     gain = (v / 30.0f) * 0.8f;
     if (out) out->SetGain(gain);
   }
-  void stop() {
+  // Position et taille AVANT de tout detruire, pour la fiche de coupure.
+  void noterAvantStop(const char *cause) {
+    if (!(mp3 || wav)) return;                       // rien ne jouait : pas une coupure
+    noterCoupure(cause, _curPath, g_blocage.debutMs, posBytes(), sizeBytes());
+  }
+  void stop(const char *cause = nullptr) {
+    if (cause) noterAvantStop(cause);
     if (mp3) { mp3->stop(); delete mp3; mp3 = nullptr; }
     if (wav) { wav->stop(); delete wav; wav = nullptr; }
     if (buf) { delete buf; buf = nullptr; }
@@ -513,7 +567,7 @@ class I2SAudio {
   // POURQUOI C'EST DANGEREUX : ces deux appels sont sous assert() dans la
   // bibliotheque, et le noyau Arduino ESP32 compile SANS -DNDEBUG. Une seule
   // allocation ratee = abort = la carte redemarre, en pleine priere. C'est
-  // exactement ce qui est arrive avec la 3.0.21 : elle visait 16 x 4092 o, et
+  // exactement ce qui est arrive avec la 3.0.29 : elle visait 16 x 4092 o, et
   // se contentait de verifier la memoire TOTALE libre plus UN bloc. Or le
   // pilote demande 16 blocs SEPARES : apres des heures de Wi-Fi, de TLS et de
   // BLE, la RAM interne est fragmentee, le total suffit, les blocs non.
@@ -562,7 +616,10 @@ class I2SAudio {
   }
 
   bool playPath(const char *path) {
-    stop();
+    if (mp3 || wav) {
+      char c[40]; snprintf(c, sizeof(c), "nouvelle lecture %.24s", path);
+      stop(c);
+    } else stop();
     g_blocage.raz();                 // [CREPITEMENT] chaque lecture repart a zero
     if (!_sdOk || !SD.exists(path)) return false;
     strncpy(_curPath, path, sizeof(_curPath) - 1);   // [PLAYER] memorise le fichier
@@ -634,8 +691,15 @@ class I2SAudio {
       if (out) { int16_t s[2] = {0, 0}; while (out->ConsumeSample(s)) {} }
       return;
     }
-    if (mp3 && mp3->isRunning()) { if (!mp3->loop()) stop(); }
-    if (wav && wav->isRunning()) { if (!wav->loop()) stop(); }
+    // Le decodeur rend faux a la fin du fichier, mais AUSSI quand la source ne
+    // lui donne plus rien (trois lectures SD a zero octet de suite). La position
+    // fait la difference : a moins de 8 Ko de la fin, c'est la fin.
+    if (mp3 && mp3->isRunning()) {
+      if (!mp3->loop()) stop((sizeBytes() && posBytes() + 8192 >= sizeBytes()) ? "fin du fichier" : "decodeur : la carte SD ne repond plus");
+    }
+    if (wav && wav->isRunning()) {
+      if (!wav->loop()) stop((sizeBytes() && posBytes() + 8192 >= sizeBytes()) ? "fin du fichier" : "decodeur : la carte SD ne repond plus");
+    }
   }
 };
 
@@ -812,7 +876,7 @@ static inline void hsv2rgb(uint8_t h, uint8_t s, uint8_t v, uint8_t &r, uint8_t 
 bool ds3231SetAlarm2Daily(uint8_t hour, uint8_t minute);
 void ds3231DisableAlarms();
 bool loadStoredLocation(double &outLat, double &outLon, double &outAcc);
-void stopPlay();
+void stopPlay(const char *cause = "autre");
 void playTrack(int track);
 
 // LED helper using driver API (some cores don't expose ledcSetup/ledcAttachPin)
@@ -1242,7 +1306,7 @@ void handlePlayTrack() {
 }
 
 void handleStopPlay() {
-  stopPlay();
+  stopPlay("application");
   server.send(200, "text/plain", "Stopped");
 }
 
@@ -1710,7 +1774,7 @@ void handleOtaUploadComplete() {
 // GET /api/firmware/version
 void handleFirmwareVersion() {
   server.send(200, "application/json",
-              "{\"version\":\"3.0.21\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
+              "{\"version\":\"3.0.29\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
 }
 
 // Returns true if the request carries the correct API key (or if token not yet set).
@@ -1757,7 +1821,7 @@ void handleAudioStatus() {
   char buf[256];
   snprintf(buf, sizeof(buf),
            "{\"playing\":%s,\"paused\":%s,\"file\":\"%s\",\"pos\":%lu,\"size\":%lu,\"volume\":%d}",
-           (isPlaying && audio.isRunning()) ? "true" : "false",
+           ((isPlaying && audio.isRunning()) || g_enchainement) ? "true" : "false",
            audio.isPaused() ? "true" : "false",
            audio.currentPath(),
            (unsigned long)audio.posBytes(),
@@ -1801,11 +1865,11 @@ void handleDeviceInfo() {
   char buf[512];
   if (pairingWindow || hasValidToken) {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.21\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
+             "{\"version\":\"3.0.29\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
              OTA_HOSTNAME, deviceIdHex().c_str(), _apiToken.c_str(), _otaPass.c_str());
   } else {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.21\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
+             "{\"version\":\"3.0.29\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
              OTA_HOSTNAME, deviceIdHex().c_str());
   }
   server.send(200, "application/json", buf);
@@ -3033,6 +3097,15 @@ void ledFlushSave(){
   }
 }
 
+// ── [BOUTON] Compteurs de diagnostic du capteur tactile ────────────────────
+// Un TTP223 marginal se voit a ses chiffres : des appuis retenus alors que
+// personne n'a touche la boite, des maintiens de plusieurs secondes (le chip
+// recalibre sa base et relache tout seul), des rejets en rafale. Le banc les
+// affiche : laisser la boite seule dix minutes et regarder si ca bouge.
+uint32_t g_btnActions = 0;    // appuis retenus (une action a ete faite)
+uint32_t g_btnIgnores = 0;    // appuis rejetes (trop courts, ou fenetre bruyante)
+uint32_t g_btnMaxMs   = 0;    // plus long maintien observe, en ms
+
 void checkConfigButton(){
   static bool inited = false;
   static int idleLevel = HIGH;      // niveau de repos capture au 1er passage
@@ -3044,16 +3117,52 @@ void checkConfigButton(){
   // la polarite. Un "appui" = niveau oppose au repos.
   if(!inited){ idleLevel = digitalRead(CONFIG_BUTTON_PIN); lastState = idleLevel; inited = true; return; }
 
+  // [COUPURE] Avant : la PREMIERE lecture d'un niveau « appuye » declenchait,
+  // une impulsion de quelques ms suffisait. Une nappe de haut-parleur qui passe
+  // pres du capteur en produit au son. Desormais l'appui doit etre TENU
+  // APPUI_MIN_MS d'affilee (un doigt tient bien plus ; le TTP223 lui-meme ne
+  // sort jamais moins de ~60 ms), et on mesure sa duree totale : un faux appui
+  // induit par le son dure tant que le son dure, un doigt lache.
+  const unsigned long APPUI_MIN_MS = 80;
+  static unsigned long appuiDepuis = 0;   // debut de l'appui en cours, 0 = relache
+  static bool appuiTraite = false;        // deja agi pour cet appui
   int val = digitalRead(CONFIG_BUTTON_PIN);
-  if(val != lastState && (millis() - debounceTime) > DEBOUNCE_MS){
-    debounceTime = millis();
-    bool pressed = (val != idleLevel);
-    lastState = val;
+  bool pressedNow = (val != idleLevel);
+  if (!pressedNow) {
+    if (appuiDepuis) {
+      const uint32_t tenu = millis() - appuiDepuis;
+      if (tenu > g_btnMaxMs) g_btnMaxMs = tenu;
+      if (appuiTraite && g_coupure.boutonMs == 1) g_coupure.boutonMs = tenu;
+      else if (!appuiTraite) g_btnIgnores++;
+    }
+    appuiDepuis = 0; appuiTraite = false; lastState = val;
+    return;
+  }
+  if (!appuiDepuis) appuiDepuis = millis();
+  // [BOUTON] Fenetres ou le capteur ment. La connexion Wi-Fi fait des salves
+  // d'emission de plusieurs centaines de mA : le 3V3 plonge, la base du TTP223
+  // se decale, et sa sortie part toute seule — Adel l'a vu s'allumer pile au
+  // moment de l'association, sans que personne ne touche la boite. Idem les
+  // premieres secondes apres le demarrage, pendant que le chip se calibre.
+  // Personne n'appuie a ces instants-la : on ignore, et on compte.
+  if (wifiConnectState == WCS_CONNECTING || millis() < 5000) {
+    if (!appuiTraite) { appuiTraite = true; g_btnIgnores++; }
+    return;
+  }
+  if (appuiTraite || millis() - appuiDepuis < APPUI_MIN_MS) return;
+  if (millis() - debounceTime <= DEBOUNCE_MS) return;
+  debounceTime = millis(); appuiTraite = true; lastState = val; g_btnActions++;
+  {
+    bool pressed = true;
     if(pressed){
       if(isPlaying){
-        stopPlay();
-        ledScenario = 0; ledCustomActive = false; setLedDuty(0);
-        if(useAddressableLEDs) stripSetAll(0,0,0);
+        stopPlay("bouton tactile");               // remet lui-meme le scenario d'avant l'adhan
+        g_coupure.boutonMs = 1;                      // sera remplace par la duree a la relache
+        // [LED] On ne coupe PLUS la lumiere ici. stopPlay() vient de restaurer le
+        // scenario qu'il y avait avant la scene de priere, et la couleur libre
+        // (ledCustomActive) n'est jamais touchee pendant l'adhan : elle revient
+        // d'elle-meme. Eteindre effacait le choix de l'utilisateur, et rendait un
+        // appui volontaire indiscernable d'un redemarrage (demande d'Adel, 09/09).
       } else {
         ledCustomActive = false;   // le bouton reprend la main sur la couleur libre
         do {
@@ -3700,7 +3809,8 @@ void playTrack(int track) {
   }
 }
 
-void stopPlay() {
+void stopPlay(const char *cause) {
+  audio.noterAvantStop(cause);
   shouldPlayDuaaAfterAdhan = false;
   adhanTrackBeforeDuaa = 0;
   if (prayerPrevLedScenario >= 0) {
@@ -3718,7 +3828,44 @@ void stopPlay() {
 }
 
 // Appelee depuis loop() quand la lecture I2S se termine naturellement
+// [CORAN] La sourate suivante, s'il y en a une.
+// Les recitations sont rangees en /quran/<recitateur>/001.mp3 a 114.mp3 : on
+// calcule le numero suivant au lieu de lister le dossier, ce qui couterait une
+// centaine d'entrees a lire sur une SD a 1 MHz, en plein enchainement.
+// Ne concerne QUE ce classement : /quran/al-kahf.mp3 et les adhans de /mp3/
+// n'ont pas de suite, et l'adhan a deja son propre enchainement vers la duaa.
+static bool coranSuivante(const char *fini, char *suivant, size_t n) {
+  if (!fini || strncmp(fini, "/quran/", 7) != 0) return false;
+  const char *barre = strrchr(fini, '/');
+  if (!barre || barre == fini + 6) return false;          // pas de sous-dossier
+  const char *nom = barre + 1;
+  if (strlen(nom) != 7 || strcasecmp(nom + 3, ".mp3") != 0) return false;
+  if (!isdigit((unsigned char)nom[0]) || !isdigit((unsigned char)nom[1])
+      || !isdigit((unsigned char)nom[2])) return false;
+  const int num = (nom[0] - '0') * 100 + (nom[1] - '0') * 10 + (nom[2] - '0');
+  if (num < 1 || num >= 114) return false;                // 114 = derniere sourate
+  snprintf(suivant, n, "%.*s%03d.mp3", (int)(barre - fini + 1), fini, num + 1);
+  return SD.exists(suivant);
+}
+
 void onPlaybackFinished() {
+  // [CORAN] Enchainer la sourate suivante. On exige que la lecture se soit
+  // terminee NATURELLEMENT : g_coupure porte la cause, et « decodeur : la carte
+  // SD ne repond plus » ne doit pas faire sauter a la suivante en masquant le
+  // probleme. Un arret par le bouton ou l'application ne passe pas ici du tout,
+  // stopPlay() ayant deja mis isPlaying a false.
+  char suivante[40];
+  if (!shouldPlayDuaaAfterAdhan
+      && strcmp(g_coupure.cause, "fin du fichier") == 0
+      && coranSuivante(g_coupure.fichier, suivante, sizeof(suivante))) {
+    Serial.printf("[Coran] %s termine, enchaine sur %s\n", g_coupure.fichier, suivante);
+    g_enchainement = true;          // la box reste « en lecture » pour l'application
+    delay(300);
+    const bool ok = audio.playPath(suivante);
+    g_enchainement = false;
+    if (ok) { isPlaying = true; return; }
+    Serial.println("[Coran] enchainement refuse, on s'arrete la");
+  }
   isPlaying = false;
   if (shouldPlayDuaaAfterAdhan && adhanTrackBeforeDuaa > 0) {
     int adhanTrack = adhanTrackBeforeDuaa;
@@ -3770,7 +3917,7 @@ void mqttCallback(char *topic, byte *payload, unsigned int len) {
     }
 
   } else if (strcmp(topic, TOPIC_AUDIO_STOP) == 0) {
-    stopPlay();
+    stopPlay("MQTT");
     mqtt.publish(TOPIC_AUDIO_STATUS, "stopped");
 
   } else if (strcmp(topic, TOPIC_AUDIO_VOLUME) == 0) {
@@ -4015,14 +4162,18 @@ static const char* wifiPsNom() {
 // Diagnostic : horloge SD reelle + debit de lecture (ko/s) + heap/PSRAM.
 // Sert a savoir si la SD tient le 128 kbps (16 ko/s) ou pas.
 void handleDiag() {
-  stopPlay();  // mesure au repos (pas de contention SPI avec l'audio)
+  const Coupure coupureAvant = g_coupure;   // le diagnostic va arreter la lecture : on garde la vraie cause
+  stopPlay("diagnostic");  // mesure au repos (pas de contention SPI avec l'audio)
+  g_coupure = coupureAvant;
   int kBs = audio.sdBenchKBs("/quran/afs/001.mp3", 256 * 1024);
-  char buf[640];
+  char buf[896];
   snprintf(buf, sizeof(buf),
     "{\"sd_clock_hz\":%lu,\"sd_read_kBs\":%d,\"need_kBs\":16,"
     "\"lecture_max_ms\":%lu,\"gels\":%lu,\"wifi_veille\":\"%s\","
     "\"gel_cpu_max_ms\":%lu,\"dma_ms\":%lu,\"dma_libre\":%lu,\"redemarrage\":\"%s\","
     "\"avant_plantage\":\"%s\",\"avant_plantage_info\":%lu,"
+    "\"coupure\":\"%s\",\"coupure_fichier\":\"%s\",\"coupure_apres_ms\":%lu,\"coupure_pct\":%u,\"coupure_bouton_ms\":%lu,"
+    "\"btn_actions\":%lu,\"btn_ignores\":%lu,\"btn_max_ms\":%lu,\"btn_niveau\":%d,"
     "\"audio_tours\":%lu,\"audio_ecart_max_ms\":%lu,\"audio_sup_dma\":%lu,"
     "\"audio_n50_90\":%lu,\"audio_n90_200\":%lu,\"audio_n200_500\":%lu,\"audio_n500\":%lu,"
     "\"audio_pump_max_ms\":%lu,\"audio_tick_max_ms\":%lu,\"audio_http_max_ms\":%lu,"
@@ -4034,6 +4185,8 @@ void handleDiag() {
     (unsigned long)audio.benchCpuMaxMs(), (unsigned long)g_blocage.dmaMs,
     (unsigned long)g_blocage.dmaLibre, raisonRedemarrage(),
     g_mietteAvant[0] ? g_mietteAvant : "-", (unsigned long)g_mietteAvantInfo,
+    g_coupure.cause, g_coupure.fichier, (unsigned long)g_coupure.apresMs, (unsigned)g_coupure.positionPct, (unsigned long)g_coupure.boutonMs,
+    (unsigned long)g_btnActions, (unsigned long)g_btnIgnores, (unsigned long)g_btnMaxMs, digitalRead(CONFIG_BUTTON_PIN),
     (unsigned long)g_blocage.tours, (unsigned long)(g_blocage.ecartMaxUs / 1000),
     (unsigned long)g_blocage.supDma,
     (unsigned long)g_blocage.n50_90, (unsigned long)g_blocage.n90_200,
@@ -4079,7 +4232,7 @@ int v2SyncContent() {
   if (_syncAbandon || audio.isRunning()) { _syncAFaire = true; _syncPasAvant = millis() + 120000UL; return 0; }
 
   // ── [SYNCHRO] Ce que cette boucle NE FAIT PLUS, et pourquoi ──────────────
-  // Jusqu'en 3.0.21 elle ouvrait une connexion TLS pour CHAQUE fichier, lisait
+  // Jusqu'en 3.0.29 elle ouvrait une connexion TLS pour CHAQUE fichier, lisait
   // le Content-Length, et si la taille sur la SD differait, EFFACAIT le fichier
   // puis le retelechargeait. Or cinq des six adhans precharges sur les cartes SD
   // n'ont plus la taille des fichiers du serveur (archive.org y a ajoute ~99 Ko
@@ -4265,7 +4418,7 @@ void setup() {
   // IMPERATIVEMENT AVANT Serial.begin() : begin() ne cree le tampon que s'il
   // n'existe pas encore, alors que setTxBufferSize() appele APRES supprime le
   // tampon en service pour en recreer un, sous le nez de l'interruption
-  // d'emission. La 3.0.21 le faisait apres, et la carte ne repondait plus.
+  // d'emission. La 3.0.29 le faisait apres, et la carte ne repondait plus.
   Serial.setTxBufferSize(2048);
 #endif
   Serial.begin(115200);
@@ -4799,22 +4952,26 @@ static void bancCommande(String c) {
   String verbe = (esp < 0) ? c : c.substring(0, esp);
   String arg   = (esp < 0) ? String("") : c.substring(esp + 1);
   arg.trim();
-  char buf[640];
+  char buf[896];
 
   if (verbe == "info") {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.21\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
+             "{\"version\":\"3.0.29\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
              deviceIdHex().c_str());
     bancRep(buf);
 
   } else if (verbe == "diag") {
-    stopPlay();                                  // mesure au repos, comme /api/diag
+    const Coupure coupureAvant = g_coupure;
+    stopPlay("diagnostic");                      // mesure au repos, comme /api/diag
+    g_coupure = coupureAvant;
     int kBs = audio.sdBenchKBs("/quran/afs/001.mp3", 256 * 1024);
     snprintf(buf, sizeof(buf),
              "{\"sd_clock_hz\":%lu,\"sd_read_kBs\":%d,\"need_kBs\":16,"
              "\"lecture_max_ms\":%lu,\"gels\":%lu,\"wifi_veille\":\"%s\","
              "\"gel_cpu_max_ms\":%lu,\"dma_ms\":%lu,\"dma_libre\":%lu,\"redemarrage\":\"%s\","
              "\"avant_plantage\":\"%s\",\"avant_plantage_info\":%lu,"
+             "\"coupure\":\"%s\",\"coupure_fichier\":\"%s\",\"coupure_apres_ms\":%lu,\"coupure_pct\":%u,\"coupure_bouton_ms\":%lu,"
+             "\"btn_actions\":%lu,\"btn_ignores\":%lu,\"btn_max_ms\":%lu,\"btn_niveau\":%d,"
              "\"audio_tours\":%lu,\"audio_ecart_max_ms\":%lu,\"audio_sup_dma\":%lu,"
              "\"audio_n50_90\":%lu,\"audio_n90_200\":%lu,\"audio_n200_500\":%lu,\"audio_n500\":%lu,"
              "\"audio_pump_max_ms\":%lu,\"audio_tick_max_ms\":%lu,\"audio_http_max_ms\":%lu,"
@@ -4826,6 +4983,8 @@ static void bancCommande(String c) {
              (unsigned long)audio.benchCpuMaxMs(), (unsigned long)g_blocage.dmaMs,
              (unsigned long)g_blocage.dmaLibre, raisonRedemarrage(),
              g_mietteAvant[0] ? g_mietteAvant : "-", (unsigned long)g_mietteAvantInfo,
+             g_coupure.cause, g_coupure.fichier, (unsigned long)g_coupure.apresMs, (unsigned)g_coupure.positionPct, (unsigned long)g_coupure.boutonMs,
+             (unsigned long)g_btnActions, (unsigned long)g_btnIgnores, (unsigned long)g_btnMaxMs, digitalRead(CONFIG_BUTTON_PIN),
              (unsigned long)g_blocage.tours, (unsigned long)(g_blocage.ecartMaxUs / 1000),
              (unsigned long)g_blocage.supDma,
              (unsigned long)g_blocage.n50_90, (unsigned long)g_blocage.n90_200,
@@ -4899,7 +5058,7 @@ static void bancCommande(String c) {
     bancRep(F("{\"ok\":true}"));
 
   } else if (verbe == "stop") {
-    stopPlay();
+    stopPlay("banc");
     bancRep(F("{\"ok\":true}"));
 
   } else if (verbe == "vol") {
@@ -4908,7 +5067,7 @@ static void bancCommande(String c) {
 
   } else if (verbe == "audiostatus") {
     snprintf(buf, sizeof(buf), "{\"playing\":%s}",
-             (isPlaying && audio.isRunning()) ? "true" : "false");
+             ((isPlaying && audio.isRunning()) || g_enchainement) ? "true" : "false");
     bancRep(buf);
 
   } else if (verbe == "led") {
@@ -5207,7 +5366,7 @@ void loop() {
       int t = cmd.substring(5).toInt();
       playTrack(t);
     } else if (cmd.equalsIgnoreCase("stopplay")) {
-      stopPlay();
+      stopPlay("console serie");
     }
   }
   // Pompe audio I2S + detection fin de lecture
