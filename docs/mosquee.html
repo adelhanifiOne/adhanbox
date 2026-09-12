@@ -195,7 +195,9 @@ if (!/^[0-9a-f]{12}$/.test(ID)) {
       const c = b.dataset.cmd;
       if (c === 'adhan') { envoyer('/adhan/trigger', b.dataset.val); dire('🕌 Adhan lancé'); }
       if (c === 'play')  { envoyer('/audio/play',    b.dataset.val); dire('▶ Lecture lancée'); }
-      if (c === 'stop')  { envoyer('/audio/stop',    '1'); }
+      // Un retour tout de suite : sans lui le bouton paraissait mort le temps
+      // que la boite reponde, et on appuyait trois fois.
+      if (c === 'stop')  { envoyer('/audio/stop',    '1'); dire('⏹ Arrêt…'); }
     });
   });
 
