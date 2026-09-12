@@ -2,7 +2,7 @@
 // - Starts an AP when a long-press is detected on CONFIG_BUTTON_PIN
 // - Serves a small webpage that requests navigator.geolocation and POSTs lat/lon
 // - Stores lat/lon/accuracy/timestamp in Preferences (NVS)
-//Version: 3.0.31 (AdhanBox V3 / HW v3)
+//Version: 3.0.32 (AdhanBox V3 / HW v3)
 #include <Arduino.h>
 #include <esp_mac.h>   // esp_read_mac() : MAC eFuse, lisible sans Wi-Fi
 #include <Wire.h>
@@ -1808,7 +1808,7 @@ void handleOtaUploadComplete() {
 // GET /api/firmware/version
 void handleFirmwareVersion() {
   server.send(200, "application/json",
-              "{\"version\":\"3.0.31\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
+              "{\"version\":\"3.0.32\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
 }
 
 // Returns true if the request carries the correct API key (or if token not yet set).
@@ -1921,11 +1921,11 @@ void handleDeviceInfo() {
   char buf[512];
   if (pairingWindow || hasValidToken) {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.31\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
+             "{\"version\":\"3.0.32\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
              OTA_HOSTNAME, deviceIdHex().c_str(), _apiToken.c_str(), _otaPass.c_str());
   } else {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.31\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
+             "{\"version\":\"3.0.32\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
              OTA_HOSTNAME, deviceIdHex().c_str());
   }
   server.send(200, "application/json", buf);
@@ -4078,6 +4078,14 @@ void reconnectMQTT() {
 
   mqtt.setServer(broker.c_str(), MQTT_PORT);
   mqtt.setCallback(mqttCallback);
+  // Par defaut PubSubClient attend 15 s un octet manquant au milieu d'un paquet.
+  // Pendant une lecture, 15 s d'arret c'est l'audio coupe net. Une seconde
+  // suffit largement sur un reseau local, et ne se produit qu'en cas de paquet
+  // TCP tronque.
+  mqtt.setSocketTimeout(1);
+  // Et par defaut le broker nous lache si loop() n'a pas tourne depuis 15 s.
+  // Une minute laisse passer un adhan entier meme si la boucle est chargee.
+  mqtt.setKeepAlive(60);
 
   Serial.printf("[MQTT] Connecting to %s…\n", broker.c_str());
   const String clientId = String(MQTT_CLIENT_ID_BASE) + "-" + deviceIdMqtt();
@@ -5160,7 +5168,7 @@ static void bancCommande(String c) {
 
   if (verbe == "info") {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.31\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
+             "{\"version\":\"3.0.32\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
              deviceIdHex().c_str());
     bancRep(buf);
 
@@ -6070,20 +6078,26 @@ void loop() {
     }
   }
 
-  // [AUDIO] Pendant la lecture, on NE fait AUCUNE operation reseau bloquante : un
-  // reconnectMQTT() (broker injoignable) ou ArduinoOTA peut bloquer plusieurs
-  // secondes -> le decodeur se vide -> l'audio se coupe (3 underruns = stop). La SD
-  // a largement le debit (117 ko/s a 1 MHz) ; le vrai tueur, c'est ces blocages.
-  if (!audio.isRunning()) {
-    // ArduinoOTA (only when connected)
-    if (WiFi.status() == WL_CONNECTED) ArduinoOTA.handle();
-
-    // MQTT : maintenir la connexion et traiter les messages entrants
-    if (WiFi.status() == WL_CONNECTED) {
-      if (!mqtt.connected()) reconnectMQTT();
-      else mqtt.loop();
-    }
+  // [AUDIO] Pendant la lecture, on NE fait AUCUNE operation reseau BLOQUANTE :
+  // reconnectMQTT() ouvre une connexion TCP vers un broker peut-etre injoignable,
+  // ArduinoOTA.handle() peut partir plusieurs secondes -> le decodeur se vide ->
+  // l'audio se coupe (3 underruns = stop). La SD a largement le debit (117 ko/s
+  // a 1 MHz) ; le vrai tueur, c'est ces blocages-la.
+  if (WiFi.status() == WL_CONNECTED && !audio.isRunning()) {
+    ArduinoOTA.handle();
+    if (!mqtt.connected()) reconnectMQTT();
   }
+
+  // mqtt.loop(), LUI, tourne aussi pendant la lecture, et c'est indispensable.
+  // Il ne lit que ce qui est DEJA arrive (il teste available() avant de lire) et
+  // envoie le ping de maintien ; sans lui, deux choses cassaient pendant un
+  // adhan : le bouton « arreter le son » de la page en mosquee n'arrivait jamais,
+  // et au bout de quinze secondes le broker coupait la connexion parce qu'il ne
+  // recevait plus de ping. On l'a vu en direct le 12/09/2026 : « connecte » passait
+  // a false en pleine lecture, et la boite n'obeissait plus a personne.
+  // Le seul risque restant est un paquet TCP tronque, borne a une seconde par
+  // setSocketTimeout(1) ci-dessus.
+  if (WiFi.status() == WL_CONNECTED && mqtt.connected()) mqtt.loop();
   // MQTT : heartbeat status toutes les 30s
   static unsigned long lastMqttStatus = 0;
   if (mqtt.connected() && millis() - lastMqttStatus > 30000) {
