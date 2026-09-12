@@ -108,8 +108,15 @@
   // L'identifiant de la carte vient de l'adresse : ?id=XXXXXXXXXXXX
   // Sans lui, on imprime un QR volontairement inutilisable plutot qu'un QR
   // qui menerait a une page morte devant les fideles.
-  const id = new URLSearchParams(location.search).get('id') || '';
-  const propre = id.trim().toLowerCase();
+  // La boite de demonstration, par defaut : ouvrir ce fichier normalement doit
+  // donner une affiche PRETE. La version precedente n'imprimait un QR valable
+  // que si on pensait a ajouter ?id=... a l'adresse, et sinon un QR mort qui
+  // renvoyait vers la page d'accueil du site. Un piege : on s'en apercoit une
+  // fois l'affiche imprimee.
+  const PAR_DEFAUT = 'b0937af61b44';
+
+  const donne = new URLSearchParams(location.search).get('id');
+  const propre = (donne || PAR_DEFAUT).trim().toLowerCase();
   const valide = /^[0-9a-f]{12}$/.test(propre);
   const url = valide
     ? 'https://adhanbox.fr/mosquee.html#' + propre
@@ -120,11 +127,12 @@
     colorDark: '#08402F', colorLight: '#ffffff',
     correctLevel: QRCode.CorrectLevel.M   // M : lisible meme un peu abime
   });
-  if (!valide) {
-    document.querySelector('.note').insertAdjacentHTML('beforeend',
-      '<p style="margin-top:8px;color:#B23A3A"><b>Identifiant manquant ou invalide.</b> ' +
-      'Le QR imprimé ne mènera nulle part. Rouvre ce fichier avec ?id=… à la fin.</p>');
-  }
+  document.querySelector('.note').insertAdjacentHTML('beforeend',
+    valide
+      ? '<p style="margin-top:8px;color:#0C5B45">Cette affiche pilote la boîte <b>' +
+        propre + '</b>' + (donne ? '' : ' (boîte de démonstration, par défaut)') + '.</p>'
+      : '<p style="margin-top:8px;color:#B23A3A"><b>Identifiant invalide :</b> « ' + donne +
+        ' ». Douze caractères, chiffres et lettres a–f. Le QR imprimé ne mènerait nulle part.</p>');
 </script>
 </body>
 </html>
