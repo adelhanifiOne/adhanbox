@@ -2,7 +2,7 @@
 // - Starts an AP when a long-press is detected on CONFIG_BUTTON_PIN
 // - Serves a small webpage that requests navigator.geolocation and POSTs lat/lon
 // - Stores lat/lon/accuracy/timestamp in Preferences (NVS)
-//Version: 3.0.32 (AdhanBox V3 / HW v3)
+//Version: 3.0.33 (AdhanBox V3 / HW v3)
 #include <Arduino.h>
 #include <esp_mac.h>   // esp_read_mac() : MAC eFuse, lisible sans Wi-Fi
 #include <Wire.h>
@@ -217,11 +217,11 @@ PubSubClient mqtt(mqttWifiClient);
 // client garde son comportement habituel.
 bool     demoActif       = false;
 int      demoVolumeMax   = 18;    // sur 30
-uint32_t demoDelaiS      = 45;    // entre deux declenchements
+uint32_t demoDelaiS      = 12;    // apres la FIN d une lecture, avant la suivante
 uint16_t demoAvantPriere = 5;     // minutes de silence avant l'appel
 uint16_t demoApresPriere = 20;    // minutes de silence apres
-unsigned long demoDernier = 0;    // millis() du dernier declenchement accepte
 uint32_t demoPriereA   = 0;       // unixtime du dernier adhan de priere reellement joue
+unsigned long demoFin  = 0;       // millis() de la fin de la derniere lecture
 String   demoRefus;               // pourquoi le dernier ordre a ete refuse
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1808,7 +1808,7 @@ void handleOtaUploadComplete() {
 // GET /api/firmware/version
 void handleFirmwareVersion() {
   server.send(200, "application/json",
-              "{\"version\":\"3.0.32\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
+              "{\"version\":\"3.0.33\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
 }
 
 // Returns true if the request carries the correct API key (or if token not yet set).
@@ -1921,11 +1921,11 @@ void handleDeviceInfo() {
   char buf[512];
   if (pairingWindow || hasValidToken) {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.32\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
+             "{\"version\":\"3.0.33\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
              OTA_HOSTNAME, deviceIdHex().c_str(), _apiToken.c_str(), _otaPass.c_str());
   } else {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.32\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
+             "{\"version\":\"3.0.33\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
              OTA_HOSTNAME, deviceIdHex().c_str());
   }
   server.send(200, "application/json", buf);
@@ -3878,6 +3878,7 @@ void stopPlay(const char *cause) {
   }
   audio.stop();
   isPlaying = false;
+  demoFin = millis();               // [MOSQUEE] le repos part d'ici
   prefs.begin("adhancfg", true);
   int storedVol = constrain(prefs.getInt("volume", 20), 0, 30);
   prefs.end();
@@ -3925,6 +3926,7 @@ void onPlaybackFinished() {
     Serial.println("[Coran] enchainement refuse, on s'arrete la");
   }
   isPlaying = false;
+  demoFin = millis();               // [MOSQUEE] le repos part d'ici
   if (shouldPlayDuaaAfterAdhan && adhanTrackBeforeDuaa > 0) {
     int adhanTrack = adhanTrackBeforeDuaa;
     shouldPlayDuaaAfterAdhan = false;
@@ -3973,9 +3975,17 @@ static bool demoAutorise() {
     }
   }
 
-  // Delai entre deux declenchements.
-  if (demoDernier && millis() - demoDernier < demoDelaiS * 1000UL) {
-    const unsigned long reste = (demoDelaiS * 1000UL - (millis() - demoDernier)) / 1000UL + 1;
+  // Tant qu'elle joue, on ne relance pas : le compteur partait du DEBUT du
+  // declenchement, si bien qu'au bout du delai n'importe qui pouvait relancer un
+  // adhan de trois minutes depuis le debut, en boucle - tout ce que ce garde-fou
+  // devait empecher. Et une fois le son fini, la boite refusait encore alors
+  // qu'elle etait silencieuse : le visiteur croyait qu'elle etait cassee.
+  if (isPlaying || g_enchainement) {
+    demoRefus = "elle joue deja"; return false;
+  }
+  // Petit repos apres la FIN de la lecture, pour ne pas enchainer sans fin.
+  if (demoFin && millis() - demoFin < demoDelaiS * 1000UL) {
+    const unsigned long reste = (demoDelaiS * 1000UL - (millis() - demoFin)) / 1000UL + 1;
     demoRefus = "patientez " + String(reste) + " s"; return false;
   }
   return true;
@@ -4006,7 +4016,6 @@ void mqttCallback(char *topic, byte *payload, unsigned int len) {
       mqtt.publish(topicPour(TOPIC_AUDIO_STATUS).c_str(), ("refus:" + demoRefus).c_str());
       return;
     }
-    demoDernier = millis();
     demoBriderVolume();
     int track = (len > 0) ? atoi(msg) : 2;
     if (track < 2) track = 2;  // jamais track 1 (duaa) comme adhan
@@ -4029,7 +4038,6 @@ void mqttCallback(char *topic, byte *payload, unsigned int len) {
         mqtt.publish(topicPour(TOPIC_AUDIO_STATUS).c_str(), ("refus:" + demoRefus).c_str());
         return;
       }
-      demoDernier = millis();
       demoBriderVolume();
       playTrack(track);
       mqtt.publish(topicPour(TOPIC_AUDIO_STATUS).c_str(), "playing");
@@ -5168,7 +5176,7 @@ static void bancCommande(String c) {
 
   if (verbe == "info") {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.32\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
+             "{\"version\":\"3.0.33\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
              deviceIdHex().c_str());
     bancRep(buf);
 
