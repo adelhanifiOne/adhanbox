@@ -2,7 +2,7 @@
 // - Starts an AP when a long-press is detected on CONFIG_BUTTON_PIN
 // - Serves a small webpage that requests navigator.geolocation and POSTs lat/lon
 // - Stores lat/lon/accuracy/timestamp in Preferences (NVS)
-//Version: 3.0.29 (AdhanBox V3 / HW v3)
+//Version: 3.0.31 (AdhanBox V3 / HW v3)
 #include <Arduino.h>
 #include <esp_mac.h>   // esp_read_mac() : MAC eFuse, lisible sans Wi-Fi
 #include <Wire.h>
@@ -177,10 +177,20 @@ WiFiClient mqttWifiClient;
 PubSubClient mqtt(mqttWifiClient);
 
 #define MQTT_PORT 1883
-#define MQTT_CLIENT_ID "adhanbox"
+// L'identifiant de client doit etre UNIQUE sur un broker : deux clients qui
+// portent le meme nom s'ejectent mutuellement, en boucle. Sur un broker public
+// comme celui de la demonstration en mosquee, « adhanbox » tout court suffisait
+// a ce que n'importe qui mette la boite hors ligne en se connectant sous le
+// meme nom. On y accroche donc l'identifiant de la carte. Voir topicPour().
+#define MQTT_CLIENT_ID_BASE "adhanbox"
 #define MQTT_RECONNECT_MS 5000UL
 
 // Subscribe topics
+// [MOSQUEE] Les sujets etaient FIXES : deux AdhanBox branchees au meme broker
+// auraient obei aux memes ordres, et n'importe qui connaissant le nom pouvait
+// les envoyer. Ils sont desormais prefixes par l'identifiant unique de la
+// carte, qui n'est ni devinable ni partage : adhanbox/<device_id>/...
+// Les constantes ci-dessous restent les suffixes.
 #define TOPIC_ADHAN_TRIGGER "adhanbox/adhan/trigger"
 #define TOPIC_AUDIO_PLAY "adhanbox/audio/play"
 #define TOPIC_AUDIO_STOP "adhanbox/audio/stop"
@@ -192,6 +202,28 @@ PubSubClient mqtt(mqttWifiClient);
 #define TOPIC_STATUS "adhanbox/status"
 #define TOPIC_AUDIO_STATUS "adhanbox/audio/status"
 #define TOPIC_PRAYER_FIRED "adhanbox/prayer/fired"
+
+// ── [MOSQUEE] Mode demonstration ───────────────────────────────────────────
+// Pose une AdhanBox dans une mosquee et laisse les fideles la piloter depuis
+// leur telephone. Trois garde-fous, sans lesquels l'imam fait retirer la boite
+// le premier jour :
+//   - un PLAFOND de volume, applique dans le firmware et pas seulement dans la
+//     page : c'est le seul endroit ou personne ne peut le contourner ;
+//   - un DELAI entre deux declenchements, pour qu'un groupe d'adolescents ne
+//     puisse pas enchainer les adhans ;
+//   - un SILENCE autour des heures de priere, de quelques minutes avant
+//     l'appel a la fin de l'office.
+// Hors mode demonstration, rien de tout cela ne s'applique : une boite chez un
+// client garde son comportement habituel.
+bool     demoActif       = false;
+int      demoVolumeMax   = 18;    // sur 30
+uint32_t demoDelaiS      = 45;    // entre deux declenchements
+uint16_t demoAvantPriere = 5;     // minutes de silence avant l'appel
+uint16_t demoApresPriere = 20;    // minutes de silence apres
+unsigned long demoDernier = 0;    // millis() du dernier declenchement accepte
+uint32_t demoPriereA   = 0;       // unixtime du dernier adhan de priere reellement joue
+String   demoRefus;               // pourquoi le dernier ordre a ete refuse
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 // ── OTA ──────────────────────────────────────────────────────────────────────
@@ -567,7 +599,7 @@ class I2SAudio {
   // POURQUOI C'EST DANGEREUX : ces deux appels sont sous assert() dans la
   // bibliotheque, et le noyau Arduino ESP32 compile SANS -DNDEBUG. Une seule
   // allocation ratee = abort = la carte redemarre, en pleine priere. C'est
-  // exactement ce qui est arrive avec la 3.0.29 : elle visait 16 x 4092 o, et
+  // exactement ce qui est arrive avec la 3.0.17 : elle visait 16 x 4092 o, et
   // se contentait de verifier la memoire TOTALE libre plus UN bloc. Or le
   // pilote demande 16 blocs SEPARES : apres des heures de Wi-Fi, de TLS et de
   // BLE, la RAM interne est fragmentee, le total suffit, les blocs non.
@@ -781,6 +813,8 @@ void handleStopPlay();
 bool tryReinitSD();
 void playTrack(int track);
 void handleSetVolume();
+void handleMosqueeGet();      // [MOSQUEE] etat du mode demonstration
+void handleMosqueeSet();      // [MOSQUEE] activer / regler le mode demonstration
 void handleFactoryStatus();   // [USINE] ce que la carte garde d'un atelier ou d'un client
 void handleFactoryReset();    // [USINE] remise a zero par le reseau, jeton + confirmation
 void handleGetVolume();
@@ -1774,7 +1808,7 @@ void handleOtaUploadComplete() {
 // GET /api/firmware/version
 void handleFirmwareVersion() {
   server.send(200, "application/json",
-              "{\"version\":\"3.0.29\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
+              "{\"version\":\"3.0.31\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
 }
 
 // Returns true if the request carries the correct API key (or if token not yet set).
@@ -1852,6 +1886,28 @@ static String deviceIdHex() {
   return String(id);
 }
 
+// [MOSQUEE] « adhanbox/adhan/trigger » -> « adhanbox/<device_id>/adhan/trigger ».
+// Les 8 premiers caracteres du sujet sont « adhanbox », qu'on remplace par
+// « adhanbox/<id> » : chaque carte a donc ses propres sujets, et deux boites
+// branchees au meme broker ne s'entendent plus.
+// En MINUSCULES, et c'est essentiel : les sujets MQTT sont sensibles a la casse.
+// deviceIdHex() rend du %012llX, donc « B0937AF61B44 », alors que la page web et
+// le QR de l'affiche travaillent en minuscules. La boite se serait abonnee a
+// adhanbox/B09.../adhan/trigger pendant que les telephones publiaient sur
+// adhanbox/b09.../adhan/trigger : rien n'aurait jamais repondu, sans une seule
+// erreur nulle part. On ne touche pas a deviceIdHex() lui-meme : l'application
+// compare cet identifiant pour retrouver la boite quand son IP change, et toutes
+// les boites deja appairees en gardent la forme majuscule.
+static String deviceIdMqtt() {
+  String id = deviceIdHex();
+  id.toLowerCase();
+  return id;
+}
+
+static String topicPour(const char *sujet) {
+  return "adhanbox/" + deviceIdMqtt() + String(sujet + 8);
+}
+
 void handleDeviceInfo() {
   // [SECU] Le token (et ota_pass) ne sont exposes QUE pendant la fenetre
   // d'appairage : mode AP, ou dans les 10 min apres le boot, ou si l'appelant
@@ -1865,11 +1921,11 @@ void handleDeviceInfo() {
   char buf[512];
   if (pairingWindow || hasValidToken) {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.29\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
+             "{\"version\":\"3.0.31\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
              OTA_HOSTNAME, deviceIdHex().c_str(), _apiToken.c_str(), _otaPass.c_str());
   } else {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.29\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
+             "{\"version\":\"3.0.31\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
              OTA_HOSTNAME, deviceIdHex().c_str());
   }
   server.send(200, "application/json", buf);
@@ -3028,6 +3084,8 @@ void setupServerRoutes() {
   server.on("/api/audio/pause", HTTP_GET, handleAudioPause);     // [PLAYER] pause
   server.on("/api/audio/resume", HTTP_GET, handleAudioResume);   // [PLAYER] reprise
   server.on("/api/diag", HTTP_GET, handleDiag);
+  server.on("/api/mosquee", HTTP_GET, handleMosqueeGet);     // [MOSQUEE] etat + sujets MQTT
+  server.on("/api/mosquee", HTTP_POST, handleMosqueeSet);    // [MOSQUEE] activer / regler
 #if ENABLE_BLE
   // Depuis la page web de la box : demande l'appairage BLE. Demarrer le BLE A CHAUD
   // (WiFi+web+audio en RAM) manque de memoire -> crash. On memorise la demande et on
@@ -3889,13 +3947,67 @@ void onPlaybackFinished() {
 }
 
 // ── MQTT callback ─────────────────────────────────────────────────────────────
+// [MOSQUEE] Un ordre venu du telephone d'un fidele est-il acceptable ?
+// Renvoie true si on peut jouer. Remplit demoRefus sinon, pour que la page
+// puisse dire pourquoi plutot que de rester muette.
+static bool demoAutorise() {
+  if (!demoActif) return true;                       // boite de client : rien ne change
+  demoRefus = "";
+
+  // Silence autour des heures de priere. On compare a la prochaine priere
+  // calculee par le firmware, et a celle qui vient de sonner.
+  if (rtcPresent && timeUsable()) {
+    DateTime maintenant = rtc.now();
+    DateTime prochaine; int idx = 0;
+    if (computeNextPrayer(maintenant, prochaine, idx)) {
+      const long avant = (long)(prochaine.unixtime() - maintenant.unixtime());
+      if (avant >= 0 && avant <= (long)demoAvantPriere * 60L) {
+        demoRefus = "la priere approche"; return false;
+      }
+    }
+    if (demoPriereA > 0) {
+      const long depuis = (long)(maintenant.unixtime() - (uint32_t)demoPriereA);
+      if (depuis >= 0 && depuis <= (long)demoApresPriere * 60L) {
+        demoRefus = "priere en cours"; return false;
+      }
+    }
+  }
+
+  // Delai entre deux declenchements.
+  if (demoDernier && millis() - demoDernier < demoDelaiS * 1000UL) {
+    const unsigned long reste = (demoDelaiS * 1000UL - (millis() - demoDernier)) / 1000UL + 1;
+    demoRefus = "patientez " + String(reste) + " s"; return false;
+  }
+  return true;
+}
+
+// [MOSQUEE] Plafonne le volume avant toute lecture declenchee a distance.
+static void demoBriderVolume() {
+  if (!demoActif) return;
+  prefs.begin("adhancfg", true);
+  const int vol = constrain(prefs.getInt("volume", 20), 0, 30);
+  prefs.end();
+  if (vol > demoVolumeMax) audio.volume(demoVolumeMax);
+}
+
 void mqttCallback(char *topic, byte *payload, unsigned int len) {
   char msg[len + 1];
   memcpy(msg, payload, len);
   msg[len] = '\0';
   Serial.printf("[MQTT] %s → %s\n", topic, msg);
 
-  if (strcmp(topic, TOPIC_ADHAN_TRIGGER) == 0) {
+  // [MOSQUEE] Les sujets recus sont prefixes : on compare sur le suffixe.
+  const String sujet(topic);
+  auto est = [&](const char *t) { return sujet.endsWith(String(t + 8)); };
+
+  if (est(TOPIC_ADHAN_TRIGGER)) {
+    if (!demoAutorise()) {
+      Serial.printf("[MOSQUEE] adhan refuse : %s\n", demoRefus.c_str());
+      mqtt.publish(topicPour(TOPIC_AUDIO_STATUS).c_str(), ("refus:" + demoRefus).c_str());
+      return;
+    }
+    demoDernier = millis();
+    demoBriderVolume();
     int track = (len > 0) ? atoi(msg) : 2;
     if (track < 2) track = 2;  // jamais track 1 (duaa) comme adhan
     shouldPlayDuaaAfterAdhan = true;
@@ -3907,27 +4019,35 @@ void mqttCallback(char *topic, byte *payload, unsigned int len) {
       Serial.printf("MQTT adhan: LED switched to PRAYER scene (was %d)\n", prayerPrevLedScenario);
     }
     playTrack(track);
-    mqtt.publish(TOPIC_AUDIO_STATUS, "playing");
+    mqtt.publish(topicPour(TOPIC_AUDIO_STATUS).c_str(), "playing");
 
-  } else if (strcmp(topic, TOPIC_AUDIO_PLAY) == 0) {
+  } else if (est(TOPIC_AUDIO_PLAY)) {
     int track = atoi(msg);
     if (track > 0) {
+      if (!demoAutorise()) {
+        Serial.printf("[MOSQUEE] lecture refusee : %s\n", demoRefus.c_str());
+        mqtt.publish(topicPour(TOPIC_AUDIO_STATUS).c_str(), ("refus:" + demoRefus).c_str());
+        return;
+      }
+      demoDernier = millis();
+      demoBriderVolume();
       playTrack(track);
-      mqtt.publish(TOPIC_AUDIO_STATUS, "playing");
+      mqtt.publish(topicPour(TOPIC_AUDIO_STATUS).c_str(), "playing");
     }
 
-  } else if (strcmp(topic, TOPIC_AUDIO_STOP) == 0) {
+  } else if (est(TOPIC_AUDIO_STOP)) {
     stopPlay("MQTT");
-    mqtt.publish(TOPIC_AUDIO_STATUS, "stopped");
+    mqtt.publish(topicPour(TOPIC_AUDIO_STATUS).c_str(), "stopped");
 
-  } else if (strcmp(topic, TOPIC_AUDIO_VOLUME) == 0) {
-    int vol = constrain(atoi(msg), 0, 30);
+  } else if (est(TOPIC_AUDIO_VOLUME)) {
+    // En mode demonstration le plafond s'applique AUSSI au reglage direct.
+    int vol = constrain(atoi(msg), 0, demoActif ? demoVolumeMax : 30);
     audio.volume(vol);
     prefs.begin("adhancfg", false);
     prefs.putInt("volume", vol);
     prefs.end();
 
-  } else if (strcmp(topic, TOPIC_LED_SCENARIO) == 0) {
+  } else if (est(TOPIC_LED_SCENARIO)) {
     int sc = atoi(msg);
     if (sc >= 0 && sc < TOTAL_SCENES) {
       ledScenario = sc;
@@ -3936,7 +4056,7 @@ void mqttCallback(char *topic, byte *payload, unsigned int len) {
       prefs.end();
     }
 
-  } else if (strcmp(topic, TOPIC_LED_BRIGHTNESS) == 0) {
+  } else if (est(TOPIC_LED_BRIGHTNESS)) {
     int br = constrain(atoi(msg), 0, 100);
     ledBrightness = br;
     prefs.begin("adhancfg", false);
@@ -3960,14 +4080,15 @@ void reconnectMQTT() {
   mqtt.setCallback(mqttCallback);
 
   Serial.printf("[MQTT] Connecting to %s…\n", broker.c_str());
-  if (mqtt.connect(MQTT_CLIENT_ID)) {
+  const String clientId = String(MQTT_CLIENT_ID_BASE) + "-" + deviceIdMqtt();
+  if (mqtt.connect(clientId.c_str())) {
     Serial.println("[MQTT] Connected");
-    mqtt.subscribe(TOPIC_ADHAN_TRIGGER);
-    mqtt.subscribe(TOPIC_AUDIO_PLAY);
-    mqtt.subscribe(TOPIC_AUDIO_STOP);
-    mqtt.subscribe(TOPIC_AUDIO_VOLUME);
-    mqtt.subscribe(TOPIC_LED_SCENARIO);
-    mqtt.subscribe(TOPIC_LED_BRIGHTNESS);
+    mqtt.subscribe(topicPour(TOPIC_ADHAN_TRIGGER).c_str());
+    mqtt.subscribe(topicPour(TOPIC_AUDIO_PLAY).c_str());
+    mqtt.subscribe(topicPour(TOPIC_AUDIO_STOP).c_str());
+    mqtt.subscribe(topicPour(TOPIC_AUDIO_VOLUME).c_str());
+    mqtt.subscribe(topicPour(TOPIC_LED_SCENARIO).c_str());
+    mqtt.subscribe(topicPour(TOPIC_LED_BRIGHTNESS).c_str());
     mqttPublishStatus();
   } else {
     Serial.printf("[MQTT] Failed rc=%d — retry in %lus\n", mqtt.state(), MQTT_RECONNECT_MS / 1000);
@@ -3985,14 +4106,14 @@ void mqttPublishStatus() {
            isPlaying ? "true" : "false",
            ledScenario,
            ledBrightness);
-  mqtt.publish(TOPIC_STATUS, buf, /*retain=*/true);
+  mqtt.publish(topicPour(TOPIC_STATUS).c_str(), buf, /*retain=*/true);
 }
 
 void mqttPublishPrayerFired(int prayerIndex) {
   if (!mqtt.connected()) return;
   char buf[32];
   snprintf(buf, sizeof(buf), "{\"prayer\":%d}", prayerIndex);
-  mqtt.publish(TOPIC_PRAYER_FIRED, buf);
+  mqtt.publish(topicPour(TOPIC_PRAYER_FIRED).c_str(), buf);
 }
 
 // ── HTTP handler : config broker MQTT ─────────────────────────────────────────
@@ -4159,6 +4280,84 @@ static const char* wifiPsNom() {
        : ps == WIFI_PS_MIN_MODEM ? "min_modem" : "max_modem";
 }
 
+// ── [MOSQUEE] Etat et reglages du mode demonstration ───────────────────────
+// GET rend aussi les sujets MQTT exacts de CETTE carte : c'est ce que la page
+// de controle doit connaitre, et il n'y a aucun autre moyen de les deviner.
+void handleMosqueeGet() {
+  if (!requireApiKey()) return;
+  prefs.begin("adhancfg", true);
+  String broker = prefs.getString("mqtt_broker", "");
+  prefs.end();
+  String j = "{\"actif\":" + String(demoActif ? "true" : "false")
+           + ",\"volume_max\":" + String(demoVolumeMax)
+           + ",\"delai_s\":" + String(demoDelaiS)
+           + ",\"avant_priere_min\":" + String(demoAvantPriere)
+           + ",\"apres_priere_min\":" + String(demoApresPriere)
+           + ",\"broker\":\"" + broker + "\""
+           + ",\"connecte\":" + String(mqtt.connected() ? "true" : "false")
+           + ",\"device_id\":\"" + deviceIdHex() + "\""
+           + ",\"prefixe\":\"adhanbox/" + deviceIdMqtt() + "\""
+           + ",\"dernier_refus\":\"" + demoRefus + "\"}";
+  server.send(200, "application/json", j);
+}
+
+void handleMosqueeSet() {
+  if (!requireApiKey()) return;
+  const String b = server.arg("plain");
+  auto entier = [&](const char *cle, int defaut) {
+    const int i = b.indexOf("\"" + String(cle) + "\"");
+    if (i < 0) return defaut;
+    const int d = b.indexOf(':', i);
+    return (d < 0) ? defaut : (int)b.substring(d + 1).toInt();
+  };
+  const bool demoAvant = demoActif;
+  if (b.indexOf("\"actif\"") >= 0) demoActif = (b.indexOf("\"actif\":true") >= 0);
+  demoVolumeMax   = constrain(entier("volume_max", demoVolumeMax), 1, 30);
+  demoDelaiS      = constrain(entier("delai_s", (int)demoDelaiS), 0, 600);
+  demoAvantPriere = constrain(entier("avant_priere_min", (int)demoAvantPriere), 0, 120);
+  demoApresPriere = constrain(entier("apres_priere_min", (int)demoApresPriere), 0, 240);
+  // Le broker se regle par le meme appel : sans lui, rien ne peut arriver.
+  const int ib = b.indexOf("\"broker\"");
+  if (ib >= 0) {
+    const int d = b.indexOf('"', b.indexOf(':', ib) + 1);
+    const int f = b.indexOf('"', d + 1);
+    if (d > 0 && f > d) {
+      prefs.begin("adhancfg", false);
+      prefs.putString("mqtt_broker", b.substring(d + 1, f));
+      prefs.end();
+      mqtt.disconnect();      // forcera une reconnexion sur le nouveau broker
+    }
+  }
+  // Couper la demonstration DEBRANCHE aussi la boite du broker. Sans cela, tous
+  // ceux qui ont scanne le QR connaissent l'identifiant de la carte et gardent
+  // la main dessus, de n'importe ou dans le monde, une fois la boite rentree a
+  // la maison - mais desormais sans les garde-fous, puisqu'ils ne s'appliquent
+  // qu'en mode demonstration. Si l'appel fournit lui-meme un broker, c'est un
+  // changement volontaire et on le respecte.
+  if (demoAvant && !demoActif && ib < 0) {
+    prefs.begin("adhancfg", false);
+    prefs.remove("mqtt_broker");
+    prefs.end();
+    mqtt.disconnect();
+    Serial.println("[MOSQUEE] demonstration coupee : broker efface, plus de pilotage a distance");
+  }
+
+  prefs.begin("adhancfg", false);
+  prefs.putBool("demo_actif", demoActif);
+  prefs.putInt("demo_vmax", demoVolumeMax);
+  prefs.putInt("demo_delai", (int)demoDelaiS);
+  // Les deux fenetres de silence autour des prieres s'enregistrent elles aussi.
+  // Sans cela un redemarrage dans la mosquee - coupure de courant, mise a jour -
+  // les ramenerait en silence a 5 et 20 minutes, et c'est justement le garde-fou
+  // qui empeche un telephone de lancer un adhan pendant l'appel du muezzin.
+  prefs.putInt("demo_avant", (int)demoAvantPriere);
+  prefs.putInt("demo_apres", (int)demoApresPriere);
+  prefs.end();
+  Serial.printf("[MOSQUEE] mode %s, volume max %d, delai %lu s\n",
+                demoActif ? "ACTIF" : "inactif", demoVolumeMax, (unsigned long)demoDelaiS);
+  handleMosqueeGet();
+}
+
 // Diagnostic : horloge SD reelle + debit de lecture (ko/s) + heap/PSRAM.
 // Sert a savoir si la SD tient le 128 kbps (16 ko/s) ou pas.
 void handleDiag() {
@@ -4232,7 +4431,7 @@ int v2SyncContent() {
   if (_syncAbandon || audio.isRunning()) { _syncAFaire = true; _syncPasAvant = millis() + 120000UL; return 0; }
 
   // ── [SYNCHRO] Ce que cette boucle NE FAIT PLUS, et pourquoi ──────────────
-  // Jusqu'en 3.0.29 elle ouvrait une connexion TLS pour CHAQUE fichier, lisait
+  // Jusqu'en 3.0.19 elle ouvrait une connexion TLS pour CHAQUE fichier, lisait
   // le Content-Length, et si la taille sur la SD differait, EFFACAIT le fichier
   // puis le retelechargeait. Or cinq des six adhans precharges sur les cartes SD
   // n'ont plus la taille des fichiers du serveur (archive.org y a ajoute ~99 Ko
@@ -4418,7 +4617,7 @@ void setup() {
   // IMPERATIVEMENT AVANT Serial.begin() : begin() ne cree le tampon que s'il
   // n'existe pas encore, alors que setTxBufferSize() appele APRES supprime le
   // tampon en service pour en recreer un, sous le nez de l'interruption
-  // d'emission. La 3.0.29 le faisait apres, et la carte ne repondait plus.
+  // d'emission. La 3.0.14 le faisait apres, et la carte ne repondait plus.
   Serial.setTxBufferSize(2048);
 #endif
   Serial.begin(115200);
@@ -4450,6 +4649,11 @@ void setup() {
   ledBrightness = prefs.getInt("brightness", 50);
   ledScenario = prefs.getInt("led_scenario", 8);
   ledCustomActive = prefs.getBool("led_custom", false);
+  demoActif     = prefs.getBool("demo_actif", false);        // [MOSQUEE]
+  demoVolumeMax = constrain(prefs.getInt("demo_vmax", 18), 1, 30);
+  demoDelaiS    = (uint32_t)constrain(prefs.getInt("demo_delai", 45), 0, 600);
+  demoAvantPriere = (uint16_t)constrain(prefs.getInt("demo_avant", 5), 0, 120);
+  demoApresPriere = (uint16_t)constrain(prefs.getInt("demo_apres", 20), 0, 240);
   ledCustomR = (uint8_t)prefs.getInt("led_cr", 255);
   ledCustomG = (uint8_t)prefs.getInt("led_cg", 200);
   ledCustomB = (uint8_t)prefs.getInt("led_cb", 0);
@@ -4956,7 +5160,7 @@ static void bancCommande(String c) {
 
   if (verbe == "info") {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.29\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
+             "{\"version\":\"3.0.31\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
              deviceIdHex().c_str());
     bancRep(buf);
 
@@ -5803,6 +6007,7 @@ void loop() {
               Serial.printf("Playing adhan directly (track %d) without duaa\n", trackToPlay);
               playTrack(trackToPlay);
             }
+            demoPriereA = (uint32_t)nowUnix;   // [MOSQUEE] point de depart du silence d'apres
             mqttPublishPrayerFired(scheduledPrayerIndex);
           } else {
             Serial.printf("Skipping non-adhan event for index %d\n", scheduledPrayerIndex);
