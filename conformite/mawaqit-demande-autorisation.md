@@ -14,12 +14,12 @@ Le mail ci-dessous **dit ce que fait la box aujourd'hui**, sans rien cacher.
 C'est le seul angle tenable : ils peuvent le constater en dix minutes, et être
 devancé serait bien pire que de le dire soi-même.
 
-**Deux choses à faire avant de l'envoyer :**
+**Avant de l'envoyer :** remplacer `[NOMBRE]` par le nombre réel de boîtiers en
+service.
 
-1. Corriger la vérification du certificat TLS dans le firmware
-   (`client.setInsecure()` dans `performMawaqitSync`). Qu'ils ne trouvent pas un
-   défaut de sécurité en regardant le produit de près.
-2. Remplacer `[NOMBRE]` par le nombre réel de boîtiers en service.
+La vérification du certificat TLS est faite (firmware 3.0.36) : la carte
+contrôle désormais l'identité de mawaqit.net au lieu de se contenter d'un canal
+chiffré. C'était le point qu'il ne fallait pas leur laisser découvrir.
 
 ---
 
