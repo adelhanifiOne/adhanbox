@@ -2,7 +2,7 @@
 // - Starts an AP when a long-press is detected on CONFIG_BUTTON_PIN
 // - Serves a small webpage that requests navigator.geolocation and POSTs lat/lon
 // - Stores lat/lon/accuracy/timestamp in Preferences (NVS)
-//Version: 3.0.37 (AdhanBox V3 / HW v3)
+//Version: 3.0.38 (AdhanBox V3 / HW v3)
 #include <Arduino.h>
 #include <esp_mac.h>   // esp_read_mac() : MAC eFuse, lisible sans Wi-Fi
 #include <Wire.h>
@@ -729,10 +729,15 @@ class I2SAudio {
     }
     return ok;
   }
-  void playTrackNum(int track) {
+  // Rend VRAI seulement si le fichier existe et que la lecture a demarre. La
+  // version precedente ne rendait rien : un numero de piste inexistant passait
+  // pour un succes, et tout le monde en aval annonçait une lecture silencieuse.
+  bool playTrackNum(int track) {
     char path[24];
     snprintf(path, sizeof(path), "/mp3/%04d.mp3", track);
-    if (!playPath(path)) { snprintf(path, sizeof(path), "/MP3/%04d.mp3", track); playPath(path); }
+    if (playPath(path)) return true;
+    snprintf(path, sizeof(path), "/MP3/%04d.mp3", track);
+    return playPath(path);
   }
   bool isRunning() { return (mp3 && mp3->isRunning()) || (wav && wav->isRunning()); }
   void pump() {
@@ -832,7 +837,7 @@ void handleDiag();
 void handlePlayFile();
 void handleStopPlay();
 bool tryReinitSD();
-void playTrack(int track);
+bool playTrack(int track);
 void handleSetVolume();
 void handleMosqueeGet();      // [MOSQUEE] etat du mode demonstration
 void handleMosqueeSet();      // [MOSQUEE] activer / regler le mode demonstration
@@ -932,7 +937,7 @@ bool rtcSetAlarmDaily(uint8_t hour, uint8_t minute);
 void rtcDisableAlarms();
 bool loadStoredLocation(double &outLat, double &outLon, double &outAcc);
 void stopPlay(const char *cause = "autre");
-void playTrack(int track);
+bool playTrack(int track);
 
 // LED helper using driver API (some cores don't expose ledcSetup/ledcAttachPin)
 static inline void setLedDuty(uint32_t duty) {
@@ -1829,7 +1834,7 @@ void handleOtaUploadComplete() {
 // GET /api/firmware/version
 void handleFirmwareVersion() {
   server.send(200, "application/json",
-              "{\"version\":\"3.0.37\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
+              "{\"version\":\"3.0.38\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
 }
 
 // Returns true if the request carries the correct API key (or if token not yet set).
@@ -1942,11 +1947,11 @@ void handleDeviceInfo() {
   char buf[512];
   if (pairingWindow || hasValidToken) {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.37\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
+             "{\"version\":\"3.0.38\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
              OTA_HOSTNAME, deviceIdHex().c_str(), _apiToken.c_str(), _otaPass.c_str());
   } else {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.37\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
+             "{\"version\":\"3.0.38\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
              OTA_HOSTNAME, deviceIdHex().c_str());
   }
   server.send(200, "application/json", buf);
@@ -3868,16 +3873,19 @@ bool tryReinitSD(int retries = 2) {
 }
 
 // Lance la lecture d'un track (1-based, /mp3/NNNN.mp3)
-void playTrack(int track) {
+bool playTrack(int track) {
   if (!audio.sdOk()) {
     Serial.println("[Audio] SD non disponible, tentative reinit...");
     if (!tryReinitSD(2)) {
       Serial.println("[Audio] Lecture impossible : SD indisponible");
-      return;
+      return false;
     }
   }
   Serial.printf("[Audio] Lecture track %d\n", track);
-  audio.playTrackNum(track);
+  if (!audio.playTrackNum(track)) {
+    Serial.printf("[Audio] piste %d introuvable sur la carte\n", track);
+    return false;
+  }
   isPlaying = true;
 
   // Pompe audio 800ms pour eviter de couper le debut de l'adhan
@@ -3886,6 +3894,7 @@ void playTrack(int track) {
     audio.pump();
     delay(2);
   }
+  return true;
 }
 
 void stopPlay(const char *cause) {
@@ -4045,8 +4054,11 @@ void mqttCallback(char *topic, byte *payload, unsigned int len) {
       ledScenario = SCENE_PRAYER;
       Serial.printf("MQTT adhan: LED switched to PRAYER scene (was %d)\n", prayerPrevLedScenario);
     }
-    playTrack(track);
-    mqtt.publish(topicPour(TOPIC_AUDIO_STATUS).c_str(), "playing");
+    if (playTrack(track)) {
+      mqtt.publish(topicPour(TOPIC_AUDIO_STATUS).c_str(), "playing");
+    } else {
+      mqtt.publish(topicPour(TOPIC_AUDIO_STATUS).c_str(), "refus:fichier absent");
+    }
 
   } else if (est(TOPIC_AUDIO_PLAY)) {
     // Le message est soit un NUMERO de piste - /mp3/000N.mp3, les adhans et la
@@ -4084,8 +4096,11 @@ void mqttCallback(char *topic, byte *payload, unsigned int len) {
       // piste qu'on vient de demander a la place.
       shouldPlayDuaaAfterAdhan = false;
       adhanTrackBeforeDuaa = 0;
-      playTrack(track);
-      mqtt.publish(topicPour(TOPIC_AUDIO_STATUS).c_str(), "playing");
+      if (playTrack(track)) {
+        mqtt.publish(topicPour(TOPIC_AUDIO_STATUS).c_str(), "playing");
+      } else {
+        mqtt.publish(topicPour(TOPIC_AUDIO_STATUS).c_str(), "refus:fichier absent");
+      }
     }
 
   } else if (est(TOPIC_AUDIO_STOP)) {
@@ -5252,7 +5267,7 @@ static void bancCommande(String c) {
 
   if (verbe == "info") {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.37\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
+             "{\"version\":\"3.0.38\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
              deviceIdHex().c_str());
     bancRep(buf);
 
