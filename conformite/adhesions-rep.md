@@ -36,6 +36,54 @@ impots.gouv.fr. Demande type :
 Compte quelques jours. Le même numéro servira pour les commissions Etsy et
 Vinted, qui relèvent de l'autoliquidation.
 
+### Sans accès à l'espace professionnel
+
+Vérifié le 13/09/2026 sur l'annuaire du service public : le SIE compétent est
+celui des Hautes-Pyrénées, **1 boulevard du Maréchal-Juin, 65000 Tarbes**,
+téléphone **05 62 44 40 49**, ouvert du lundi au mercredi de 8 h 45 à 12 h,
+accueil physique **sur rendez-vous uniquement**.
+
+Le téléphone est le plus rapide. Sinon, courrier à envoyer :
+
+> Adel Hanifi
+> 14 rue du Corps Franc Pommiès
+> 65500 Vic-en-Bigorre
+>
+> Service des impôts des entreprises des Hautes-Pyrénées
+> Centre des finances publiques
+> 1 boulevard du Maréchal-Juin
+> 65000 Tarbes
+>
+> Vic-en-Bigorre, le [DATE]
+>
+> **Objet : demande d'attribution d'un numéro de TVA intracommunautaire**
+> **SIREN 932 355 589 — SIRET 932 355 589 00023**
+>
+> Madame, Monsieur,
+>
+> Entrepreneur individuel placé sous le régime de la franchise en base de TVA
+> (article 293 B du CGI), je fabrique et vends un appareil électronique de ma
+> conception.
+>
+> À ce titre, je dois adhérer à des éco-organismes agréés au titre de la
+> responsabilité élargie du producteur — ecosystem pour les équipements
+> électriques et les piles, Citeo pour les emballages ménagers. Ces organismes
+> exigent un numéro de TVA intracommunautaire pour instruire mon adhésion.
+>
+> Je sollicite donc l'attribution de ce numéro. Cette demande ne vaut pas
+> renonciation à la franchise en base pour mes opérations nationales.
+>
+> Ne disposant pas encore d'un accès à mon espace professionnel sur
+> impots.gouv.fr, je vous adresse cette demande par courrier.
+>
+> Je vous remercie de bien vouloir me le communiquer à l'adresse ci-dessus, ou
+> par courriel à contact@adhanbox.fr.
+>
+> Je vous prie d'agréer, Madame, Monsieur, l'expression de mes salutations
+> distinguées.
+>
+> Adel Hanifi
+
 ---
 
 ## 1. Les chiffres à réunir
