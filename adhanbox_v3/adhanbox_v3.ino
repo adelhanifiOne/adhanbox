@@ -2,7 +2,7 @@
 // - Starts an AP when a long-press is detected on CONFIG_BUTTON_PIN
 // - Serves a small webpage that requests navigator.geolocation and POSTs lat/lon
 // - Stores lat/lon/accuracy/timestamp in Preferences (NVS)
-//Version: 3.0.36 (AdhanBox V3 / HW v3)
+//Version: 3.0.37 (AdhanBox V3 / HW v3)
 #include <Arduino.h>
 #include <esp_mac.h>   // esp_read_mac() : MAC eFuse, lisible sans Wi-Fi
 #include <Wire.h>
@@ -1829,7 +1829,7 @@ void handleOtaUploadComplete() {
 // GET /api/firmware/version
 void handleFirmwareVersion() {
   server.send(200, "application/json",
-              "{\"version\":\"3.0.36\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
+              "{\"version\":\"3.0.37\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
 }
 
 // Returns true if the request carries the correct API key (or if token not yet set).
@@ -1942,11 +1942,11 @@ void handleDeviceInfo() {
   char buf[512];
   if (pairingWindow || hasValidToken) {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.36\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
+             "{\"version\":\"3.0.37\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
              OTA_HOSTNAME, deviceIdHex().c_str(), _apiToken.c_str(), _otaPass.c_str());
   } else {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.36\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
+             "{\"version\":\"3.0.37\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
              OTA_HOSTNAME, deviceIdHex().c_str());
   }
   server.send(200, "application/json", buf);
@@ -4049,6 +4049,29 @@ void mqttCallback(char *topic, byte *payload, unsigned int len) {
     mqtt.publish(topicPour(TOPIC_AUDIO_STATUS).c_str(), "playing");
 
   } else if (est(TOPIC_AUDIO_PLAY)) {
+    // Le message est soit un NUMERO de piste - /mp3/000N.mp3, les adhans et la
+    // duaa - soit un CHEMIN complet. Le Coran et les azkar ne sont pas
+    // numerotes : ils vivent dans /quran/ et /azkar/. Sans ce second cas, la
+    // page en mosquee ne pouvait lancer ni sourate ni azkar, et le firmware
+    // cherchait un /mp3/0007.mp3 qui n'existe sur aucune carte.
+    if (msg[0] == '/') {
+      if (!demoAutorise()) {
+        Serial.printf("[MOSQUEE] lecture refusee : %s\n", demoRefus.c_str());
+        mqtt.publish(topicPour(TOPIC_AUDIO_STATUS).c_str(), ("refus:" + demoRefus).c_str());
+        return;
+      }
+      demoBriderVolume();
+      shouldPlayDuaaAfterAdhan = false;   // pas de duaa derriere une sourate
+      adhanTrackBeforeDuaa = 0;
+      if (audio.playPath(msg)) {
+        isPlaying = true;
+        mqtt.publish(topicPour(TOPIC_AUDIO_STATUS).c_str(), "playing");
+      } else {
+        Serial.printf("[MOSQUEE] fichier absent : %s\n", msg);
+        mqtt.publish(topicPour(TOPIC_AUDIO_STATUS).c_str(), "refus:fichier absent");
+      }
+      return;
+    }
     int track = atoi(msg);
     if (track > 0) {
       if (!demoAutorise()) {
@@ -5229,7 +5252,7 @@ static void bancCommande(String c) {
 
   if (verbe == "info") {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.36\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
+             "{\"version\":\"3.0.37\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
              deviceIdHex().c_str());
     bancRep(buf);
 
