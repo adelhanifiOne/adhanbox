@@ -25,6 +25,11 @@ import { list, put } from '@vercel/blob';
 import { stepEmail, esc } from '../lib/email.js';
 
 const FROM_EMAIL = process.env.FROM_EMAIL || 'AdhanBox <commande@adhanbox.fr>';
+// Copie cachee au vendeur. Resend envoie depuis SES serveurs : rien ne passe par
+// la boite OVH, donc aucun message n'apparait jamais dans les « Envoyes » et on
+// n'a aucun moyen simple de savoir ce qui est parti. Cette copie tient lieu de
+// dossier d'envoi, dans la boite qu'Adel releve tous les jours.
+const NOTIF_EMAIL = process.env.NOTIF_EMAIL || 'contact@adhanbox.fr';
 const STEPS = ['preparation', 'montage', 'expedition', 'avis'];
 const LIBELLE = {
   preparation: 'En préparation',
@@ -177,7 +182,7 @@ export default async function handler(req, res) {
   // email » envoie le client dans le vide : ni l'adresse Gmail Android, ni la
   // photo ne seraient jamais arrivées.
   const sent = await resend.emails.send({ from: FROM_EMAIL, to, subject, html,
-                                          replyTo: 'contact@adhanbox.fr' });
+                                          replyTo: 'contact@adhanbox.fr', bcc: NOTIF_EMAIL });
   if (sent.error) {
     return page(res, 502, 'Envoi échoué', esc(sent.error.message || 'Resend a refusé l\'envoi.'), 'err');
   }
