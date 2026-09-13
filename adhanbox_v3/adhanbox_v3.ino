@@ -2,7 +2,7 @@
 // - Starts an AP when a long-press is detected on CONFIG_BUTTON_PIN
 // - Serves a small webpage that requests navigator.geolocation and POSTs lat/lon
 // - Stores lat/lon/accuracy/timestamp in Preferences (NVS)
-//Version: 3.0.34 (AdhanBox V3 / HW v3)
+//Version: 3.0.35 (AdhanBox V3 / HW v3)
 #include <Arduino.h>
 #include <esp_mac.h>   // esp_read_mac() : MAC eFuse, lisible sans Wi-Fi
 #include <Wire.h>
@@ -216,11 +216,11 @@ PubSubClient mqtt(mqttWifiClient);
 // Hors mode demonstration, rien de tout cela ne s'applique : une boite chez un
 // client garde son comportement habituel.
 bool     demoActif       = false;
-int      demoVolumeMax   = 18;    // sur 30
+int      demoVolumeMax   = 15;    // sur 30, soit 50 % de la puissance
 uint32_t demoDelaiS      = 0;     // repos apres la FIN d une lecture ; 0 = aucun,
                                   // on peut couper et relancer quand on veut
-uint16_t demoAvantPriere = 5;     // minutes de silence avant l'appel
-uint16_t demoApresPriere = 20;    // minutes de silence apres
+uint16_t demoAvantPriere = 0;     // minutes de silence avant l'appel ; 0 = aucun
+uint16_t demoApresPriere = 0;     // minutes de silence apres ; 0 = aucun
 uint32_t demoPriereA   = 0;       // unixtime du dernier adhan de priere reellement joue
 unsigned long demoFin  = 0;       // millis() de la fin de la derniere lecture
 String   demoRefus;               // pourquoi le dernier ordre a ete refuse
@@ -1809,7 +1809,7 @@ void handleOtaUploadComplete() {
 // GET /api/firmware/version
 void handleFirmwareVersion() {
   server.send(200, "application/json",
-              "{\"version\":\"3.0.34\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
+              "{\"version\":\"3.0.35\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
 }
 
 // Returns true if the request carries the correct API key (or if token not yet set).
@@ -1922,11 +1922,11 @@ void handleDeviceInfo() {
   char buf[512];
   if (pairingWindow || hasValidToken) {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.34\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
+             "{\"version\":\"3.0.35\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
              OTA_HOSTNAME, deviceIdHex().c_str(), _apiToken.c_str(), _otaPass.c_str());
   } else {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.34\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
+             "{\"version\":\"3.0.35\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
              OTA_HOSTNAME, deviceIdHex().c_str());
   }
   server.send(200, "application/json", buf);
@@ -3957,18 +3957,20 @@ static bool demoAutorise() {
   if (!demoActif) return true;                       // boite de client : rien ne change
   demoRefus = "";
 
-  // Silence autour des heures de priere. On compare a la prochaine priere
-  // calculee par le firmware, et a celle qui vient de sonner.
-  if (rtcPresent && timeUsable()) {
+  // Silence autour des heures de priere : DESACTIVE par defaut depuis la 3.0.35,
+  // sur demande d'Adel. Les deux reglages restent (avant_priere_min et
+  // apres_priere_min, a 0) : si un imam demande ce silence, un appel a
+  // /api/mosquee le rallume sans reflasher le boitier sur place.
+  if ((demoAvantPriere || demoApresPriere) && rtcPresent && timeUsable()) {
     DateTime maintenant = rtc.now();
     DateTime prochaine; int idx = 0;
-    if (computeNextPrayer(maintenant, prochaine, idx)) {
+    if (demoAvantPriere && computeNextPrayer(maintenant, prochaine, idx)) {
       const long avant = (long)(prochaine.unixtime() - maintenant.unixtime());
       if (avant >= 0 && avant <= (long)demoAvantPriere * 60L) {
         demoRefus = "la priere approche"; return false;
       }
     }
-    if (demoPriereA > 0) {
+    if (demoApresPriere && demoPriereA > 0) {
       const long depuis = (long)(maintenant.unixtime() - (uint32_t)demoPriereA);
       if (depuis >= 0 && depuis <= (long)demoApresPriere * 60L) {
         demoRefus = "priere en cours"; return false;
@@ -4054,6 +4056,7 @@ void mqttCallback(char *topic, byte *payload, unsigned int len) {
     prefs.begin("adhancfg", false);
     prefs.putInt("volume", vol);
     prefs.end();
+    mqttPublishStatus();   // la page se recale tout de suite, pas dans 30 s
 
   } else if (est(TOPIC_LED_SCENARIO)) {
     int sc = atoi(msg);
@@ -4114,14 +4117,23 @@ void reconnectMQTT() {
 // ── MQTT publish helpers ────────────────────────────────────────────────────────
 void mqttPublishStatus() {
   if (!mqtt.connected()) return;
-  char buf[128];
+  // [MOSQUEE] volume et plafond en font partie : la page de demonstration lit ce
+  // message retenu pour dessiner son curseur a la bonne echelle, au lieu de
+  // coder le plafond en dur et de se desynchroniser des qu'on le change.
+  prefs.begin("adhancfg", true);
+  const int volCourant = constrain(prefs.getInt("volume", 20), 0, 30);
+  prefs.end();
+  char buf[192];
   snprintf(buf, sizeof(buf),
-           "{\"ip\":\"%s\",\"rssi\":%d,\"playing\":%s,\"led\":%d,\"brightness\":%d}",
+           "{\"ip\":\"%s\",\"rssi\":%d,\"playing\":%s,\"led\":%d,\"brightness\":%d,"
+           "\"volume\":%d,\"volume_max\":%d}",
            WiFi.localIP().toString().c_str(),
            WiFi.RSSI(),
            isPlaying ? "true" : "false",
            ledScenario,
-           ledBrightness);
+           ledBrightness,
+           volCourant,
+           demoActif ? demoVolumeMax : 30);
   mqtt.publish(topicPour(TOPIC_STATUS).c_str(), buf, /*retain=*/true);
 }
 
@@ -4666,10 +4678,10 @@ void setup() {
   ledScenario = prefs.getInt("led_scenario", 8);
   ledCustomActive = prefs.getBool("led_custom", false);
   demoActif     = prefs.getBool("demo_actif", false);        // [MOSQUEE]
-  demoVolumeMax = constrain(prefs.getInt("demo_vmax", 18), 1, 30);
+  demoVolumeMax = constrain(prefs.getInt("demo_vmax", 15), 1, 30);
   demoDelaiS    = (uint32_t)constrain(prefs.getInt("demo_delai", 45), 0, 600);
-  demoAvantPriere = (uint16_t)constrain(prefs.getInt("demo_avant", 5), 0, 120);
-  demoApresPriere = (uint16_t)constrain(prefs.getInt("demo_apres", 20), 0, 240);
+  demoAvantPriere = (uint16_t)constrain(prefs.getInt("demo_avant", 0), 0, 120);
+  demoApresPriere = (uint16_t)constrain(prefs.getInt("demo_apres", 0), 0, 240);
   ledCustomR = (uint8_t)prefs.getInt("led_cr", 255);
   ledCustomG = (uint8_t)prefs.getInt("led_cg", 200);
   ledCustomB = (uint8_t)prefs.getInt("led_cb", 0);
@@ -5176,7 +5188,7 @@ static void bancCommande(String c) {
 
   if (verbe == "info") {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.34\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
+             "{\"version\":\"3.0.35\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
              deviceIdHex().c_str());
     bancRep(buf);
 

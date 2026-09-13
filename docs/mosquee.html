@@ -61,6 +61,21 @@
   .pot{width:46px;height:46px;border-radius:50%;border:2px solid rgba(255,255,255,.22);cursor:pointer}
   .pot:active{transform:scale(.9)}
 
+  .volume{display:flex;align-items:center;gap:12px;
+          background:var(--carte);border:1px solid var(--bord);border-radius:16px;padding:14px 16px}
+  .volume .ico{font-size:19px;line-height:1;flex:none}
+  input[type=range]{flex:1;-webkit-appearance:none;appearance:none;background:transparent;height:28px}
+  input[type=range]::-webkit-slider-runnable-track{height:6px;border-radius:999px;
+    background:linear-gradient(90deg,var(--or) var(--p,60%),rgba(255,255,255,.16) var(--p,60%))}
+  input[type=range]::-moz-range-track{height:6px;border-radius:999px;background:rgba(255,255,255,.16)}
+  input[type=range]::-moz-range-progress{height:6px;border-radius:999px;background:var(--or)}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;
+    width:24px;height:24px;border-radius:50%;background:var(--or);border:none;margin-top:-9px;
+    box-shadow:0 2px 8px rgba(0,0,0,.35)}
+  input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:50%;
+    background:var(--or);border:none;box-shadow:0 2px 8px rgba(0,0,0,.35)}
+  .vval{text-align:center;font-size:13px;color:var(--texte-2);margin-top:8px}
+
   .msg{min-height:22px;text-align:center;font-size:13.5px;margin:14px 0 0;color:var(--or);font-weight:500}
 
   .final{margin-top:30px;border-top:1px solid var(--bord);padding-top:22px;text-align:center}
@@ -99,6 +114,15 @@
     <button data-cmd="play" data-val="10"><span class="ico">🌙</span><span class="lbl">Azkar du soir</span></button>
     <button class="large stop" data-cmd="stop"><span class="ico">⏹</span><span class="lbl">Arrêter le son</span></button>
   </div>
+
+  <h2>Le volume</h2>
+  <div class="volume">
+    <span class="ico">🔈</span>
+    <input type="range" id="vol" min="0" max="100" step="5" value="60"
+           aria-label="Volume">
+    <span class="ico">🔊</span>
+  </div>
+  <p class="vval" id="volval">—</p>
 
   <h2>La lumière</h2>
   <div class="couleurs">
@@ -154,6 +178,8 @@ const ID = ((location.hash || '').replace('#', '')
 const $ = (s) => document.querySelector(s);
 const msg = $('#msg'), etat = $('#etat'), pastille = $('#pastille');
 let client = null, pret = false;
+let vMax = 15;              // plafond ; remplace par celui que la boite annonce
+let curseurTenu = false;    // un doigt tient le curseur de volume
 
 function dire(t, duree = 3200) {
   msg.textContent = t;
@@ -165,6 +191,23 @@ if (!/^[0-9a-f]{12}$/.test(ID)) {
   pastille.className = 'pastille ko';
 } else {
   const base = 'adhanbox/' + ID;
+
+  // ── Volume ───────────────────────────────────────────────────────────────
+  // Le curseur va de 0 a 100 % de ce qui est AUTORISE, pas de la puissance de
+  // la boite : le plafond est une affaire entre Adel et la mosquee, le visiteur
+  // n'a pas a voir un curseur qui s'arrete au milieu sans explication.
+  const vol = $('#vol'), volval = $('#volval');
+
+  const peindre = (pct) => {
+    vol.style.setProperty('--p', pct + '%');
+    volval.textContent = pct === 0 ? 'Silencieux' : 'Volume ' + pct + ' %';
+  };
+  // Depuis la valeur absolue de la boite (0..vMax) vers le pourcentage affiche.
+  const poserVolume = (abs) => {
+    const pct = Math.round(Math.min(abs, vMax) / vMax * 20) * 5;
+    vol.value = pct; peindre(pct);
+  };
+
   client = mqtt.connect(BROKER, { connectTimeout: 8000, reconnectPeriod: 4000, clean: true });
 
   client.on('connect', () => {
@@ -179,10 +222,28 @@ if (!/^[0-9a-f]{12}$/.test(ID)) {
 
   client.on('message', (sujet, charge) => {
     const v = charge.toString();
-    // Le firmware répond « refus:<raison> » quand un garde-fou s'applique.
-    if (v.startsWith('refus:')) { dire('⏸ ' + v.slice(6), 4000); return; }
-    if (v === 'playing') dire('▶ En cours de lecture');
-    if (v === 'stopped') dire('⏹ Arrêté');
+
+    // Attention a l'ordre : « adhanbox/<id>/audio/status » se termine LUI AUSSI
+    // par « /status ». On teste donc le plus precis d'abord.
+    if (sujet.endsWith('/audio/status')) {
+      // Le firmware répond « refus:<raison> » quand un garde-fou s'applique.
+      if (v.startsWith('refus:')) { dire('⏸ ' + v.slice(6), 4000); return; }
+      if (v === 'playing') dire('▶ En cours de lecture');
+      if (v === 'stopped') dire('⏹ Arrêté');
+      return;
+    }
+
+    // L'etat general, retenu par le serveur : il arrive des l'abonnement et
+    // porte le volume du moment et le plafond autorise. La page s'y accorde
+    // plutot que de coder le plafond en dur, qui se desynchroniserait des
+    // qu'Adel le change depuis /api/mosquee.
+    if (sujet.endsWith('/status')) {
+      try {
+        const st = JSON.parse(v);
+        if (Number.isFinite(st.volume_max) && st.volume_max > 0) vMax = st.volume_max;
+        if (Number.isFinite(st.volume) && !curseurTenu) poserVolume(st.volume);
+      } catch { /* un etat illisible ne doit pas casser la page */ }
+    }
   });
 
   const envoyer = (sujet, valeur) => {
@@ -207,6 +268,23 @@ if (!/^[0-9a-f]{12}$/.test(ID)) {
       dire(p.dataset.scene === '0' ? '💡 Lumière éteinte' : '💡 Lumière changée');
     });
   });
+
+  // Pendant qu'un doigt tient le curseur, on ignore l'etat qui revient de la
+  // boite : sinon il sauterait sous le doigt a chaque message retenu.
+  ['pointerdown', 'touchstart'].forEach((e) =>
+    vol.addEventListener(e, () => { curseurTenu = true; }, { passive: true }));
+  ['pointerup', 'touchend', 'pointercancel'].forEach((e) =>
+    vol.addEventListener(e, () => { curseurTenu = false; }, { passive: true }));
+
+  vol.addEventListener('input', () => peindre(Number(vol.value)));
+  // On n'envoie qu'au relachement : un message par pixel glisse noierait la
+  // boite, qui ecrit le volume en memoire permanente a chaque fois.
+  vol.addEventListener('change', () => {
+    const pct = Number(vol.value);
+    envoyer('/audio/volume', Math.round(pct / 100 * vMax));
+    dire(pct === 0 ? '🔇 Silencieux' : '🔊 Volume ' + pct + ' %');
+  });
+  peindre(Number(vol.value));
 }
 </script>
 </body>
