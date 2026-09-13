@@ -26,7 +26,7 @@
   .wrap{max-width:520px;margin:0 auto}
 
   header{text-align:center;padding:6px 0 18px}
-  .ar{font-family:Amiri,serif;font-size:30px;color:var(--or);line-height:1;margin-bottom:6px}
+  .logo{width:74px;height:74px;display:block;margin:0 auto 10px;border-radius:16px}
   h1{font-family:Fraunces,Georgia,serif;font-weight:700;font-size:30px;margin:0;color:var(--or);letter-spacing:.01em}
   .sous{color:var(--texte-2);font-size:14.5px;margin:8px 0 0;line-height:1.5}
 
@@ -39,6 +39,7 @@
   .pastille.ok{background:#5FD3A0;box-shadow:0 0 0 4px rgba(95,211,160,.18)}
   .pastille.ko{background:#E48787}
 
+  .recitant{font-size:12.5px;color:var(--texte-2);margin:-4px 0 10px;opacity:.85}
   h2{font-size:11.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--or);
      font-weight:700;margin:26px 0 10px;opacity:.9}
 
@@ -94,7 +95,7 @@
 <div class="wrap">
 
   <header>
-    <div class="ar">أَذَان</div>
+    <img class="logo" alt="AdhanBox" src="logo-app.png">
     <h1>AdhanBox</h1>
     <p class="sous">Essayez-la. Touchez un bouton, elle répond ici, devant vous.</p>
     <div class="etat"><span class="pastille" id="pastille"></span><span id="etat">Connexion…</span></div>
@@ -102,16 +103,21 @@
 
   <h2>L'appel à la prière</h2>
   <div class="grille">
-    <button data-cmd="adhan" data-val="2"><span class="ico">🕌</span><span class="lbl">Adhan</span><span class="sub">La Mecque</span></button>
-    <button data-cmd="adhan" data-val="4"><span class="ico">🕌</span><span class="lbl">Adhan</span><span class="sub">Médine</span></button>
+    <button data-cmd="adhan" data-val="2"><span class="ico">🕌</span><span class="lbl">Adhan</span><span class="sub">Ahmed al-Imadi</span></button>
+    <button data-cmd="adhan" data-val="4"><span class="ico">🕌</span><span class="lbl">Adhan</span><span class="sub">Mokhtar Hadj Slimane</span></button>
+    <button data-cmd="adhan" data-val="5"><span class="ico">🕌</span><span class="lbl">Adhan</span><span class="sub">Nasser al-Qatami</span></button>
+    <button data-cmd="adhan" data-val="6"><span class="ico">🕌</span><span class="lbl">Adhan</span><span class="sub">Majed al-Hamathani</span></button>
   </div>
 
-  <h2>Coran et invocations</h2>
+  <h2>Le Coran et les invocations</h2>
+  <p class="recitant">Récités par Mishary al-Afasy</p>
   <div class="grille">
-    <button data-cmd="play" data-val="7"><span class="ico">📖</span><span class="lbl">Al-Fatiha</span></button>
-    <button data-cmd="play" data-val="8"><span class="ico">📖</span><span class="lbl">Al-Kahf</span></button>
-    <button data-cmd="play" data-val="9"><span class="ico">🌅</span><span class="lbl">Azkar du matin</span></button>
-    <button data-cmd="play" data-val="10"><span class="ico">🌙</span><span class="lbl">Azkar du soir</span></button>
+    <button data-cmd="play" data-val="/quran/afs/001.mp3"><span class="ico">📖</span><span class="lbl">Al-Fatiha</span></button>
+    <button data-cmd="play" data-val="/quran/al-mulk.mp3"><span class="ico">📖</span><span class="lbl">Al-Mulk</span></button>
+    <button data-cmd="play" data-val="/quran/al-kahf.mp3"><span class="ico">📖</span><span class="lbl">Al-Kahf</span></button>
+    <button data-cmd="play" data-val="/mp3/0001.mp3"><span class="ico">🤲</span><span class="lbl">L'invocation</span><span class="sub">après l'adhan</span></button>
+    <button data-cmd="play" data-val="/azkar/sabah.mp3"><span class="ico">🌅</span><span class="lbl">Azkar du matin</span></button>
+    <button data-cmd="play" data-val="/azkar/masaa.mp3"><span class="ico">🌙</span><span class="lbl">Azkar du soir</span></button>
     <button class="large stop" data-cmd="stop"><span class="ico">⏹</span><span class="lbl">Arrêter le son</span></button>
   </div>
 
@@ -255,6 +261,9 @@ if (!/^[0-9a-f]{12}$/.test(ID)) {
     b.addEventListener('click', () => {
       const c = b.dataset.cmd;
       if (c === 'adhan') { envoyer('/adhan/trigger', b.dataset.val); dire('🕌 Adhan lancé'); }
+      // Le Coran et les azkar se jouent par CHEMIN, pas par numero : seuls les
+      // adhans et l'invocation vivent dans /mp3/000N.mp3. Le firmware accepte
+      // les deux formes depuis la 3.0.37.
       if (c === 'play')  { envoyer('/audio/play',    b.dataset.val); dire('▶ Lecture lancée'); }
       // Un retour tout de suite : sans lui le bouton paraissait mort le temps
       // que la boite reponde, et on appuyait trois fois.
