@@ -2,12 +2,32 @@
 // - Starts an AP when a long-press is detected on CONFIG_BUTTON_PIN
 // - Serves a small webpage that requests navigator.geolocation and POSTs lat/lon
 // - Stores lat/lon/accuracy/timestamp in Preferences (NVS)
-//Version: 3.0.35 (AdhanBox V3 / HW v3)
+//Version: 3.0.36 (AdhanBox V3 / HW v3)
 #include <Arduino.h>
 #include <esp_mac.h>   // esp_read_mac() : MAC eFuse, lisible sans Wi-Fi
 #include <Wire.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
+
+// ── [TLS] Verifier a qui on parle ───────────────────────────────────────────
+// Jusqu'ici les trois connexions chiffrees de la carte appelaient setInsecure() :
+// elles etablissaient bien un canal chiffre, mais SANS verifier le certificat du
+// serveur d'en face. Sur un Wi-Fi hostile ou avec un DNS detourne, n'importe qui
+// pouvait se faire passer pour mawaqit.net et envoyer de faux horaires de priere
+// - une famille aurait prie a la mauvaise heure sans jamais rien remarquer - ou
+// se faire passer pour GitHub et remplacer les fichiers audio telecharges.
+//
+// On s'appuie sur le magasin de certificats racine fourni par l'ESP-IDF, deja
+// present dans les bibliotheques. On ne fige PAS un certificat particulier :
+// les autorites renouvellent les leurs, et un certificat epingle transformerait
+// chaque rotation en panne generale du parc, sans moyen de la voir venir.
+extern const uint8_t x509_crt_bundle_start[] asm("_binary_x509_crt_bundle_start");
+extern const uint8_t x509_crt_bundle_end[]   asm("_binary_x509_crt_bundle_end");
+
+static inline void securiser(WiFiClientSecure &c) {
+  c.setCACertBundle(x509_crt_bundle_start,
+                    (size_t)(x509_crt_bundle_end - x509_crt_bundle_start));
+}
 #include <WebServer.h>
 #include <Preferences.h>
 #include <nvs_flash.h>   // [BANC] remise a zero usine : effacement de la NVS
@@ -738,13 +758,13 @@ class I2SAudio {
 
 I2SAudio audio;
 
-// DS3231 interrupt pin (connect INT/SQW -> this pin)
-#ifndef DS3231_INT_PIN
-#define DS3231_INT_PIN 7
+// Broche d interruption du RTC RX-8025T (/INT -> cette broche)
+#ifndef RTC_INT_PIN
+#define RTC_INT_PIN 7
 #endif
 
 // Alarm scheduling state
-volatile bool ds3231AlarmFlag = false;
+volatile bool rtcAlarmFlag = false;
 
 // ── [COUPURES] Confiance dans l'heure (voir V2 2.3.29) ──────────────────────
 static bool _timeTrusted = false;
@@ -908,8 +928,8 @@ static inline void hsv2rgb(uint8_t h, uint8_t s, uint8_t v, uint8_t &r, uint8_t 
 }
 
 // Forward declarations for functions defined later but used above
-bool ds3231SetAlarm2Daily(uint8_t hour, uint8_t minute);
-void ds3231DisableAlarms();
+bool rtcSetAlarmDaily(uint8_t hour, uint8_t minute);
+void rtcDisableAlarms();
 bool loadStoredLocation(double &outLat, double &outLon, double &outAcc);
 void stopPlay(const char *cause = "autre");
 void playTrack(int track);
@@ -1270,7 +1290,7 @@ void handleSetAlarmTest() {
   DateTime now = rtc.now();
   int mm = (now.minute() + 1) % 60;
   int hh = now.hour() + (now.minute() == 59 ? 1 : 0);
-  ds3231SetAlarm2Daily(hh % 24, mm);
+  rtcSetAlarmDaily(hh % 24, mm);
   scheduledPrayerIndex = 1;
   scheduledPrayerTime = DateTime(now.year(), now.month(), now.day(), hh % 24, mm, 0);
 
@@ -1289,8 +1309,8 @@ void handleSetAlarmTest() {
 
 void handleCancelAlarms() {
   if (!requireApiKey()) return;  // [SECU] auth requise
-  ds3231DisableAlarms();
-  server.send(200, "text/plain", "DS3231 alarms disabled");
+  rtcDisableAlarms();
+  server.send(200, "text/plain", "Alarmes RTC desactivees");
 }
 
 void handleShowNextAlarm() {
@@ -1809,7 +1829,7 @@ void handleOtaUploadComplete() {
 // GET /api/firmware/version
 void handleFirmwareVersion() {
   server.send(200, "application/json",
-              "{\"version\":\"3.0.35\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
+              "{\"version\":\"3.0.36\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
 }
 
 // Returns true if the request carries the correct API key (or if token not yet set).
@@ -1922,11 +1942,11 @@ void handleDeviceInfo() {
   char buf[512];
   if (pairingWindow || hasValidToken) {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.35\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
+             "{\"version\":\"3.0.36\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
              OTA_HOSTNAME, deviceIdHex().c_str(), _apiToken.c_str(), _otaPass.c_str());
   } else {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.35\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
+             "{\"version\":\"3.0.36\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
              OTA_HOSTNAME, deviceIdHex().c_str());
   }
   server.send(200, "application/json", buf);
@@ -2256,7 +2276,7 @@ bool performMawaqitSync(String &errorMsg) {
   for (int attempt = 0; attempt < attempts && !anyValid; attempt++) {
     HTTPClient http;
     WiFiClientSecure client;
-    client.setInsecure();
+    securiser(client);   // [TLS] on verifie que c est bien mawaqit.net
 
     String url = "https://" + host + urls[attempt];
     Serial.printf("Mawaqit request [%d/%d]: %s\n", attempt + 1, attempts, url.c_str());
@@ -3607,7 +3627,7 @@ void handleDumpStatus() {
   server.send(200, "application/json", String(out));
 }
 
-// ---------------- DS3231 alarm helpers (I2C register access + Alarm2 daily) ----------------
+// ---------------- Alarme du RTC RX-8025T (acces registres I2C, alarme quotidienne) ----------------
 static inline uint8_t decToBcd(uint8_t val) {
   return ((val / 10) << 4) | (val % 10);
 }
@@ -3615,46 +3635,46 @@ static inline uint8_t bcdToDec(uint8_t val) {
   return ((val >> 4) * 10) + (val & 0x0F);
 }
 
-// [V3] Acces registres RTC RX-8025T (addr 0x32) — noms ds3231* conserves pour diff minimal
-void ds3231WriteReg(uint8_t reg, uint8_t value) {
+// [V3] Acces registres RTC RX-8025T (addr 0x32)
+void rtcWriteReg(uint8_t reg, uint8_t value) {
   RX8025T::writeReg(reg, value);   // [V3] RX-8025T @0x32
 }
 
-uint8_t ds3231ReadReg(uint8_t reg) {
+uint8_t rtcReadReg(uint8_t reg) {
   return RX8025T::readReg(reg);    // [V3] RX-8025T @0x32
 }
 
 // [V3] Efface le flag alarme AF (reg 0x0E bit3) du RX-8025T.
-void ds3231ClearAlarmFlags() {
-  uint8_t f = ds3231ReadReg(RX_REG_FLAG);
-  ds3231WriteReg(RX_REG_FLAG, f & ~RX_FLAG_AF);
+void rtcClearAlarmFlags() {
+  uint8_t f = rtcReadReg(RX_REG_FLAG);
+  rtcWriteReg(RX_REG_FLAG, f & ~RX_FLAG_AF);
 }
 
 // [V3] Active l'interruption alarme (AIE, reg 0x0F bit3) du RX-8025T.
-void ds3231EnableAlarm2Interrupt() {
-  ds3231ClearAlarmFlags();
-  uint8_t c = ds3231ReadReg(RX_REG_CTRL);
-  ds3231WriteReg(RX_REG_CTRL, c | RX_CTRL_AIE);
+void rtcEnableAlarmInterrupt() {
+  rtcClearAlarmFlags();
+  uint8_t c = rtcReadReg(RX_REG_CTRL);
+  rtcWriteReg(RX_REG_CTRL, c | RX_CTRL_AIE);
 }
 
 // [V3] Coupe l'alarme RX-8025T.
-void ds3231DisableAlarms() {
-  uint8_t c = ds3231ReadReg(RX_REG_CTRL);
-  ds3231WriteReg(RX_REG_CTRL, c & ~RX_CTRL_AIE);
-  ds3231ClearAlarmFlags();
+void rtcDisableAlarms() {
+  uint8_t c = rtcReadReg(RX_REG_CTRL);
+  rtcWriteReg(RX_REG_CTRL, c & ~RX_CTRL_AIE);
+  rtcClearAlarmFlags();
 }
 
 // [V3] Alarme quotidienne hh:mm sur RX-8025T :
 //   0x08 = minute (AE=0), 0x09 = heure (AE=0), 0x0A = AE=1 (jour ignore).
 //   WADA=1 (mode jour-du-mois) pour que 0x0A soit bien "jour" et non "semaine".
-bool ds3231SetAlarm2Daily(uint8_t hour, uint8_t minute) {
+bool rtcSetAlarmDaily(uint8_t hour, uint8_t minute) {
   if (hour > 23 || minute > 59) return false;
-  uint8_t ext = ds3231ReadReg(RX_REG_EXT);
-  ds3231WriteReg(RX_REG_EXT, ext | RX_EXT_WADA);
-  ds3231WriteReg(RX_REG_ALMIN, rxDecToBcd(minute) & 0x7F);
-  ds3231WriteReg(RX_REG_ALHR,  rxDecToBcd(hour)   & 0x3F);
-  ds3231WriteReg(RX_REG_ALWD,  RX_ALARM_AE);
-  ds3231EnableAlarm2Interrupt();
+  uint8_t ext = rtcReadReg(RX_REG_EXT);
+  rtcWriteReg(RX_REG_EXT, ext | RX_EXT_WADA);
+  rtcWriteReg(RX_REG_ALMIN, rxDecToBcd(minute) & 0x7F);
+  rtcWriteReg(RX_REG_ALHR,  rxDecToBcd(hour)   & 0x3F);
+  rtcWriteReg(RX_REG_ALWD,  RX_ALARM_AE);
+  rtcEnableAlarmInterrupt();
   return true;
 }
 
@@ -3678,7 +3698,7 @@ void scanI2CBusAndReport() {
 }
 
 void probeIP5306() {
-  // Try multiple possible I2C addresses for IP5306 on Wire bus (shared with DS3231)
+  // Adresses I2C possibles de l IP5306 sur le bus Wire (partage avec le RTC)
   const uint8_t ip5306Addrs[] = { 0x74, 0x75, 0x76, 0x77 };
   bool found = false;
   for (int i = 0; i < 4; i++) {
@@ -3696,9 +3716,9 @@ void probeIP5306() {
   }
 }
 
-// ISR for DS3231 INT pin
-void IRAM_ATTR ds3231_isr() {
-  ds3231AlarmFlag = true;
+// Interruption sur la broche /INT du RTC
+void IRAM_ATTR rtc_isr() {
+  rtcAlarmFlag = true;
 }
 
 // Compute the next prayer time (DateTime) and index (1..6) from now
@@ -3807,9 +3827,9 @@ void scheduleNextPrayerAlarm() {
   if (computeNextPrayer(now, nextDt, idx)) {
     scheduledPrayerIndex = idx;
     scheduledPrayerTime = nextDt;
-    ds3231SetAlarm2Daily(nextDt.hour(), nextDt.minute());
+    rtcSetAlarmDaily(nextDt.hour(), nextDt.minute());
     // Also schedule a software fallback alarm based on millis() to ensure
-    // the prayer triggers even if the DS3231 interrupt/flag is missed.
+    // the prayer triggers even if the RTC interrupt/flag is missed.
     unsigned long deltaSec = 0;
     uint32_t nowUnix = now.unixtime();
     uint32_t nextUnix = nextDt.unixtime();
@@ -4445,7 +4465,7 @@ int v2SyncContent() {
   if (_bleActive) stopBLEProvisioning();   // libere la RAM BLE (~60KB) avant le TLS
 #endif
   miette("synchro contenu");
-  WiFiClientSecure cli; cli.setInsecure();
+  WiFiClientSecure cli; securiser(cli);   // [TLS] on verifie que c est bien GitHub
   HTTPClient http;
   if (!http.begin(cli, V2_CONTENT_URL)) return -1;
   http.setConnectTimeout(5000);
@@ -4507,7 +4527,7 @@ int v2SyncContent() {
       }
     }
 
-    WiFiClientSecure c2; c2.setInsecure();
+    WiFiClientSecure c2; securiser(c2);   // [TLS] idem pour chaque fichier
     HTTPClient h2;
     if (!h2.begin(c2, url)) { _syncMsg += " " + path + "=beginFail"; continue; }
     h2.setConnectTimeout(15000);
@@ -4695,7 +4715,7 @@ void setup() {
     Serial.printf("[Audio] forcePlayTrack1 = %s\n", forcePlayTrack1 ? "ON" : "OFF");
   }
 
-  // Initialize I2C bus (Wire) for DS3231 + IP5306:
+  // Bus I2C (Wire) : RTC RX-8025T + IP5306
   // SDA -> GPIO5, SCL -> GPIO4
   // Proper I2C bus recovery: master drives both lines, clocks SCL 9 times
   // to force any stuck slave to release SDA, then generates a real STOP condition.
@@ -4730,10 +4750,10 @@ void setup() {
   scanI2CBusAndReport();
   probeIP5306();
 
-  // Initialize DS3231 RTC using RTClib
+  // [V3] RTC Epson RX-8025T (et non un DS3231 : voir rx8025t.h)
   rtcPresent = rtc.begin();
   if (!rtcPresent) {
-    Serial.println("Couldn't find RTC. Check wiring (VCC/GND/SDA/SCL) and power.");
+    Serial.println("RTC RX-8025T introuvable. Verifier VCC/GND/SDA/SCL et l alimentation.");
   } else {
     if (rtc.lostPower()) {
       // [COUPURES] restaure la derniere heure sauvegardee ; sans sauvegarde,
@@ -4752,16 +4772,37 @@ void setup() {
     } else {
       _timeTrusted = true;
     }
+    // [TLS] L'horloge SYSTEME de l'ESP part a 1970 a chaque demarrage, et seul
+    // NTP la reglait. Or mbedTLS verifie les dates de validite d'un certificat
+    // avec CETTE horloge-la, pas avec la puce RTC : en 1970, tout certificat
+    // parait « pas encore valide » et la synchro des horaires echouerait entre
+    // le demarrage et le premier NTP reussi - voire indefiniment derriere un
+    // reseau qui bloque NTP. On la seme donc avec l'heure de la puce, qui est
+    // sauvegardee par la pile. Cette heure est LOCALE, donc decalee de quelques
+    // heures : sans importance pour une validite de certificat qui se compte en
+    // mois, et rien d'autre dans ce firmware ne lit l'horloge systeme - toute la
+    // logique de priere passe par rtc.now(). NTP la remettra en UTC ensuite.
+    {
+      const uint32_t t = rtc.now().unixtime();
+      if (t > 1700000000UL) {            // posterieur a novembre 2023 : plausible
+        struct timeval tv = { .tv_sec = (time_t)t, .tv_usec = 0 };
+        settimeofday(&tv, nullptr);
+        Serial.printf("Horloge systeme semee depuis la RTC (%lu) pour le TLS\n",
+                      (unsigned long)t);
+      } else {
+        Serial.println("RTC sans heure plausible : TLS impossible jusqu'au premier NTP.");
+      }
+    }
     Serial.println("RTC ready.");
     DateTime now = rtc.now();
     char buf[64];
     snprintf(buf, sizeof(buf), "%04u-%02u-%02u %02u:%02u:%02u", now.year(), now.month(), now.day(), now.hour(), now.minute(), now.second());
     Serial.print("Current RTC time: ");
     Serial.println(buf);
-    // Configure DS3231 INT pin and attach ISR (requires hardware INT from DS3231)
-    Serial.printf("Attaching RX8025T /INT on pin %d\n", DS3231_INT_PIN);
-    pinMode(DS3231_INT_PIN, INPUT_PULLUP);
-    attachInterrupt(digitalPinToInterrupt(DS3231_INT_PIN), ds3231_isr, FALLING);
+    // Broche /INT du RTC et son interruption (necessite le fil /INT cable)
+    Serial.printf("Attaching RX8025T /INT on pin %d\n", RTC_INT_PIN);
+    pinMode(RTC_INT_PIN, INPUT_PULLUP);
+    attachInterrupt(digitalPinToInterrupt(RTC_INT_PIN), rtc_isr, FALLING);
   }
 
   // LED data pin (do not use GPIO1/GPIO3). Configure LEDC timer + channel using driver API.
@@ -5188,7 +5229,7 @@ static void bancCommande(String c) {
 
   if (verbe == "info") {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.35\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
+             "{\"version\":\"3.0.36\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
              deviceIdHex().c_str());
     bancRep(buf);
 
@@ -5547,7 +5588,7 @@ void loop() {
         DateTime now = rtc.now();
         int mm = (now.minute() + 1) % 60;
         int hh = now.hour() + (now.minute() == 59 ? 1 : 0);
-        ds3231SetAlarm2Daily(hh, mm);
+        rtcSetAlarmDaily(hh, mm);
         scheduledPrayerIndex = 1;  // test play track 1
         scheduledPrayerTime = DateTime(now.year(), now.month(), now.day(), hh % 24, mm, 0);
         Serial.printf("Test alarm set for %02d:%02d\n", hh % 24, mm);
@@ -5555,8 +5596,8 @@ void loop() {
         Serial.println("RTC not present; cannot set alarm.");
       }
     } else if (cmd.equalsIgnoreCase("cancelalarms")) {
-      ds3231DisableAlarms();
-      Serial.println("DS3231 alarms disabled and cleared.");
+      rtcDisableAlarms();
+      Serial.println("Alarmes RTC desactivees et effacees.");
     } else if (cmd.equalsIgnoreCase("shownextalarm")) {
       if (scheduledPrayerIndex > 0) {
         Serial.printf("Next scheduled prayer %d at %04u-%02u-%02u %02d:%02d\n", scheduledPrayerIndex, scheduledPrayerTime.year(), scheduledPrayerTime.month(), scheduledPrayerTime.day(), scheduledPrayerTime.hour(), scheduledPrayerTime.minute());
@@ -5957,21 +5998,21 @@ void loop() {
     Serial.println("RTC reached scheduled prayer time (fallback polling)");
     shouldTrigger = true;
   }
-  if (ds3231AlarmFlag && !timeUsable()) {
+  if (rtcAlarmFlag && !timeUsable()) {
     // [COUPURES] heure inconnue : alarme ignoree et reprogrammee.
-    ds3231AlarmFlag = false;
+    rtcAlarmFlag = false;
     Serial.println("[COUPURES] Alarme ignoree : heure non fiable (attente NTP).");
     if (rtcPresent) scheduleNextPrayerAlarm();
   }
-  if (ds3231AlarmFlag) {
-    Serial.println("DS3231 alarm triggered.");
+  if (rtcAlarmFlag) {
+    Serial.println("Alarme RTC declenchee.");
     shouldTrigger = true;
   }
 
   if (shouldTrigger) {
     softwareAlarmAt = 0;
-    ds3231AlarmFlag = false;
-    ds3231ClearAlarmFlags();
+    rtcAlarmFlag = false;
+    rtcClearAlarmFlags();
 
     if (nowUnix == 0 || (nowUnix - lastPrayerTriggeredUnix) > 60) {
       lastPrayerTriggeredUnix = nowUnix;
