@@ -2,7 +2,7 @@
 // - Starts an AP when a long-press is detected on CONFIG_BUTTON_PIN
 // - Serves a small webpage that requests navigator.geolocation and POSTs lat/lon
 // - Stores lat/lon/accuracy/timestamp in Preferences (NVS)
-//Version: 3.0.38 (AdhanBox V3 / HW v3)
+//Version: 3.0.39 (AdhanBox V3 / HW v3)
 #include <Arduino.h>
 #include <esp_mac.h>   // esp_read_mac() : MAC eFuse, lisible sans Wi-Fi
 #include <Wire.h>
@@ -1069,10 +1069,36 @@ const char index_html[] PROGMEM = R"HTML(
   <div class="msg" id="testMsg"></div>
 </div>
 
+<div class="card hidden" id="usineCard">
+  <h2>🧹 Remise à zéro</h2>
+  <p class="hint">Avant de donner ou de revendre ce boîtier : efface le Wi-Fi
+  enregistré, la mosquée choisie, tous les réglages, et régénère ses clés
+  d'accès. Le contenu de la carte SD n'est pas touché. C'est sans retour.</p>
+  <p class="hint">Pour confirmer, recopie l'identifiant de la carte :
+  <b id="usineId">…</b></p>
+  <input id="usineConfirm" placeholder="identifiant de la carte" autocomplete="off">
+  <div class="btn-row">
+    <button class="btn-red" id="usineBtn">Tout effacer</button>
+  </div>
+  <div class="msg" id="usineMsg"></div>
+</div>
+
 <script>
   function $(id){return document.getElementById(id);}
   fetch('/api/device/info').then(function(r){return r.json();}).then(function(j){
     $('devInfo').textContent = 'Version '+(j.version||'?')+' · '+(j.hostname||location.hostname);
+    // La remise a zero n'apparait que si device/info nous rend le jeton, ce
+    // qu'il ne fait que pendant la fenetre d'appairage : mode point d'acces, ou
+    // les dix minutes qui suivent le demarrage. Cette page est OUVERTE a tout
+    // le reseau - sans cette condition, n'importe qui sur le Wi-Fi d'une
+    // mosquee pourrait vider la boite en pleine demonstration. Exiger un
+    // debranchement, c'est exiger l'acces physique au boitier : c'est le bon
+    // critere pour un effacement definitif.
+    if (j.token) {
+      window.__jeton = j.token;
+      $('usineId').textContent = j.device_id || '?';
+      $('usineCard').classList.remove('hidden');
+    }
   }).catch(function(){ $('devInfo').textContent = location.hostname; });
 
   $('pairBtn').onclick=function(){
@@ -1116,6 +1142,29 @@ const char index_html[] PROGMEM = R"HTML(
 
   $('testBtn').onclick=function(){ $('testMsg').textContent="Lecture de l'adhan…"; fetch('/play?track=2').catch(function(){}); };
   $('stopBtn').onclick=function(){ $('testMsg').textContent=''; fetch('/stopplay').catch(function(){}); };
+
+  $('usineBtn').onclick=function(){
+    var attendu = $('usineId').textContent.trim();
+    var saisi = $('usineConfirm').value.trim();
+    if (saisi.toUpperCase() !== attendu.toUpperCase()) {
+      $('usineMsg').textContent = "L'identifiant ne correspond pas."; return;
+    }
+    var b = this; b.disabled = true;
+    $('usineMsg').textContent = 'Effacement…';
+    fetch('/api/factory_reset', {method:'POST',
+      headers:{'Content-Type':'application/json','X-API-Key':window.__jeton},
+      body: JSON.stringify({confirm: attendu})})
+      .then(function(r){return r.json();})
+      .then(function(j){
+        $('usineMsg').textContent = j.ok
+          ? '✅ Effacé. Le boîtier redémarre : il attend maintenant un appairage Bluetooth.'
+          : '❌ ' + (j.error || 'echec');
+      })
+      .catch(function(){
+        // Le boitier redemarre aussitot : la reponse peut ne jamais revenir.
+        $('usineMsg').textContent = '✅ Effacé. Le boîtier redémarre.';
+      });
+  };
 </script>
 </body></html>
 )HTML";
@@ -1834,7 +1883,7 @@ void handleOtaUploadComplete() {
 // GET /api/firmware/version
 void handleFirmwareVersion() {
   server.send(200, "application/json",
-              "{\"version\":\"3.0.38\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
+              "{\"version\":\"3.0.39\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
 }
 
 // Returns true if the request carries the correct API key (or if token not yet set).
@@ -1947,11 +1996,11 @@ void handleDeviceInfo() {
   char buf[512];
   if (pairingWindow || hasValidToken) {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.38\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
+             "{\"version\":\"3.0.39\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
              OTA_HOSTNAME, deviceIdHex().c_str(), _apiToken.c_str(), _otaPass.c_str());
   } else {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.38\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
+             "{\"version\":\"3.0.39\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
              OTA_HOSTNAME, deviceIdHex().c_str());
   }
   server.send(200, "application/json", buf);
@@ -5267,7 +5316,7 @@ static void bancCommande(String c) {
 
   if (verbe == "info") {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.38\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
+             "{\"version\":\"3.0.39\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
              deviceIdHex().c_str());
     bancRep(buf);
 
