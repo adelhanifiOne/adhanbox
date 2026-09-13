@@ -2,12 +2,32 @@
 // - Starts an AP when a long-press is detected on CONFIG_BUTTON_PIN
 // - Serves a small webpage that requests navigator.geolocation and POSTs lat/lon
 // - Stores lat/lon/accuracy/timestamp in Preferences (NVS)
-//Version: 3.0.35 (AdhanBox V3 / HW v3)
+//Version: 3.0.36 (AdhanBox V3 / HW v3)
 #include <Arduino.h>
 #include <esp_mac.h>   // esp_read_mac() : MAC eFuse, lisible sans Wi-Fi
 #include <Wire.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
+
+// ── [TLS] Verifier a qui on parle ───────────────────────────────────────────
+// Jusqu'ici les trois connexions chiffrees de la carte appelaient setInsecure() :
+// elles etablissaient bien un canal chiffre, mais SANS verifier le certificat du
+// serveur d'en face. Sur un Wi-Fi hostile ou avec un DNS detourne, n'importe qui
+// pouvait se faire passer pour mawaqit.net et envoyer de faux horaires de priere
+// - une famille aurait prie a la mauvaise heure sans jamais rien remarquer - ou
+// se faire passer pour GitHub et remplacer les fichiers audio telecharges.
+//
+// On s'appuie sur le magasin de certificats racine fourni par l'ESP-IDF, deja
+// present dans les bibliotheques. On ne fige PAS un certificat particulier :
+// les autorites renouvellent les leurs, et un certificat epingle transformerait
+// chaque rotation en panne generale du parc, sans moyen de la voir venir.
+extern const uint8_t x509_crt_bundle_start[] asm("_binary_x509_crt_bundle_start");
+extern const uint8_t x509_crt_bundle_end[]   asm("_binary_x509_crt_bundle_end");
+
+static inline void securiser(WiFiClientSecure &c) {
+  c.setCACertBundle(x509_crt_bundle_start,
+                    (size_t)(x509_crt_bundle_end - x509_crt_bundle_start));
+}
 #include <WebServer.h>
 #include <Preferences.h>
 #include <nvs_flash.h>   // [BANC] remise a zero usine : effacement de la NVS
@@ -1809,7 +1829,7 @@ void handleOtaUploadComplete() {
 // GET /api/firmware/version
 void handleFirmwareVersion() {
   server.send(200, "application/json",
-              "{\"version\":\"3.0.35\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
+              "{\"version\":\"3.0.36\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
 }
 
 // Returns true if the request carries the correct API key (or if token not yet set).
@@ -1922,11 +1942,11 @@ void handleDeviceInfo() {
   char buf[512];
   if (pairingWindow || hasValidToken) {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.35\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
+             "{\"version\":\"3.0.36\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
              OTA_HOSTNAME, deviceIdHex().c_str(), _apiToken.c_str(), _otaPass.c_str());
   } else {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.35\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
+             "{\"version\":\"3.0.36\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
              OTA_HOSTNAME, deviceIdHex().c_str());
   }
   server.send(200, "application/json", buf);
@@ -2256,7 +2276,7 @@ bool performMawaqitSync(String &errorMsg) {
   for (int attempt = 0; attempt < attempts && !anyValid; attempt++) {
     HTTPClient http;
     WiFiClientSecure client;
-    client.setInsecure();
+    securiser(client);   // [TLS] on verifie que c est bien mawaqit.net
 
     String url = "https://" + host + urls[attempt];
     Serial.printf("Mawaqit request [%d/%d]: %s\n", attempt + 1, attempts, url.c_str());
@@ -4445,7 +4465,7 @@ int v2SyncContent() {
   if (_bleActive) stopBLEProvisioning();   // libere la RAM BLE (~60KB) avant le TLS
 #endif
   miette("synchro contenu");
-  WiFiClientSecure cli; cli.setInsecure();
+  WiFiClientSecure cli; securiser(cli);   // [TLS] on verifie que c est bien GitHub
   HTTPClient http;
   if (!http.begin(cli, V2_CONTENT_URL)) return -1;
   http.setConnectTimeout(5000);
@@ -4507,7 +4527,7 @@ int v2SyncContent() {
       }
     }
 
-    WiFiClientSecure c2; c2.setInsecure();
+    WiFiClientSecure c2; securiser(c2);   // [TLS] idem pour chaque fichier
     HTTPClient h2;
     if (!h2.begin(c2, url)) { _syncMsg += " " + path + "=beginFail"; continue; }
     h2.setConnectTimeout(15000);
@@ -4751,6 +4771,27 @@ void setup() {
       }
     } else {
       _timeTrusted = true;
+    }
+    // [TLS] L'horloge SYSTEME de l'ESP part a 1970 a chaque demarrage, et seul
+    // NTP la reglait. Or mbedTLS verifie les dates de validite d'un certificat
+    // avec CETTE horloge-la, pas avec la puce RTC : en 1970, tout certificat
+    // parait « pas encore valide » et la synchro des horaires echouerait entre
+    // le demarrage et le premier NTP reussi - voire indefiniment derriere un
+    // reseau qui bloque NTP. On la seme donc avec l'heure de la puce, qui est
+    // sauvegardee par la pile. Cette heure est LOCALE, donc decalee de quelques
+    // heures : sans importance pour une validite de certificat qui se compte en
+    // mois, et rien d'autre dans ce firmware ne lit l'horloge systeme - toute la
+    // logique de priere passe par rtc.now(). NTP la remettra en UTC ensuite.
+    {
+      const uint32_t t = rtc.now().unixtime();
+      if (t > 1700000000UL) {            // posterieur a novembre 2023 : plausible
+        struct timeval tv = { .tv_sec = (time_t)t, .tv_usec = 0 };
+        settimeofday(&tv, nullptr);
+        Serial.printf("Horloge systeme semee depuis la RTC (%lu) pour le TLS\n",
+                      (unsigned long)t);
+      } else {
+        Serial.println("RTC sans heure plausible : TLS impossible jusqu'au premier NTP.");
+      }
     }
     Serial.println("RTC ready.");
     DateTime now = rtc.now();
@@ -5188,7 +5229,7 @@ static void bancCommande(String c) {
 
   if (verbe == "info") {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.35\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
+             "{\"version\":\"3.0.36\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
              deviceIdHex().c_str());
     bancRep(buf);
 
