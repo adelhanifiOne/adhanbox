@@ -13,9 +13,15 @@ avant du PCB, celle qui touche le telephone.
 Repere "monde" pour le pied : X droite, Y vers l'ARRIERE, Z vers le haut. La
 carte est inclinee a 65 deg de l'horizontale, dos vers l'arriere.
 
+Style : le marche des supports de telephone imprimes (Cozyleigh et consorts)
+impose un vocabulaire : cannelures verticales sur tout le pourtour, aretes
+adoucies, silhouette de galet, teintes mates. La coque et le pied le reprennent.
+
 Coque (PETG translucide blanc, imprimee fond sur le plateau, ouverture en l'air)
-  - bol D98.2 ext, paroi 1.6, fond 1.6 ; 5 mm de jour tout autour du PCB : c'est
-    par la que sort la lumiere des LEDs, vue de face.
+  - galet D100.8 ext, paroi 2.9 cannelee (54 gorges de 1.3, il reste 1.6 de
+    matiere au fond des gorges), dos arrondi R4, levre avant chanfreinee ;
+    5 mm de jour tout autour du PCB : c'est par la que sort la lumiere des LEDs,
+    vue de face, et les cannelures la modulent.
   - 4 plots D6 a r = 30 avec pion D1.8 dans les trous H1..H4 du PCB.
   - 4 nervures a 45/135/225/315 deg avec crochet de 0.6 mm : le PCB se clipse,
     pas de vis en face avant.
@@ -23,7 +29,8 @@ Coque (PETG translucide blanc, imprimee fond sur le plateau, ouverture en l'air)
     membrane souple sur le bouton utilisateur ; trou D3 sur le capteur de lumiere.
 
 Pied (PETG noir, imprime a plat)
-  - bloc 70 x 52 x 24 a chanfreins, fente a la forme exacte de la coque
+  - bloc 70 x 52 x 24, angles verticaux R10, dessus arrondi R4, face avant
+    cannelee comme la coque ; fente a la forme exacte de la coque
     (jeu 0.3), poche pour la languette et une PRISE USB-C COUDEE, rainure de
     cable vers le cote droit, 4 logements pour pads silicone dessous.
   - butee avant de 3 mm pour le bas du telephone.
@@ -50,19 +57,49 @@ USB = dict(w=9.0, d=7.35, h=3.2, y_face=TAB_Y)   # receptacle HRO sur la languet
 
 # ---------------------------------------------------------------- coque (repere carte)
 GAP_RAD = 5.0                       # jour lumineux entre PCB et paroi
-WALL = 1.6
+WALL = 2.9                          # paroi du pourtour : 1.6 de matiere sous les cannelures
+BACK_T = 1.6                        # fond
 R_IN = R_PCB + GAP_RAD              # 47.5
-R_OUT = R_IN + WALL                 # 49.1
+R_OUT = R_IN + WALL                 # 50.4
+# style commun coque / pied
+N_FLUTE = 54                        # cannelures sur le pourtour, pas de 5.9 mm au rayon 50.4 : une tranche de piece
+R_FLUTE, D_FLUTE = 3.9, 1.3         # rayon de la gorge, profondeur : les gorges se touchent, il reste des cretes arrondies
+R_BACK, C_FRONT = 3.5, 0.8          # arrondi du dos (il reste 1.5 au coin de la cavite), chanfrein de la levre avant
 Z_FRONT = -1.6                      # bord avant de la coque, 1.6 mm devant le PCB
 Z_INNER = T_PCB + H_COMP + 1.0      # fond interieur : 8.0
-Z_BACK = Z_INNER + WALL             # 9.6
+Z_BACK = Z_INNER + BACK_T           # 9.6
 HOOK = 0.6                          # retenue des crochets sur le bord du PCB
 PLAY = 0.3                          # jeu radial PCB / crochets
 
+def cannelures(centres, z0, h):
+    """Cylindres verticaux a retrancher : une gorge par centre (x, y), de z0 a z0 + h.
+    Les cercles voisins se chevauchent : ils sont fusionnes en 2D (Sketch) avant extrusion, sinon
+    OCC recoit une face auto-intersectante et la soustraction echoue en silence (piece intacte ou vide)."""
+    sk = cq.Sketch().push(centres).circle(R_FLUTE).clean()
+    return cq.Workplane("XY").placeSketch(sk).extrude(h).translate((0, 0, z0))
+
+def verifie_gorges(avant, apres, nom):
+    """Garde-fou : la soustraction des cannelures doit avoir enleve de la matiere, pas tout ni rien."""
+    va, vb = avant.val().Volume(), apres.val().Volume()
+    if not apres.solids().size() or vb >= va - 1.0:
+        raise RuntimeError(f"{nom} : cannelures non taillees (volume {va / 1000:.1f} -> {vb / 1000:.1f} cm3)")
+    return apres
+
 def coque():
-    body = cq.Workplane("XY").circle(R_OUT).extrude(Z_BACK - Z_FRONT).translate((0, 0, Z_FRONT))
+    # galet de revolution : levre avant chanfreinee, dos arrondi (profil dans le plan XZ, x = rayon)
+    k = math.sqrt(0.5)
+    body = (cq.Workplane("XZ")
+            .moveTo(0, Z_FRONT).lineTo(R_OUT - C_FRONT, Z_FRONT).lineTo(R_OUT, Z_FRONT + C_FRONT)
+            .lineTo(R_OUT, Z_BACK - R_BACK)
+            .threePointArc((R_OUT - R_BACK + R_BACK * k, Z_BACK - R_BACK + R_BACK * k), (R_OUT - R_BACK, Z_BACK))
+            .lineTo(0, Z_BACK).close()
+            .revolve(360, (0, 0, 0), (0, 1, 0)))
     cavity = cq.Workplane("XY").circle(R_IN).extrude(Z_INNER - Z_FRONT).translate((0, 0, Z_FRONT))
     body = body.cut(cavity)
+    # cannelures : elles s'arretent la ou le dos s'arrondit
+    r_axe = R_OUT + R_FLUTE - D_FLUTE
+    pts = [(r_axe * math.cos(2 * math.pi * i / N_FLUTE), r_axe * math.sin(2 * math.pi * i / N_FLUTE)) for i in range(N_FLUTE)]
+    body = verifie_gorges(body, body.cut(cannelures(pts, Z_FRONT - 1.0, (Z_BACK - R_BACK) - (Z_FRONT - 1.0))), "coque")
 
     # plots + pions (le PCB repose dessus par sa face arriere, z = 1.6)
     for hx, hy in HOLES:
@@ -132,9 +169,15 @@ def pt_world(x, y, z):
 def pied():
     f = FOOT
     block = cq.Workplane("XY").box(f["x"], f["y1"] - f["y0"], f["h"], centered=(True, False, False)).translate((0, f["y0"], 0))
-    block = block.edges("|Z").chamfer(4.0)
-    # butee avant pour le bas du telephone
-    lip = cq.Workplane("XY").box(f["x"] - 8, 2.5, 3.0, centered=(True, False, False)).translate((0, f["y0"] + 1.0, f["h"]))
+    block = block.edges("|Z").fillet(10.0)
+    block = block.faces(">Z").edges().fillet(4.0)          # dessus arrondi, la brique devient un galet
+    # cannelures sur la face avant, meme pas que la coque, entre les angles arrondis
+    pitch = 2 * math.pi * R_OUT / N_FLUTE
+    n = int((f["x"] - 26.0) / pitch)
+    pts = [(-(n - 1) / 2 * pitch + i * pitch, f["y0"] - R_FLUTE + D_FLUTE) for i in range(n)]
+    block = verifie_gorges(block, block.cut(cannelures(pts, -1.0, f["h"] - 4.0 + 1.0)), "pied")
+    # butee avant pour le bas du telephone ; elle descend dans l'arrondi pour ne pas flotter
+    lip = cq.Workplane("XY").box(f["x"] - 16, 2.5, 7.0, centered=(True, False, False)).translate((0, f["y0"] + 1.0, f["h"] - 4.0))
     block = block.union(lip)
 
     # fente : enveloppe de la coque avec jeu

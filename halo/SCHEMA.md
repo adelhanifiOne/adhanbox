@@ -352,12 +352,24 @@ Réalisée dans `gen_coque_pied.py`, fichiers dans `3d/`. Même principe que
 `fusion_scripts/` : la conception est un script rejouable, les valeurs de
 contrôle sont mesurées à l'exécution.
 
-**Coque arrière**, PETG translucide blanc, 22 g de matière pleine
+**Style.** Les supports de téléphone imprimés qui se vendent (Cozyleigh et
+consorts) partagent un vocabulaire : cannelures verticales sur tout le
+pourtour, aucune arête vive, silhouette de galet, teintes mates. La coque et le
+pied le reprennent depuis le 15/09/2026 ; avant, c'étaient un bol lisse et une
+brique chanfreinée. Le pied reste massif parce qu'il loge la prise USB-C
+coudée : l'affiner demande de revoir cette poche, pas seulement l'habillage.
 
-- Bol de diamètre extérieur 98,2 mm, paroi 1,6 mm, fond 1,6 mm, hauteur 11,2 mm.
+**Coque arrière**, PETG translucide blanc, 24 g de matière pleine
+
+- Galet de diamètre extérieur 100,8 mm, hauteur 11,2 mm, fond 1,6 mm. La paroi
+  fait 2,9 mm et porte 54 cannelures de 1,3 mm de profondeur au pas de 5,9 mm,
+  tranche de pièce de monnaie : il reste 1,6 mm de matière au fond des gorges.
+  Dos arrondi R3,5, lèvre avant chanfreinée 0,8. Les cannelures s'arrêtent où
+  le dos s'arrondit.
   Le rayon intérieur est de 47,5 mm pour un PCB de 42,5 mm : les 5 mm de jour
   tout autour du PCB sont la surface lumineuse vue de face. Les LEDs éclairent
-  le fond du bol, la lumière ressort par ce jour et par la paroi.
+  le fond du bol, la lumière ressort par ce jour et par la paroi, que les
+  cannelures modulent.
 - Le bord avant dépasse le PCB de 1,6 mm. Le téléphone s'appuie sur la face
   avant du PCB, masque noir.
 - Le PCB repose par sa face arrière sur 4 plots de diamètre 6 mm à r = 30 mm,
@@ -371,10 +383,11 @@ contrôle sont mesurées à l'exécution.
 - Impression fond sur le plateau, ouverture en l'air, sans support. Les
   crochets ont 0,6 mm de porte-à-faux.
 
-**Pied**, PETG noir, 81 cm³ de volume, environ 40 g à 15 % de remplissage
+**Pied**, PETG noir, 77 cm³ de volume, environ 40 g à 15 % de remplissage
 
-- Bloc 70 x 52 x 24 mm à chanfreins de 4 mm, butée avant de 3 mm pour le bas
-  du téléphone.
+- Bloc 70 x 52 x 24 mm, angles verticaux arrondis R10, dessus arrondi R4, face
+  avant cannelée au même pas que la coque (10 gorges entre les angles), butée
+  avant de 3 mm pour le bas du téléphone, prolongée dans l'arrondi.
 - Fente à la forme exacte de la coque inclinée à 65°, jeu 0,3 mm. La coque s'y
   emboîte sur 8,6 mm de profondeur. Hauteur totale du produit : 109 mm.
 - Poche pour la languette USB-C et une **prise USB-C coudée**. C'est un choix
@@ -391,7 +404,7 @@ contrôle sont mesurées à l'exécution.
 | intersection coque / PCB | 0 mm³ |
 | intersection coque / composants | 0 mm³ |
 | intersection coque / pied | 0 mm³ |
-| coque en place, Z | 15,4 à 109,2 mm |
+| coque en place, Z | 15,4 à 110,0 mm |
 | emboîtement dans le pied | 8,6 mm |
 | bas de la prise coudée au-dessus du plancher | 4,2 mm |
 | rainure de câble | Y = -15,1, Z = 11,2 |
