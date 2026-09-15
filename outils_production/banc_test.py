@@ -39,6 +39,13 @@ RACINE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RAPPORTS = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'rapports')
 SKETCH = os.path.join(RACINE, 'adhanbox_v3')
 FQBN = 'esp32:esp32:esp32s3:PartitionScheme=min_spiffs,PSRAM=enabled,CDCOnBoot=cdc'
+# Image de SORTIE : identique, sans CDCOnBoot. La difference n'est pas cosmetique.
+# Avec CDCOnBoot, Serial sort par l'USB natif — or l'USB, sur un boitier ferme,
+# c'est la prise d'alimentation. Une carte de banc expediee telle quelle offre
+# donc la console d'atelier a quiconque la branche sur un ordinateur, commande
+# « t:usine » comprise. Sans CDCOnBoot, Serial part sur l'UART et ce port reste
+# muet. C'est exactement ce que verifie preparer_envoi().
+FQBN_SORTIE = 'esp32:esp32:esp32s3:PartitionScheme=min_spiffs,PSRAM=enabled'
 HOTES = ['adhanbox.local', '192.168.4.1']   # mDNS, puis point d'acces de la box
 
 # Contenu attendu sur la carte SD (voir sd_preload/ dans le depot)
@@ -301,6 +308,7 @@ def _courir(cmd, sortie):
 # octets de plus). Deux fois le 07/09/2026, une carte flashee depuis le banc
 # juste apres une publication est restee « sans reponse » pour cette raison.
 BUILD = os.path.join(RACINE, 'build_banc_v3')
+BUILD_SORTIE = os.path.join(RACINE, 'build_sortie_v3')
 BINAIRE = os.path.join(BUILD, 'adhanbox_v3.ino.bin')
 BINAIRE_SIGNE = os.path.join(BUILD, 'adhanbox_v3.ino.signed.bin')
 CLE_PRIVEE = os.path.join(RACINE, 'keys', 'ota_private.pem')
@@ -477,6 +485,96 @@ def flasher(port=None, recompiler=False, sortie=info):
                            'en est la cause la plus frequente — ferme-le.')
         return False, 'Televersement echoue.'
     return True, 'Firmware televerse sur %s. La carte redemarre (~20 s).' % port
+
+
+def preparer_envoi(port=None, sortie=info):
+    """Repose l'image de SORTIE sur une carte qui vient d'etre testee.
+
+    Le banc flashe volontairement une image bavarde : sans console par le cable,
+    il ne pourrait rien tester. Mais cette image ne doit pas partir chez un
+    client. Cette etape la remplace, et c'est la derniere chose a faire avant de
+    fermer le boitier.
+
+    La verification est une inversion : apres coup, la carte ne doit PLUS
+    repondre par le cable. Un port devenu muet est la preuve que l'image de
+    sortie est en place — c'est le seul controle possible, puisque justement
+    elle ne parle plus.
+    """
+    cli = trouver_cli()
+    if not cli:
+        return False, 'arduino-cli introuvable (brew install arduino-cli).'
+
+    if not port:
+        dispo = ports_serie()
+        if not dispo:
+            return False, 'Aucune carte detectee. Branche-la en USB et reessaie.'
+        if len(dispo) > 1:
+            return False, ('Plusieurs cartes branchees (%s) — choisis le port.'
+                           % ', '.join(dispo))
+        port = dispo[0]
+    sortie('Carte sur %s' % port)
+
+    attendue = version_source()
+    sortie('Compilation de l\'image de sortie (%s, sans console USB)…' % (attendue or '?'))
+    lib = os.path.expanduser('~/Documents/Arduino/libraries')
+    if _courir([cli, 'compile', '--fqbn', FQBN_SORTIE, '--libraries', lib,
+                '--output-dir', BUILD_SORTIE, SKETCH], sortie) != 0:
+        return False, 'Compilation de l\'image de sortie echouee.'
+
+    sortie('Televersement de l\'image de sortie…')
+    trace = []
+
+    def tracer(ligne):
+        trace.append(ligne)
+        sortie(ligne)
+
+    if _courir([cli, 'upload', '--fqbn', FQBN_SORTIE, '--port', port,
+                '--input-dir', BUILD_SORTIE, SKETCH], tracer) != 0:
+        texte = '\n'.join(trace).lower()
+        if 'busy' in texte or 'could not open' in texte:
+            occupant = qui_occupe_port(port)
+            return False, ('Televersement impossible : %s'
+                           % (occupant or 'le port est pris par un autre programme.'))
+        return False, 'Televersement de l\'image de sortie echoue.'
+
+    sortie('Verification : la console doit maintenant se taire…')
+    time.sleep(5)
+    if _console_repond(port):
+        return False, ('La carte repond encore par le cable : l\'image de banc est '
+                       'toujours en place. NE PAS EXPEDIER cette carte.')
+    return True, ('Image de sortie %s installee, console USB fermee. '
+                  'La carte est prete a partir.' % (attendue or ''))
+
+
+def _console_repond(port, secondes=5):
+    """Vrai si la carte repond a t:info par le cable. Sert a prouver le
+    CONTRAIRE : sur une image de sortie, ce port ne doit rien renvoyer."""
+    try:
+        subprocess.run(['stty', '-f', port, 'raw', '115200', '-echo', '-hupcl'],
+                       check=True, capture_output=True, timeout=5)
+        fd = os.open(port, os.O_RDWR | os.O_NOCTTY | os.O_NONBLOCK)
+    except Exception:
+        return False          # port injoignable : pas une reponse
+    try:
+        os.write(fd, b't:info\n')
+        fin = time.time() + secondes
+        tampon = ''
+        while time.time() < fin:
+            if select.select([fd], [], [], 0.2)[0]:
+                try:
+                    tampon += os.read(fd, 4096).decode('utf-8', 'replace')
+                except OSError:
+                    break
+        return 'version' in tampon
+    finally:
+        os.close(fd)
+
+
+def cmd_sortie(args):
+    titre('Preparation de la carte pour l\'envoi')
+    succes, message = preparer_envoi(args.port, sortie=info)
+    (ok if succes else ko)(message)
+    return 0 if succes else 1
 
 
 def cmd_flash(args):
@@ -1757,6 +1855,10 @@ def main():
     m.add_argument('--jeton', help="jeton d'API, si la carte ne le publie plus")
     m.add_argument('--recompiler', action='store_true', help='force la compilation')
     m.set_defaults(fn=cmd_maj)
+
+    e = sp.add_parser('sortie', help="repose l'image de sortie : derniere etape avant l'envoi")
+    e.add_argument('--port', default='')
+    e.set_defaults(fn=cmd_sortie)
 
     u = sp.add_parser('usine', help='remet une carte comme au premier allumage (cable USB)')
     u.add_argument('--port', help='port serie (auto-detecte sinon)')
