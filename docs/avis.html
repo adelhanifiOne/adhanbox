@@ -45,6 +45,22 @@
     .avis-form textarea { min-height:120px; resize:vertical; }
     .avis-form .hint { color:#9a9a9a; font-size:.82rem; margin-top:4px; }
     .avis-form .row2 { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+    /* Pastilles « comment nous avez-vous connus » : un seul choix, une seule
+       touche. Un menu deroulant aurait demande deux gestes sur telephone. */
+    .source-pick { display:flex; flex-wrap:wrap; gap:9px; margin-top:4px; }
+    .source-pick input { position:absolute; opacity:0; width:0; height:0; }
+    .source-pick label {
+      display:inline-block; margin:0; padding:9px 15px; border-radius:999px;
+      border:1px solid #d7d2c7; background:#fbfaf7; cursor:pointer;
+      font-size:.9rem; font-weight:500; color:var(--ink);
+      transition:background .12s ease, border-color .12s ease, color .12s ease;
+    }
+    .source-pick label:hover { border-color:var(--emerald); }
+    .source-pick input:checked + label {
+      background:var(--emerald); border-color:var(--emerald); color:#fff; font-weight:600;
+    }
+    .source-pick input:focus-visible + label { outline:2px solid var(--emerald); outline-offset:3px; }
+    #f-source-autre { margin-top:10px; }
     @media (max-width:520px){ .avis-form .row2 { grid-template-columns:1fr; } }
     .hp { position:absolute; left:-9999px; opacity:0; height:0; overflow:hidden; }
 
@@ -121,6 +137,19 @@
               <input type="text" id="f-ville" name="ville" maxlength="60" placeholder="ex : Lyon" autocomplete="address-level2">
             </div>
           </div>
+
+          <label id="source-label">Comment nous avez-vous connus ?</label>
+          <div class="source-pick" role="radiogroup" aria-labelledby="source-label">
+            <input type="radio" name="source" id="s-tiktok"  value="tiktok"><label for="s-tiktok">TikTok</label>
+            <input type="radio" name="source" id="s-insta"   value="instagram"><label for="s-insta">Instagram</label>
+            <input type="radio" name="source" id="s-proche"  value="bouche-a-oreille"><label for="s-proche">Un proche m'en a parlé</label>
+            <input type="radio" name="source" id="s-mosquee" value="mosquee"><label for="s-mosquee">À la mosquée</label>
+            <input type="radio" name="source" id="s-google"  value="recherche"><label for="s-google">Une recherche sur internet</label>
+            <input type="radio" name="source" id="s-autre"   value="autre"><label for="s-autre">Autrement</label>
+          </div>
+          <input type="text" id="f-source-autre" name="source_autre" maxlength="60"
+                 placeholder="Dites-nous comment, en quelques mots" hidden>
+          <div class="hint">Cela nous aide à savoir où nous faire connaître. Ce choix n'est jamais publié.</div>
 
           <label for="f-email">Email <span style="font-weight:400;color:#9a9a9a;">(facultatif — jamais publié)</span></label>
           <input type="email" id="f-email" name="email" maxlength="120" placeholder="ex : vous@email.fr" autocomplete="email">
@@ -210,6 +239,16 @@
   var msg = document.getElementById('avis-msg');
   var btn = document.getElementById('avis-submit');
 
+  // Le champ libre ne sert qu'a « Autrement » : le montrer d'emblee alourdirait
+  // le formulaire pour les cinq autres reponses.
+  var autreInput = document.getElementById('f-source-autre');
+  form.querySelectorAll('input[name="source"]').forEach(function (r) {
+    r.addEventListener('change', function () {
+      autreInput.hidden = (r.value !== 'autre');
+      if (!autreInput.hidden) autreInput.focus(); else autreInput.value = '';
+    });
+  });
+
   form.addEventListener('submit', function (e) {
     e.preventDefault();
     msg.className = 'avis-msg';
@@ -222,6 +261,8 @@
     if (!note) { return show('err', 'Choisissez une note (1 à 5 étoiles).'); }
     if (texte.length < 10) { return show('err', 'Votre avis est un peu court (10 caractères minimum).'); }
     if (!prenom) { return show('err', 'Merci d\'indiquer votre prénom.'); }
+    var srcEl = form.querySelector('input[name="source"]:checked');
+    if (!srcEl) { return show('err', 'Dites-nous comment vous nous avez connus.'); }
 
     var original = btn.textContent;
     btn.disabled = true; btn.textContent = 'Envoi…';
@@ -235,6 +276,8 @@
         prenom: prenom,
         ville: form.ville.value.trim(),
         email: form.email.value.trim(),
+        source: srcEl.value,
+        source_autre: autreInput.value.trim(),
         hp: form.hp.value
       })
     })
@@ -243,6 +286,7 @@
         btn.disabled = false; btn.textContent = original;
         if (res.ok && res.j.ok) {
           form.reset();
+          autreInput.hidden = true; autreInput.value = '';
           show('ok', 'Merci ! 🌙 Votre avis a bien été reçu. Il apparaîtra après validation.');
         } else {
           show('err', (res.j && res.j.error) || 'Une erreur est survenue. Réessayez.');

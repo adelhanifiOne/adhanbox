@@ -30,7 +30,16 @@ export default async function handler(req, res) {
     reviews = await Promise.all(blobs.map(async (b) => {
       try {
         const r = await fetch(b.url, { cache: 'no-store' });
-        return r.ok ? await r.json() : null;
+        if (!r.ok) return null;
+        // Liste blanche : ce point d'acces renvoyait l'objet stocke TEL QUEL,
+        // donc tout champ ajoute a l'avis se serait retrouve publie sans qu'on
+        // s'en apercoive - c'est arrive avec « source », qui ne regarde que
+        // nous. On n'expose que ce que la page affiche.
+        const a = await r.json();
+        return {
+          note: a.note, texte: a.texte, prenom: a.prenom,
+          ville: a.ville, verifie: a.verifie, date: a.date,
+        };
       } catch { return null; }
     }));
     reviews = reviews

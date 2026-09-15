@@ -1,4 +1,4 @@
-// POST /api/review  { note, texte, prenom, ville, email?, hp? }
+// POST /api/review  { note, texte, prenom, ville, email?, source, source_autre?, hp? }
 // Dépôt d'un avis client (ou testeur) depuis adhanbox.fr/avis.html.
 //
 // L'avis est stocké EN ATTENTE dans Vercel Blob (reviews/pending/{id}.json),
@@ -79,9 +79,19 @@ export default async function handler(req, res) {
   const ville = clean(body.ville, 60);
   const email = clean(body.email, 120);
 
+  // « Comment nous avez-vous connus ». Vocabulaire ferme : on n'enregistre que
+  // l'une de ces six valeurs, jamais ce que le visiteur a pu taper. Le store
+  // Blob des avis est PUBLIC et le restera : rien d'ecrit librement ne doit y
+  // atterrir. Le texte libre de « autrement » part uniquement dans le courriel
+  // de notification, qui lui n'est pas public.
+  const SOURCES = ['tiktok', 'instagram', 'bouche-a-oreille', 'mosquee', 'recherche', 'autre'];
+  const source = SOURCES.includes(body.source) ? body.source : '';
+  const sourceAutre = source === 'autre' ? clean(body.source_autre, 60) : '';
+
   if (!(note >= 1 && note <= 5)) return sendJson(res, 400, { error: 'Note invalide (1 à 5).' });
   if (texte.length < 10) return sendJson(res, 400, { error: 'Votre avis est un peu court (10 caractères minimum).' });
   if (!prenom) return sendJson(res, 400, { error: 'Merci d\'indiquer votre prénom.' });
+  if (!source) return sendJson(res, 400, { error: 'Dites-nous comment vous nous avez connus.' });
   // Anti-spam simple : pas de liens dans un avis.
   if (/https?:\/\/|www\.|\[url/i.test(texte)) {
     return sendJson(res, 400, { error: 'Merci de retirer les liens de votre avis.' });
@@ -97,6 +107,7 @@ export default async function handler(req, res) {
     prenom,
     ville,
     verifie,
+    source,
     date: new Date().toISOString(),
   };
 
@@ -116,6 +127,12 @@ export default async function handler(req, res) {
     const link = (action) =>
       `${BACKEND}/api/review-moderate?id=${id}&action=${action}&token=${encodeURIComponent(ADMIN_TOKEN)}`;
     const stars = '★'.repeat(note) + '☆'.repeat(5 - note);
+    const LIBELLE = {
+      tiktok: 'TikTok', instagram: 'Instagram',
+      'bouche-a-oreille': 'un proche lui en a parlé', mosquee: 'à la mosquée',
+      recherche: 'une recherche sur internet', autre: 'autrement',
+    };
+    const commentConnu = (LIBELLE[source] || source) + (sourceAutre ? ` — « ${sourceAutre} »` : '');
     try {
       const resend = new Resend(process.env.RESEND_API_KEY);
       await resend.emails.send({
@@ -128,6 +145,7 @@ export default async function handler(req, res) {
   <p style="font-size:20px;color:#C9A227;margin:0;">${stars} <span style="color:#666;font-size:14px;">(${note}/5)</span></p>
   <p style="background:#F6F4EF;border-radius:10px;padding:16px 18px;font-style:italic;">« ${esc(texte)} »</p>
   <p><b>${esc(prenom)}</b>${ville ? ' · ' + esc(ville) : ''}${verifie ? ' · <span style="color:#0C5B45;">✔ acheteur vérifié</span>' : ' · <span style="color:#999;">non vérifié</span>'}</p>
+  <p style="color:#555;">Nous a connus par : <b>${esc(commentConnu)}</b></p>
   <p style="margin-top:24px;">
     <a href="${link('approve')}" style="background:#0C5B45;color:#fff;text-decoration:none;padding:12px 22px;border-radius:8px;font-weight:700;margin-right:10px;">✔ Approuver (publier)</a>
     <a href="${link('reject')}" style="background:#eee;color:#333;text-decoration:none;padding:12px 22px;border-radius:8px;font-weight:700;">✕ Rejeter</a>
@@ -137,6 +155,7 @@ export default async function handler(req, res) {
           `Nouvel avis en attente (${note}/5)`,
           `« ${texte} »`,
           `${prenom}${ville ? ' · ' + ville : ''}${verifie ? ' · acheteur vérifié' : ''}`,
+          `Nous a connus par : ${commentConnu}`,
           '',
           `Approuver : ${link('approve')}`,
           `Rejeter   : ${link('reject')}`,
