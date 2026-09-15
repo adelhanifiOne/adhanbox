@@ -266,7 +266,10 @@ if __name__ == "__main__":
 
     # 4. exports
     cq.exporters.export(coq, str(OUT / "Halo_coque.step"))
-    cq.exporters.export(coq, str(OUT / "Halo_coque.stl"), tolerance=0.02, angularTolerance=0.1)
+    # STL de la coque dans l'orientation d'impression : retournee, fond sur le plateau (z = 0), ouverture
+    # en l'air ; le STEP reste dans le repere carte pour l'assemblage.
+    coq_print = coq.rotate((0, 0, 0), (1, 0, 0), 180).translate((0, 0, Z_BACK))
+    cq.exporters.export(coq_print, str(OUT / "Halo_coque.stl"), tolerance=0.02, angularTolerance=0.1)
     cq.exporters.export(foot, str(OUT / "Halo_pied.step"))
     cq.exporters.export(foot, str(OUT / "Halo_pied.stl"), tolerance=0.02, angularTolerance=0.1)
     cq.exporters.export(carte, str(OUT / "Halo_pcb.step"))
