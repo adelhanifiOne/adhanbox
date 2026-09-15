@@ -77,6 +77,10 @@
     background:var(--or);border:none;box-shadow:0 2px 8px rgba(0,0,0,.35)}
   .vval{text-align:center;font-size:13px;color:var(--texte-2);margin-top:8px}
 
+  /* Elements inertes tant que la boite ne s'est pas annoncee : visibles, mais
+     visiblement sans effet. Les laisser actifs invitait a appuyer dans le vide. */
+  .inerte{opacity:.35;pointer-events:none;filter:saturate(.4)}
+
   .msg{min-height:22px;text-align:center;font-size:13.5px;margin:14px 0 0;color:var(--or);font-weight:500}
 
   .final{margin-top:30px;border-top:1px solid var(--bord);padding-top:22px;text-align:center}
@@ -185,6 +189,12 @@ const $ = (s) => document.querySelector(s);
 const msg = $('#msg'), etat = $('#etat'), pastille = $('#pastille');
 let client = null, pret = false;
 let vMax = 15;              // plafond ; remplace par celui que la boite annonce
+// Presence de la BOITE, distincte de notre propre liaison au serveur. Les deux
+// etaient confondues : une boite debranchee laissait la page afficher « Prete »
+// et le visiteur appuyait dans le vide, en concluant que le produit ne marche
+// pas. null = pas encore su.
+let boitePresente = null;
+let minuteurPresence = null;
 let curseurTenu = false;    // un doigt tient le curseur de volume
 
 function dire(t, duree = 3200) {
@@ -216,22 +226,74 @@ if (!/^[0-9a-f]{12}$/.test(ID)) {
 
   client = mqtt.connect(BROKER, { connectTimeout: 8000, reconnectPeriod: 4000, clean: true });
 
+  // Trois etats, et le troisieme compte autant que les deux autres.
+  // Un boitier d'avant la 3.0.40 n'annonce pas sa presence : il faut attendre
+  // son battement d'etat, jusqu'a trente secondes. Griser les commandes pendant
+  // ce temps rendrait une boite parfaitement vivante inutilisable a l'ecran.
+  // Tant qu'on ne SAIT pas, on laisse donc appuyer - et c'est l'appui lui-meme
+  // qui tranche, puisqu'une boite presente repond en une seconde.
+  const peindreEtat = () => {
+    if (!pret) { pastille.className = 'pastille'; etat.textContent = 'Connexion…'; return; }
+    if (boitePresente === true) {
+      pastille.className = 'pastille ok';
+      etat.textContent = 'Prête — à vous de jouer';
+    } else if (boitePresente === false) {
+      pastille.className = 'pastille ko';
+      etat.textContent = 'La boîte ne répond pas — prévenez-nous';
+    } else {
+      pastille.className = 'pastille';
+      etat.textContent = 'Recherche de la boîte…';
+    }
+    // On ne grise QUE si l'absence est etablie, jamais dans le doute.
+    document.querySelectorAll('button[data-cmd], .pot, #vol')
+      .forEach((el) => { el.classList.toggle('inerte', boitePresente === false); });
+  };
+
+  // Tout signe de vie vaut preuve de presence : le message de presence de la
+  // 3.0.40, mais aussi un battement d'etat non retenu, ou n'importe quelle
+  // reponse a une commande. C'est ce qui fait marcher la page avec les
+  // boitiers deja poses, sans les reflasher.
+  let attenteReponse = null;
+  const signeDeVie = () => {
+    clearTimeout(minuteurPresence);
+    clearTimeout(attenteReponse);
+    if (boitePresente !== true) { boitePresente = true; peindreEtat(); }
+  };
+
   client.on('connect', () => {
     pret = true;
-    pastille.className = 'pastille ok';
-    etat.textContent = 'Prête — à vous de jouer';
+    client.subscribe(base + '/presence');
     client.subscribe(base + '/audio/status');
     client.subscribe(base + '/status');
+    // Le message de presence est retenu : s'il existe, il arrive tout de suite.
+    // Passe ce delai sans rien, c'est qu'aucune boite ne s'est jamais annoncee.
+    // 35 s : le boitier publie son etat toutes les 30 s depuis longtemps. Passe
+    // ce delai sans le moindre signe, l'absence n'est plus un doute.
+    clearTimeout(minuteurPresence);
+    minuteurPresence = setTimeout(() => {
+      if (boitePresente !== true) { boitePresente = false; peindreEtat(); }
+    }, 35000);
+    peindreEtat();
   });
-  client.on('reconnect', () => { pastille.className = 'pastille'; etat.textContent = 'Reconnexion…'; });
+  client.on('reconnect', () => { pret = false; peindreEtat(); });
+  client.on('close', () => { pret = false; peindreEtat(); });
   client.on('error', () => { pastille.className = 'pastille ko'; etat.textContent = 'Connexion impossible'; });
 
-  client.on('message', (sujet, charge) => {
+  client.on('message', (sujet, charge, paquet) => {
     const v = charge.toString();
 
     // Attention a l'ordre : « adhanbox/<id>/audio/status » se termine LUI AUSSI
     // par « /status ». On teste donc le plus precis d'abord.
+    if (sujet.endsWith('/presence')) {
+      clearTimeout(minuteurPresence);
+      clearTimeout(attenteReponse);
+      boitePresente = (v === 'presente');
+      peindreEtat();
+      return;
+    }
+
     if (sujet.endsWith('/audio/status')) {
+      signeDeVie();   // une reponse, donc elle est bien la
       // Le firmware répond « refus:<raison> » quand un garde-fou s'applique.
       if (v.startsWith('refus:')) { dire('⏸ ' + v.slice(6), 4000); return; }
       if (v === 'playing') dire('▶ En cours de lecture');
@@ -244,6 +306,9 @@ if (!/^[0-9a-f]{12}$/.test(ID)) {
     // plutot que de coder le plafond en dur, qui se desynchroniserait des
     // qu'Adel le change depuis /api/mosquee.
     if (sujet.endsWith('/status')) {
+      // Un etat RETENU est la derniere photo connue, peut-etre vieille de
+      // plusieurs jours : il ne prouve rien. Seul un message frais compte.
+      if (paquet && !paquet.retain) signeDeVie();
       try {
         const st = JSON.parse(v);
         if (Number.isFinite(st.volume_max) && st.volume_max > 0) vMax = st.volume_max;
@@ -253,18 +318,31 @@ if (!/^[0-9a-f]{12}$/.test(ID)) {
   });
 
   const envoyer = (sujet, valeur) => {
-    if (!pret) { dire('Connexion en cours, un instant…'); return; }
+    if (!pret) { dire('Connexion en cours, un instant…'); return false; }
+    if (boitePresente === false) { dire('⚠ La boîte ne répond pas. Prévenez-nous, merci !', 5000); return false; }
     client.publish(base + sujet, String(valeur));
+    // Presence encore inconnue : cet appui sert de sonde. Une boite vivante
+    // repond en une seconde ; passe six, on tranche et on le dit.
+    if (boitePresente === null) {
+      clearTimeout(attenteReponse);
+      attenteReponse = setTimeout(() => {
+        if (boitePresente !== true) {
+          boitePresente = false; peindreEtat();
+          dire('⚠ La boîte ne répond pas. Prévenez-nous, merci !', 6000);
+        }
+      }, 6000);
+    }
+    return true;
   };
 
   document.querySelectorAll('button[data-cmd]').forEach((b) => {
     b.addEventListener('click', () => {
       const c = b.dataset.cmd;
-      if (c === 'adhan') { envoyer('/adhan/trigger', b.dataset.val); dire('🕌 Adhan lancé'); }
+      if (c === 'adhan' && envoyer('/adhan/trigger', b.dataset.val)) dire('🕌 Adhan lancé');
       // Le Coran et les azkar se jouent par CHEMIN, pas par numero : seuls les
       // adhans et l'invocation vivent dans /mp3/000N.mp3. Le firmware accepte
       // les deux formes depuis la 3.0.37.
-      if (c === 'play')  { envoyer('/audio/play',    b.dataset.val); dire('▶ Lecture lancée'); }
+      if (c === 'play'  && envoyer('/audio/play',    b.dataset.val)) dire('▶ Lecture lancée');
       // Un retour tout de suite : sans lui le bouton paraissait mort le temps
       // que la boite reponde, et on appuyait trois fois.
       if (c === 'stop')  { envoyer('/audio/stop',    '1'); dire('⏹ Arrêt…'); }
@@ -273,8 +351,8 @@ if (!/^[0-9a-f]{12}$/.test(ID)) {
 
   document.querySelectorAll('.pot').forEach((p) => {
     p.addEventListener('click', () => {
-      envoyer('/led/scenario', p.dataset.scene);
-      dire(p.dataset.scene === '0' ? '💡 Lumière éteinte' : '💡 Lumière changée');
+      if (envoyer('/led/scenario', p.dataset.scene))
+        dire(p.dataset.scene === '0' ? '💡 Lumière éteinte' : '💡 Lumière changée');
     });
   });
 
@@ -290,8 +368,8 @@ if (!/^[0-9a-f]{12}$/.test(ID)) {
   // boite, qui ecrit le volume en memoire permanente a chaque fois.
   vol.addEventListener('change', () => {
     const pct = Number(vol.value);
-    envoyer('/audio/volume', Math.round(pct / 100 * vMax));
-    dire(pct === 0 ? '🔇 Silencieux' : '🔊 Volume ' + pct + ' %');
+    if (envoyer('/audio/volume', Math.round(pct / 100 * vMax)))
+      dire(pct === 0 ? '🔇 Silencieux' : '🔊 Volume ' + pct + ' %');
   });
   peindre(Number(vol.value));
 }
