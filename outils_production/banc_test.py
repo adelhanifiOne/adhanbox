@@ -514,6 +514,27 @@ def preparer_envoi(port=None, sortie=info):
         port = dispo[0]
     sortie('Carte sur %s' % port)
 
+    # D'ABORD effacer, ENSUITE flasher : l'effacement passe par la console du
+    # cable, qui n'existera plus une fois l'image de sortie posee. Une carte
+    # testee au banc a ete reliee au Wi-Fi de l'atelier : sans cet effacement,
+    # elle partirait chez un client avec le SSID et le MOT DE PASSE de la
+    # maison dans sa memoire, lisibles avec un acces physique a la puce.
+    sortie('Effacement des reglages d\'atelier (Wi-Fi, mosquee, jetons)…')
+    try:
+        box, infos = trouver_box_serie(port)
+    except Exception as e:
+        return False, 'Carte injoignable par le cable pour l\'effacement : %s' % e
+    if not box:
+        return False, ('Aucune reponse par le cable. Cette carte porte peut-etre '
+                       'deja une image de sortie : effacer par le reseau '
+                       '(banc_test.py usine --hote <ip>) avant de recommencer.')
+    reussi, message, box, _ = remise_a_zero(box, infos=infos)
+    if isinstance(box, BoxSerie):
+        box.fermer()
+    if not reussi:
+        return False, 'Effacement echoue : %s' % message
+    sortie('Reglages effaces.')
+
     attendue = version_source()
     sortie('Compilation de l\'image de sortie (%s, sans console USB)…' % (attendue or '?'))
     lib = os.path.expanduser('~/Documents/Arduino/libraries')
@@ -542,8 +563,8 @@ def preparer_envoi(port=None, sortie=info):
     if _console_repond(port):
         return False, ('La carte repond encore par le cable : l\'image de banc est '
                        'toujours en place. NE PAS EXPEDIER cette carte.')
-    return True, ('Image de sortie %s installee, console USB fermee. '
-                  'La carte est prete a partir.' % (attendue or ''))
+    return True, ('Reglages effaces, image de sortie %s installee, console USB '
+                  'fermee. La carte est prete a partir.' % (attendue or ''))
 
 
 def _console_repond(port, secondes=5):

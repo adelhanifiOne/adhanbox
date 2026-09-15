@@ -1022,7 +1022,10 @@ $('#b-flash').onclick = () => {
 };
 $('#b-sortie').onclick = () => {
   if (!confirm("Préparer cette carte pour l'envoi ?\n\n"
-    + "L'image de sortie remplace celle du banc : la console d'atelier se ferme, "
+    + "Deux choses, dans cet ordre :\n\n"
+    + "1. Effacement des réglages d'atelier. La carte a été reliée au Wi-Fi d'ici : "
+    + "sans cela elle partirait avec le mot de passe de la maison dans sa mémoire.\n\n"
+    + "2. L'image de sortie remplace celle du banc : la console d'atelier se ferme, "
     + "et la carte ne répondra plus par le câble. C'est voulu — c'est ce qui "
     + "empêche un client de la vider en la branchant sur un ordinateur.\n\n"
     + "À faire APRÈS les tests, juste avant de fermer le boîtier.")) return;

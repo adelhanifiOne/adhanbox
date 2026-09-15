@@ -5,8 +5,19 @@ Pour les premières commandes, passées avant que le bouton « 4 · Avis »
 n'existe. Même contenu que l'email automatique (commande_backend/lib/email.js,
 étape « avis »), réécrit pour un envoi depuis la boîte contact@adhanbox.fr.
 
-Remplacer [PRÉNOM]. Envoyer une dizaine de jours après la réception, pas avant :
-le client doit avoir vécu quelques adhans chez lui.
+Deux versions, même contenu :
+
+- mail_avis_manuel.html — la mise en page exacte des emails automatiques
+  (bandeau vert, carte blanche, bouton). Ouvre-le dans le navigateur,
+  sélectionne tout, copie, colle dans un nouveau message : Mail garde la mise
+  en forme. C'est celle à préférer.
+- ce fichier-ci — le même texte en clair, si tu préfères un message sobre.
+
+Le HTML est RENDU depuis le vrai gabarit (commande_backend/lib/email.js) : il
+est identique à ce que reçoivent les clients, pas une imitation.
+
+Remplacer [PRÉNOM] et [RÉFÉRENCE]. Envoyer une dizaine de jours après la
+réception, pas avant : le client doit avoir vécu quelques adhans chez lui.
 
 À envoyer depuis contact@adhanbox.fr — et surtout PAS en copie groupée : un
 destinataire par message, sinon chacun voit l'adresse des autres.
