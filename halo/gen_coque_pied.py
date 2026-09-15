@@ -10,8 +10,9 @@ Repere "carte" = repere KiCad du PCB : x vers la droite, y vers le BAS (vers la
 languette USB-C), z vers l'ARRIERE (cote composants, F.Cu). z = 0 est la face
 avant du PCB, celle qui touche le telephone.
 
-Repere "monde" pour le pied : X droite, Y vers l'ARRIERE, Z vers le haut. La
-carte est inclinee a 65 deg de l'horizontale, dos vers l'arriere.
+Repere "monde" pour le socle : X droite, Y vers l'ARRIERE, Z vers le haut. La
+carte est inclinee a 65 deg de l'horizontale, dos vers l'arriere, son centre
+en (0, Y0, Z0) ; Z0 est calcule pour laisser GAP_FLOAT de vide sous le disque.
 
 Style : le marche des supports de telephone imprimes (Cozyleigh et consorts)
 impose un vocabulaire : cannelures verticales sur tout le pourtour, aretes
@@ -28,12 +29,18 @@ Coque (PETG translucide blanc, imprimee fond sur le plateau, ouverture en l'air)
   - fente en bas pour la languette USB-C ; 2 trous D2.2 sur RESET/BOOT ;
     membrane souple sur le bouton utilisateur ; trou D3 sur le capteur de lumiere.
 
-Pied (PETG noir, imprime a plat)
-  - bloc 70 x 52 x 24, angles verticaux R10, dessus arrondi R4, face avant
-    cannelee comme la coque ; fente a la forme exacte de la coque
-    (jeu 0.3), poche pour la languette et une PRISE USB-C COUDEE, rainure de
-    cable vers le cote droit, 4 logements pour pads silicone dessous.
-  - butee avant de 3 mm pour le bas du telephone.
+Socle et col (PETG noir, imprimes d'un seul tenant, a plat)
+  - effet « flottant » : le disque est porte par un col de 22 mm de large dans
+    son plan, qui monte d'un socle galet 90 x 72 x 11 (angles R16, dessus R3) ;
+    il reste 31 mm de vide sous le disque de part et d'autre du col.
+  - le disque s'emboite dans le haut du col (fente a sa forme exacte, jeu 0.3,
+    languette d'appui comprise) ; le telephone pose son bord sur la languette
+    de la coque et s'appuie sur la face avant du PCB.
+  - prise USB-C DROITE logee dans le col dans l'axe de la languette, canal de
+    cable qui descend dans le col puis rainure sous le socle jusqu'a l'arriere.
+    Plus besoin de cable coude.
+  - 4 logements pour pads silicone dessous. Controle de stabilite : le centre
+    de gravite d'un telephone de 200 g reste au-dessus du socle.
 
 Usage : python3 halo/gen_coque_pied.py   (depuis la racine du repo)
 """
@@ -65,6 +72,7 @@ R_OUT = R_IN + WALL                 # 50.4
 N_FLUTE = 54                        # cannelures sur le pourtour, pas de 5.9 mm au rayon 50.4 : une tranche de piece
 R_FLUTE, D_FLUTE = 3.9, 1.3         # rayon de la gorge, profondeur : les gorges se touchent, il reste des cretes arrondies
 R_BACK, C_FRONT = 3.5, 0.8          # arrondi du dos (il reste 1.5 au coin de la cavite), chanfrein de la levre avant
+LIP_W, LIP_H = 28.0, 6.0            # languette d'appui du telephone : en bas du bord avant, perpendiculaire au disque
 Z_FRONT = -1.6                      # bord avant de la coque, 1.6 mm devant le PCB
 Z_INNER = T_PCB + H_COMP + 1.0      # fond interieur : 8.0
 Z_BACK = Z_INNER + BACK_T           # 9.6
@@ -96,10 +104,15 @@ def coque():
             .revolve(360, (0, 0, 0), (0, 1, 0)))
     cavity = cq.Workplane("XY").circle(R_IN).extrude(Z_INNER - Z_FRONT).translate((0, 0, Z_FRONT))
     body = body.cut(cavity)
-    # cannelures : elles s'arretent la ou le dos s'arrondit
+    # languette d'appui : secteur de la paroi (R_IN a R_OUT, 28 mm de large) prolonge de 6 mm devant le bord
+    # avant, en bas (y > 0). Le telephone y pose son bord inferieur et s'appuie sur la face du PCB.
+    lip = (cq.Workplane("XY").circle(R_OUT).circle(R_IN).extrude(LIP_H).translate((0, 0, Z_FRONT - LIP_H))
+           .intersect(cq.Workplane("XY").box(LIP_W, R_OUT + 1, LIP_H + 1, centered=(True, False, False)).translate((0, 0, Z_FRONT - LIP_H - 0.5))))
+    body = body.union(lip)
+    # cannelures : de la languette jusqu'a l'arrondi du dos, elles courent aussi sur la languette
     r_axe = R_OUT + R_FLUTE - D_FLUTE
     pts = [(r_axe * math.cos(2 * math.pi * i / N_FLUTE), r_axe * math.sin(2 * math.pi * i / N_FLUTE)) for i in range(N_FLUTE)]
-    body = verifie_gorges(body, body.cut(cannelures(pts, Z_FRONT - 1.0, (Z_BACK - R_BACK) - (Z_FRONT - 1.0))), "coque")
+    body = verifie_gorges(body, body.cut(cannelures(pts, Z_FRONT - LIP_H - 1.0, (Z_BACK - R_BACK) - (Z_FRONT - LIP_H - 1.0))), "coque")
 
     # plots + pions (le PCB repose dessus par sa face arriere, z = 1.6)
     for hx, hy in HOLES:
@@ -152,12 +165,21 @@ def composants_enveloppe():
         sw = b if sw is None else sw.union(b)
     return usb.union(c7).union(esp).union(leds).union(sw)
 
-# ---------------------------------------------------------------- pied (repere monde)
+# ---------------------------------------------------------------- socle et col (repere monde)
+# Effet « flottant » : le disque ne s'emboite plus dans un bloc, il est porte par un col mince
+# (22 mm de large pour 100 de disque) qui monte d'un socle bas ; il reste 30 mm de vide sous le
+# disque de part et d'autre du col. Le col est dans le plan du disque, il en prolonge la ligne.
+# Consequence heureuse : la prise USB-C devient DROITE, logee dans le col dans l'axe de la
+# languette, le cable descend dans le col puis sous le socle. Plus besoin de cable coude.
 TILT = 65.0                          # angle de la carte sur l'horizontale
 ROT_X = -(90 + (90 - TILT))          # -115 deg : y carte -> bas/avant, z carte -> arriere/bas
-Y0, Z0 = 6.0, 64.0                   # position du centre de la carte dans le monde
-FOOT = dict(x=70.0, y0=-24.0, y1=28.0, h=24.0)
-PLUG = dict(w=12.5, thick=6.6, len=12.5)   # prise USB-C coudee, corps au-dela de la face du connecteur
+BASE = dict(x=90.0, y0=-38.0, y1=34.0, h=11.0, r=16.0)   # socle : galet plat
+GAP_FLOAT = 30.0                     # vide sous le point le plus bas du disque
+COL_W, COL_Z0, COL_Z1 = 22.0, -3.6, 12.4                 # col : largeur, epaisseur autour de la coque (repere carte, z)
+PLUG = dict(w=12.5, thick=6.6, len=24.0)                 # prise USB-C droite : corps au-dela de la face du connecteur
+CABLE_D = 6.0
+Y0 = 29.0                            # centre de la carte : recule pour que le telephone reste au-dessus du socle
+Z0 = BASE["h"] + GAP_FLOAT + R_OUT * math.sin(math.radians(TILT)) + Z_BACK * math.cos(math.radians(TILT))
 
 def to_world(shape):
     return shape.rotate((0, 0, 0), (1, 0, 0), ROT_X).translate((0, Y0, Z0))
@@ -167,35 +189,36 @@ def pt_world(x, y, z):
     return (x, Y0 + y * math.cos(a) - z * math.sin(a), Z0 + y * math.sin(a) + z * math.cos(a))
 
 def pied():
-    f = FOOT
-    block = cq.Workplane("XY").box(f["x"], f["y1"] - f["y0"], f["h"], centered=(True, False, False)).translate((0, f["y0"], 0))
-    block = block.edges("|Z").fillet(10.0)
-    block = block.faces(">Z").edges().fillet(4.0)          # dessus arrondi, la brique devient un galet
-    # cannelures sur la face avant, meme pas que la coque, entre les angles arrondis
-    pitch = 2 * math.pi * R_OUT / N_FLUTE
-    n = int((f["x"] - 26.0) / pitch)
-    pts = [(-(n - 1) / 2 * pitch + i * pitch, f["y0"] - R_FLUTE + D_FLUTE) for i in range(n)]
-    block = verifie_gorges(block, block.cut(cannelures(pts, -1.0, f["h"] - 4.0 + 1.0)), "pied")
-    # butee avant pour le bas du telephone ; elle descend dans l'arrondi pour ne pas flotter
-    lip = cq.Workplane("XY").box(f["x"] - 16, 2.5, 7.0, centered=(True, False, False)).translate((0, f["y0"] + 1.0, f["h"] - 4.0))
-    block = block.union(lip)
+    b = BASE
+    socle = cq.Workplane("XY").box(b["x"], b["y1"] - b["y0"], b["h"], centered=(True, False, False)).translate((0, b["y0"], 0))
+    socle = socle.edges("|Z").fillet(b["r"]).faces(">Z").edges().fillet(3.0)
 
-    # fente : enveloppe de la coque avec jeu
-    env = cq.Workplane("XY").circle(R_OUT + PLAY).extrude(Z_BACK - Z_FRONT + 2 * PLAY).translate((0, 0, Z_FRONT - PLAY))
+    # col : barreau dans le plan du disque, de la languette jusque sous le socle, puis coupe au plan du sol
+    col = (cq.Workplane("XY").box(COL_W, 120.0, COL_Z1 - COL_Z0, centered=(True, False, False))
+           .translate((0, 41.0, COL_Z0)).edges("|Y").fillet(4.0))
+    col = to_world(col).intersect(cq.Workplane("XY").box(200, 200, 200, centered=(True, True, False)))
+    block = socle.union(col)
+
+    # fente : enveloppe de la coque avec jeu, languette comprise (le disque s'emboite dans le haut du col)
+    env = cq.Workplane("XY").circle(R_OUT + PLAY).extrude(Z_BACK - Z_FRONT + LIP_H + 2 * PLAY).translate((0, 0, Z_FRONT - LIP_H - PLAY))
     block = block.cut(to_world(env))
 
-    # poche languette + prise coudee (repere carte : x +-, y de 44 a 50.5 + len, z de -1 a 7.6)
+    # poche languette + prise droite, dans l'axe de la languette (repere carte)
+    zc = T_PCB + USB["h"] / 2                                # axe du connecteur
     pocket = cq.Workplane("XY").box(PLUG["w"] + 2.0, USB["y_face"] + PLUG["len"] - 44.0 + 1.0, PLUG["thick"] + 2.0,
-                                    centered=(True, False, False)).translate((0, 44.0, -1.0))
+                                    centered=(True, False, False)).translate((0, 44.0, zc - PLUG["thick"] / 2 - 1.0))
     block = block.cut(to_world(pocket))
-
-    # rainure de cable : du centre de la prise vers la face droite
-    cx, cy, cz = pt_world(0, USB["y_face"] + PLUG["len"] / 2, T_PCB + USB["h"] / 2)
-    chan = cq.Workplane("XY").box(f["x"], 7.0, 7.0, centered=(False, True, True)).translate((0, cy, cz))
-    block = block.cut(chan)
+    # canal de cable : continue dans l'axe, traverse le col et sort sous le socle
+    chan = cq.Workplane("XZ").center(0, zc).circle(CABLE_D / 2).extrude(-80.0).translate((0, USB["y_face"] + PLUG["len"], 0))
+    block = block.cut(to_world(chan))
+    # sous le socle : rainure du point de sortie vers l'arriere, cachee par les pads
+    ys = pt_world(0, USB["y_face"] + PLUG["len"], zc)[1]
+    cx, cy, cz = 0.0, ys, 0.0
+    groove = cq.Workplane("XY").box(CABLE_D + 1.0, b["y1"] - ys + 30.0, 4.0, centered=(True, False, False)).translate((0, ys - 8.0, 0))
+    block = block.cut(groove)
 
     # logements pads silicone dessous
-    for px, py in ((-26, f["y0"] + 8), (26, f["y0"] + 8), (-26, f["y1"] - 8), (26, f["y1"] - 8)):
+    for px, py in ((-32, b["y0"] + 10), (32, b["y0"] + 10), (-32, b["y1"] - 10), (32, b["y1"] - 10)):
         block = block.cut(cq.Workplane("XY").center(px, py).circle(5.0).extrude(1.0))
     return block, (cx, cy, cz)
 
@@ -230,13 +253,16 @@ if __name__ == "__main__":
     i3 = vol(inter) if inter.solids().size() else 0.0
     print(f"intersection coque/pied = {i3:.3f} mm3 (attendu 0)")
     bb = coq_w.val().BoundingBox()
-    print(f"coque en place : Z de {bb.zmin:.1f} a {bb.zmax:.1f} mm, Y de {bb.ymin:.1f} a {bb.ymax:.1f} mm ; pied haut {FOOT['h']} mm")
-    print(f"profondeur d'emboitement dans le pied : {FOOT['h'] - bb.zmin:.1f} mm")
-    px, py, pz = pt_world(0, USB["y_face"] + PLUG["len"], T_PCB + USB["h"] / 2 + PLUG["thick"] / 2)
-    print(f"bas de la prise coudee : Z = {pz:.1f} mm (plancher du pied : > 2 mm attendu)")
-    print(f"rainure de cable : Y = {chan_c[1]:.1f}, Z = {chan_c[2]:.1f}")
+    print(f"coque en place : Z de {bb.zmin:.1f} a {bb.zmax:.1f} mm, Y de {bb.ymin:.1f} a {bb.ymax:.1f} mm ; socle haut {BASE['h']} mm")
+    print(f"vide sous le disque : {bb.zmin - BASE['h']:.1f} mm (GAP_FLOAT = {GAP_FLOAT})")
+    px, py, pz = pt_world(0, USB["y_face"] + PLUG["len"], T_PCB + USB["h"] / 2)
+    print(f"bout de la prise droite : Y = {py:.1f}, Z = {pz:.1f} mm ; sortie du cable sous le socle a Y = {chan_c[1]:.1f}")
     fb = foot.val().BoundingBox()
-    print(f"pied : {fb.xlen:.0f} x {fb.ylen:.0f} x {fb.zlen:.0f} mm ; hauteur totale produit {bb.zmax:.0f} mm")
+    print(f"socle + col : {fb.xlen:.0f} x {fb.ylen:.0f} x {fb.zlen:.0f} mm ; hauteur totale produit {bb.zmax:.0f} mm")
+    # stabilite : le telephone (200 g, centre de gravite a 70 mm du bas) ne doit pas passer devant le socle
+    xs, ys, zs = pt_world(0, R_OUT, Z_FRONT - LIP_H)        # bout de la languette d'appui
+    y_cg = ys - 70.0 * math.cos(math.radians(TILT))
+    print(f"centre de gravite du telephone : Y = {y_cg:.1f} mm, bord avant du socle a {BASE['y0']:.0f} mm -> marge {y_cg - BASE['y0']:.1f} mm (attendu > 0)")
 
     # 4. exports
     cq.exporters.export(coq, str(OUT / "Halo_coque.step"))

@@ -356,8 +356,9 @@ contrôle sont mesurées à l'exécution.
 consorts) partagent un vocabulaire : cannelures verticales sur tout le
 pourtour, aucune arête vive, silhouette de galet, teintes mates. La coque et le
 pied le reprennent depuis le 15/09/2026 ; avant, c'étaient un bol lisse et une
-brique chanfreinée. Le pied reste massif parce qu'il loge la prise USB-C
-coudée : l'affiner demande de revoir cette poche, pas seulement l'habillage.
+brique chanfreinée. Le même jour, le bloc est devenu un socle plat et un col
+mince : le disque flotte à 31 mm au-dessus du socle, et la prise USB-C, logée
+droite dans le col, n'a plus besoin d'un câble coudé.
 
 **Coque arrière**, PETG translucide blanc, 24 g de matière pleine
 
@@ -380,22 +381,29 @@ coudée : l'affiner demande de revoir cette poche, pas seulement l'habillage.
 - Fond : 2 trous de 2,2 mm au droit de RESET et BOOT, une membrane de 10 mm
   amincie à 0,6 mm avec un téton de 3 mm sur le bouton utilisateur, un trou de
   3 mm sur le capteur de lumière.
+- Languette d'appui : un secteur de la paroi de 28 mm, prolongé de 6 mm devant
+  le bord avant, en bas. Le téléphone y pose son bord inférieur et s'appuie sur
+  la face du PCB. Les cannelures courent dessus.
 - Impression fond sur le plateau, ouverture en l'air, sans support. Les
-  crochets ont 0,6 mm de porte-à-faux.
+  crochets ont 0,6 mm de porte-à-faux, la languette monte droit.
 
-**Pied**, PETG noir, 77 cm³ de volume, environ 40 g à 15 % de remplissage
+**Socle et col**, PETG noir, 74 cm³ de volume, environ 45 g à 15 % de remplissage
 
-- Bloc 70 x 52 x 24 mm, angles verticaux arrondis R10, dessus arrondi R4, face
-  avant cannelée au même pas que la coque (10 gorges entre les angles), butée
-  avant de 3 mm pour le bas du téléphone, prolongée dans l'arrondi.
-- Fente à la forme exacte de la coque inclinée à 65°, jeu 0,3 mm. La coque s'y
-  emboîte sur 8,6 mm de profondeur. Hauteur totale du produit : 109 mm.
-- Poche pour la languette USB-C et une **prise USB-C coudée**. C'est un choix
-  important : avec une prise droite, le pied ferait 35 mm de haut. Le câble
-  fourni doit donc être coudé, voir la BOM produit.
-- Rainure de câble de 7 x 7 mm de la prise vers la face droite du pied.
+- Socle galet de 90 x 72 x 11 mm, angles verticaux R16, dessus arrondi R3.
+- Col de 22 mm de large et 16 mm d'épaisseur, dans le plan du disque, qui monte
+  du socle jusqu'à la languette USB-C : le disque s'y emboîte dans une fente à
+  sa forme exacte, jeu 0,3 mm, languette d'appui comprise. Il reste 31 mm de
+  vide sous le point le plus bas du disque, de part et d'autre du col.
+- Poche dans le col pour la languette et une **prise USB-C droite** dans l'axe,
+  canal de câble de 6 mm qui continue dans l'axe à travers le col et le socle,
+  puis rainure sous le socle jusqu'à la face arrière. N'importe quel câble USB-C
+  convient, le câble coudé de la première version n'est plus nécessaire.
+- Le centre de la carte est reculé (Y0 = 29 mm) pour que le centre de gravité
+  d'un téléphone de 200 g posé sur la languette reste au-dessus du socle : le
+  script mesure 9 mm de marge par rapport au bord avant.
 - 4 logements de diamètre 10 mm dessous pour les pads silicone.
-- Impression à plat, sans support : la rainure est un pont de 7 mm.
+- Impression à plat, sans support : le col penche de 25°, la rainure est un
+  pont de 7 mm.
 
 **Valeurs de contrôle** mesurées à l'exécution du script
 
@@ -403,11 +411,11 @@ coudée : l'affiner demande de revoir cette poche, pas seulement l'habillage.
 |---|---|
 | intersection coque / PCB | 0 mm³ |
 | intersection coque / composants | 0 mm³ |
-| intersection coque / pied | 0 mm³ |
-| coque en place, Z | 15,4 à 110,0 mm |
-| emboîtement dans le pied | 8,6 mm |
-| bas de la prise coudée au-dessus du plancher | 4,2 mm |
-| rainure de câble | Y = -15,1, Z = 11,2 |
+| intersection coque / socle et col | 0 mm³ |
+| coque en place, Z | 42,2 à 136,8 mm |
+| vide sous le disque | 31,2 mm |
+| marge du centre de gravité du téléphone sur le bord avant du socle | 9,2 mm |
+| hauteur totale du produit | 137 mm |
 
 - Anneau aimanté MagSafe adhésif collé en face avant, centré à 20 mm sous le
   centre du disque pour que l'appareil photo de l'iPhone ne dépasse pas.
