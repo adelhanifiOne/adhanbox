@@ -226,6 +226,12 @@ if (!/^[0-9a-f]{12}$/.test(ID)) {
 
   client = mqtt.connect(BROKER, { connectTimeout: 8000, reconnectPeriod: 4000, clean: true });
 
+  // Trois etats, et le troisieme compte autant que les deux autres.
+  // Un boitier d'avant la 3.0.40 n'annonce pas sa presence : il faut attendre
+  // son battement d'etat, jusqu'a trente secondes. Griser les commandes pendant
+  // ce temps rendrait une boite parfaitement vivante inutilisable a l'ecran.
+  // Tant qu'on ne SAIT pas, on laisse donc appuyer - et c'est l'appui lui-meme
+  // qui tranche, puisqu'une boite presente repond en une seconde.
   const peindreEtat = () => {
     if (!pret) { pastille.className = 'pastille'; etat.textContent = 'Connexion…'; return; }
     if (boitePresente === true) {
@@ -238,9 +244,20 @@ if (!/^[0-9a-f]{12}$/.test(ID)) {
       pastille.className = 'pastille';
       etat.textContent = 'Recherche de la boîte…';
     }
-    // Tant qu'elle n'est pas la, on n'invite pas a appuyer pour rien.
+    // On ne grise QUE si l'absence est etablie, jamais dans le doute.
     document.querySelectorAll('button[data-cmd], .pot, #vol')
-      .forEach((el) => { el.classList.toggle('inerte', boitePresente !== true); });
+      .forEach((el) => { el.classList.toggle('inerte', boitePresente === false); });
+  };
+
+  // Tout signe de vie vaut preuve de presence : le message de presence de la
+  // 3.0.40, mais aussi un battement d'etat non retenu, ou n'importe quelle
+  // reponse a une commande. C'est ce qui fait marcher la page avec les
+  // boitiers deja poses, sans les reflasher.
+  let attenteReponse = null;
+  const signeDeVie = () => {
+    clearTimeout(minuteurPresence);
+    clearTimeout(attenteReponse);
+    if (boitePresente !== true) { boitePresente = true; peindreEtat(); }
   };
 
   client.on('connect', () => {
@@ -250,29 +267,33 @@ if (!/^[0-9a-f]{12}$/.test(ID)) {
     client.subscribe(base + '/status');
     // Le message de presence est retenu : s'il existe, il arrive tout de suite.
     // Passe ce delai sans rien, c'est qu'aucune boite ne s'est jamais annoncee.
+    // 35 s : le boitier publie son etat toutes les 30 s depuis longtemps. Passe
+    // ce delai sans le moindre signe, l'absence n'est plus un doute.
     clearTimeout(minuteurPresence);
     minuteurPresence = setTimeout(() => {
-      if (boitePresente === null) { boitePresente = false; peindreEtat(); }
-    }, 5000);
+      if (boitePresente !== true) { boitePresente = false; peindreEtat(); }
+    }, 35000);
     peindreEtat();
   });
   client.on('reconnect', () => { pret = false; peindreEtat(); });
   client.on('close', () => { pret = false; peindreEtat(); });
   client.on('error', () => { pastille.className = 'pastille ko'; etat.textContent = 'Connexion impossible'; });
 
-  client.on('message', (sujet, charge) => {
+  client.on('message', (sujet, charge, paquet) => {
     const v = charge.toString();
 
     // Attention a l'ordre : « adhanbox/<id>/audio/status » se termine LUI AUSSI
     // par « /status ». On teste donc le plus precis d'abord.
     if (sujet.endsWith('/presence')) {
       clearTimeout(minuteurPresence);
+      clearTimeout(attenteReponse);
       boitePresente = (v === 'presente');
       peindreEtat();
       return;
     }
 
     if (sujet.endsWith('/audio/status')) {
+      signeDeVie();   // une reponse, donc elle est bien la
       // Le firmware répond « refus:<raison> » quand un garde-fou s'applique.
       if (v.startsWith('refus:')) { dire('⏸ ' + v.slice(6), 4000); return; }
       if (v === 'playing') dire('▶ En cours de lecture');
@@ -285,6 +306,9 @@ if (!/^[0-9a-f]{12}$/.test(ID)) {
     // plutot que de coder le plafond en dur, qui se desynchroniserait des
     // qu'Adel le change depuis /api/mosquee.
     if (sujet.endsWith('/status')) {
+      // Un etat RETENU est la derniere photo connue, peut-etre vieille de
+      // plusieurs jours : il ne prouve rien. Seul un message frais compte.
+      if (paquet && !paquet.retain) signeDeVie();
       try {
         const st = JSON.parse(v);
         if (Number.isFinite(st.volume_max) && st.volume_max > 0) vMax = st.volume_max;
@@ -295,8 +319,19 @@ if (!/^[0-9a-f]{12}$/.test(ID)) {
 
   const envoyer = (sujet, valeur) => {
     if (!pret) { dire('Connexion en cours, un instant…'); return false; }
-    if (boitePresente !== true) { dire('⚠ La boîte ne répond pas. Prévenez-nous, merci !', 5000); return false; }
+    if (boitePresente === false) { dire('⚠ La boîte ne répond pas. Prévenez-nous, merci !', 5000); return false; }
     client.publish(base + sujet, String(valeur));
+    // Presence encore inconnue : cet appui sert de sonde. Une boite vivante
+    // repond en une seconde ; passe six, on tranche et on le dit.
+    if (boitePresente === null) {
+      clearTimeout(attenteReponse);
+      attenteReponse = setTimeout(() => {
+        if (boitePresente !== true) {
+          boitePresente = false; peindreEtat();
+          dire('⚠ La boîte ne répond pas. Prévenez-nous, merci !', 6000);
+        }
+      }, 6000);
+    }
     return true;
   };
 
