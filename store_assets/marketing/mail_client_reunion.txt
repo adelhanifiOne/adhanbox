@@ -1,0 +1,86 @@
+Message à la cliente de La Réunion — commande de 2 AdhanBox
+===========================================================
+
+Rédigé le 15/09/2026.
+
+Pourquoi un message et pas une commande sur le site : le checkout n'autorise
+que la France métropolitaine et Monaco. La Réunion a son propre code pays chez
+Stripe, et les options de livraison configurées (point relais Mondial Relay,
+domicile à 5 €) n'ont aucun sens là-bas. On prend donc la commande à la main.
+
+Tarifs La Poste 2026, zone OM1, au départ de métropole :
+  Colissimo Outre-mer suivi      1 kg 19,00 €   2 kg 25,89 €   6 à 18 jours
+  Colissimo Outre-mer économique 1 kg 11,73 €   2 kg 14,77 €   13 à 31 jours ouvrés
+Le colis de deux boîtiers devrait peser autour de 950 g — à peser avant d'acheter
+l'étiquette, 7 € se jouent sur le palier du kilo.
+
+Le message annonce le palier 2 kg (le plus sûr) et promet le remboursement de la
+différence. Mieux vaut rembourser 7 € que réclamer un complément.
+
+---
+
+OBJET : Votre commande de deux AdhanBox pour La Réunion
+
+---
+
+As-salāmu ʿalaykum,
+
+Merci beaucoup pour votre message, et pour votre confiance.
+
+Ma boutique en ligne ne gère pour l'instant que la France métropolitaine — je
+vais donc m'occuper de votre commande personnellement, ce sera aussi simple.
+
+LE PRIX
+
+  2 AdhanBox                                        190 €
+  Livraison Colissimo Outre-mer, suivi                26 €
+                                                    -----
+  Total                                              216 €
+
+Comptez 6 à 18 jours d'acheminement, avec suivi et remise contre signature.
+
+Il existe une formule économique à 15 € de port (soit 205 € au total), mais elle
+met 13 à 31 jours ouvrés et n'offre pas de suivi en temps réel. Pour un colis qui
+traverse 9 000 km, je vous conseille la première — mais vous choisissez.
+
+Si le colis pèse moins que prévu, je vous rembourse la différence sur le port.
+
+UNE CHOSE QUE JE PRÉFÈRE VOUS DIRE AVANT
+
+La Réunion est française, mais se trouve hors du territoire fiscal européen.
+À la livraison, vous aurez donc à régler l'octroi de mer, la taxe locale à
+l'importation. Elle varie selon le classement du produit et je ne peux pas la
+calculer à votre place — elle ne me revient pas, je ne la touche pas.
+
+Je préfère que vous le sachiez maintenant plutôt que de vous laisser une
+mauvaise surprise chez le transporteur.
+
+CE DONT J'AI BESOIN
+
+  - votre adresse complète, avec le code postal
+  - un numéro de téléphone (le transporteur en demande un pour l'outre-mer)
+  - la formule de livraison que vous préférez
+
+Je vous envoie ensuite un lien de paiement sécurisé. Dès le règlement reçu, je
+prépare et j'expédie vos deux boîtiers.
+
+Ils sont assemblés à la main, un par un. Je les teste avant de fermer le boîtier,
+et je reste joignable après la livraison : si quelque chose ne va pas, vous
+m'écrivez directement.
+
+BarakAllahu fiki,
+
+Adel Hanifi
+AdhanBox — fabriqué à la main en France
+contact@adhanbox.fr — 06 52 02 87 67
+adhanbox.fr
+
+---
+
+APRÈS SA RÉPONSE
+
+1. Peser le colis fermé, acheter l'étiquette (La Poste ou Boxtal).
+2. La déclaration en douane CN23 est OBLIGATOIRE : elle se remplit dans le
+   parcours d'achat de l'étiquette, s'imprime et se colle sur le colis.
+3. Créer le lien de paiement Stripe au montant convenu.
+4. Ne pas expédier avant d'avoir le règlement.
