@@ -14,8 +14,13 @@ Tarifs La Poste 2026, zone OM1, au départ de métropole :
 Le colis de deux boîtiers devrait peser autour de 950 g — à peser avant d'acheter
 l'étiquette, 7 € se jouent sur le palier du kilo.
 
-Le message annonce le palier 2 kg (le plus sûr) et promet le remboursement de la
-différence. Mieux vaut rembourser 7 € que réclamer un complément.
+Adel offre les frais de port. Cela retire une décision à la cliente — plus de
+choix entre deux formules — et justifie de prendre la plus rapide, puisque c'est
+lui qui paie. Coût pour lui : environ 26 € sur une commande de 190 €.
+
+Contrepartie à surveiller : « livraison offerte » laisse croire qu'il n'y a plus
+rien à payer. L'octroi de mer devient donc PLUS surprenant, pas moins. C'est
+pourquoi il est annoncé avec plus d'insistance qu'avant.
 
 ---
 
@@ -33,33 +38,30 @@ vais donc m'occuper de votre commande personnellement, ce sera aussi simple.
 LE PRIX
 
   2 AdhanBox                                        190 €
-  Livraison Colissimo Outre-mer, suivi                26 €
+  Livraison vers La Réunion                        OFFERTE
                                                     -----
-  Total                                              216 €
+  Total à régler                                     190 €
 
-Comptez 6 à 18 jours d'acheminement, avec suivi et remise contre signature.
+Je vous les envoie en Colissimo Outre-mer suivi, avec remise contre signature :
+6 à 18 jours d'acheminement. Le port est pour moi, c'est ma façon de vous
+remercier d'être venue me chercher d'aussi loin.
 
-Il existe une formule économique à 15 € de port (soit 205 € au total), mais elle
-met 13 à 31 jours ouvrés et n'offre pas de suivi en temps réel. Pour un colis qui
-traverse 9 000 km, je vous conseille la première — mais vous choisissez.
+MAIS UNE CHOSE RESTE À VOTRE CHARGE, ET JE PRÉFÈRE VOUS LE DIRE MAINTENANT
 
-Si le colis pèse moins que prévu, je vous rembourse la différence sur le port.
-
-UNE CHOSE QUE JE PRÉFÈRE VOUS DIRE AVANT
+Je vous offre le transport, mais je ne peux pas vous éviter la taxe.
 
 La Réunion est française, mais se trouve hors du territoire fiscal européen.
 À la livraison, vous aurez donc à régler l'octroi de mer, la taxe locale à
-l'importation. Elle varie selon le classement du produit et je ne peux pas la
-calculer à votre place — elle ne me revient pas, je ne la touche pas.
+l'importation, qui varie selon le classement du produit. Elle ne me revient pas,
+je ne la touche pas, et je n'ai aucun moyen de la calculer à votre place.
 
-Je préfère que vous le sachiez maintenant plutôt que de vous laisser une
-mauvaise surprise chez le transporteur.
+Je vous le dis franchement plutôt que de vous laisser une mauvaise surprise chez
+le transporteur : « livraison offerte » ne veut pas dire « plus rien à payer ».
 
 CE DONT J'AI BESOIN
 
   - votre adresse complète, avec le code postal
   - un numéro de téléphone (le transporteur en demande un pour l'outre-mer)
-  - la formule de livraison que vous préférez
 
 Je vous envoie ensuite un lien de paiement sécurisé. Dès le règlement reçu, je
 prépare et j'expédie vos deux boîtiers.
@@ -82,5 +84,5 @@ APRÈS SA RÉPONSE
 1. Peser le colis fermé, acheter l'étiquette (La Poste ou Boxtal).
 2. La déclaration en douane CN23 est OBLIGATOIRE : elle se remplit dans le
    parcours d'achat de l'étiquette, s'imprime et se colle sur le colis.
-3. Créer le lien de paiement Stripe au montant convenu.
+3. Créer le lien de paiement Stripe à 190 €, port offert.
 4. Ne pas expédier avant d'avoir le règlement.
