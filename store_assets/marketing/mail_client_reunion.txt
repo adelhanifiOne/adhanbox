@@ -33,10 +33,9 @@ de conversation se voit.
 Trois bulles. La taxe arrive AVANT qu'on lui demande son adresse : elle doit
 pouvoir reculer sans avoir rien donné.
 
-Personnalisation réelle du produit : châssis noir mat (seule teinte), motif de
-façade au choix (aucun, 1, 2, 3) et sa couleur parmi neuf — marbre, blanc, gris,
-noir, doré, rouge, vert, bleu, violet. On envoie le lien du configurateur plutôt
-que la liste : elle voit la boîte tourner, c'est plus vendeur qu'un paragraphe.
+Pour la personnalisation, on envoie le LIEN du configurateur, pas la liste des
+teintes : elle voit la boîte tourner et essaie en direct, ce qui vend mieux
+qu'un paragraphe — et le message reste court, ce qu'un DM exige.
 
 --- bulle 1 ---
 
@@ -52,14 +51,10 @@ compte 6 à 18 jours.
 
 --- bulle 2 ---
 
-Pour le choix des couleurs : va sur adhanbox.fr/personnaliser.html, tu peux
-faire tourner la boîte et essayer les combinaisons.
+Pour les couleurs, va voir sur adhanbox.fr/personnaliser.html : tu peux faire
+tourner la boîte et essayer les motifs et les teintes en direct.
 
-Le châssis est noir mat. Tu choisis le motif de la façade — aucun, 1, 2 ou 3 —
-et sa teinte parmi neuf : marbre, blanc, gris, noir, doré, rouge, vert, bleu,
-violet.
-
-Dis-moi ce que tu veux pour chacune des deux, elles peuvent être différentes.
+Dis-moi ce que tu choisis pour chacune des deux, elles peuvent être différentes.
 
 --- bulle 3 ---
 
