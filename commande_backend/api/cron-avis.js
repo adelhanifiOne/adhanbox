@@ -30,6 +30,8 @@ import { list, put } from '@vercel/blob';
 import { stepEmail } from '../lib/email.js';
 
 const FROM_EMAIL = process.env.FROM_EMAIL || 'AdhanBox <commande@adhanbox.fr>';
+// Copie cachee au vendeur : voir order-step.js, meme raison.
+const NOTIF_EMAIL = process.env.NOTIF_EMAIL || 'contact@adhanbox.fr';
 const DELAI_JOURS = parseInt(process.env.AVIS_DELAI_JOURS || '10', 10);
 const MAX_PAR_PASSAGE = 20;   // un rattrapage massif partirait sur plusieurs jours
 const MAX_SESSIONS_STRIPE = 1000;
@@ -179,7 +181,7 @@ export default async function handler(req, res) {
     if (!c.to) { echecs.push({ ref: c.ref, erreur: 'commande ou email introuvable chez Stripe' }); continue; }
     const { subject, html } = stepEmail('avis', { firstName: c.firstName, ref: c.ref, config: c.config });
     const sent = await resend.emails.send({ from: FROM_EMAIL, to: c.to, subject, html,
-                                            replyTo: 'contact@adhanbox.fr' });  // voir order-step.js
+                                            replyTo: 'contact@adhanbox.fr', bcc: NOTIF_EMAIL });  // voir order-step.js
     if (sent.error) { echecs.push({ ref: c.ref, erreur: sent.error.message }); continue; }
     try {
       await put(`orders/${c.ref}/avis.json`, JSON.stringify({
