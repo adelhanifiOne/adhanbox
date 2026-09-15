@@ -254,6 +254,37 @@ class Session:
         self.travail.start()
         return True, 'Televersement lance — suis le journal.'
 
+    def preparer_envoi(self, port=None):
+        """Derniere etape avant de fermer le boitier : reposer l'image de sortie.
+
+        Le banc flashe une image bavarde, sinon il ne pourrait rien tester par le
+        cable. Mais cette image laisse la console d'atelier ouverte sur la prise
+        USB, qui est aussi la prise d'alimentation : une carte expediee ainsi se
+        laisse vider par quiconque la branche sur un ordinateur. On repose donc
+        l'image de sortie, et on verifie que le port est devenu muet.
+        """
+        if self.occupe():
+            return False, 'Un controle est en cours.'
+        self.liberer_cable()
+
+        def travail():
+            with self.verrou:
+                self.flash_actif = True
+            try:
+                succes, message = bt.preparer_envoi(port or None, sortie=self.noter)
+                self.noter(('OK  ' if succes else 'ECHEC ') + message)
+                if succes:
+                    # La carte ne repond plus par le cable : tout ce que le banc
+                    # affichait a son sujet est desormais hors de portee.
+                    self.vider()
+            finally:
+                with self.verrou:
+                    self.flash_actif = False
+
+        self.travail = threading.Thread(target=travail, daemon=True)
+        self.travail.start()
+        return True, 'Preparation lancee — suis le journal.'
+
     def reparer(self, clef):
         """Repare, puis REJOUE le controle : le resultat affiche doit toujours
         venir d'une mesure, jamais d'une promesse."""
@@ -554,6 +585,9 @@ class Poignee(BaseHTTPRequestHandler):
             lance, message = SESSION.flasher(c.get('port', '').strip(),
                                              bool(c.get('recompiler')))
             return self._envoyer({'ok': lance, 'message': message})
+        if self.path == '/api/sortie':
+            lance, message = SESSION.preparer_envoi(c.get('port', '').strip())
+            return self._envoyer({'ok': lance, 'message': message})
         if self.path == '/api/connecter_usb':
             relie, message = SESSION.connecter_usb(c.get('port', ''))
             return self._envoyer({'ok': relie, 'message': message})
@@ -676,6 +710,7 @@ pre{background:var(--carte);border:1px solid var(--trait);border-radius:10px;pad
     <button id="b-chercher" class="fort">Chercher la carte</button>
     <button id="b-vider" title="Efface les résultats pour passer au boîtier suivant">Carte suivante</button>
     <button id="b-flash">Flasher le firmware</button>
+    <button id="b-sortie">Préparer pour l'envoi</button>
     <span style="flex:1"></span>
     <button id="b-tout" class="fort">Tout tester</button>
     <button id="b-auto">Contrôles automatiques</button>
@@ -856,8 +891,9 @@ function peindre(e){
   $('#b-usb').disabled = e.occupe || e.flash;
   for (const el of document.querySelectorAll('#cartes button, #usb button'))
     el.disabled = e.occupe || e.flash;
-  for (const id of ['#b-tout','#b-auto','#b-flash','#b-chercher'])
-    $(id).disabled = pris || (id !== '#b-chercher' && id !== '#b-flash' && !e.carte);
+  for (const id of ['#b-tout','#b-auto','#b-flash','#b-sortie','#b-chercher'])
+    $(id).disabled = pris || (id !== '#b-chercher' && id !== '#b-flash'
+                              && id !== '#b-sortie' && !e.carte);
   // Remise a zero : cable (preuve par relecture) ou reseau (preuve : la
   // carte quitte le reseau). Par le reseau il faut le jeton.
   $('#b-usine').disabled = pris || !e.carte || (!e.carte.usb && !e.carte.jeton);
@@ -983,6 +1019,18 @@ $('#b-chercher').onclick = () => {
 $('#b-flash').onclick = () => {
   $('#message').textContent = 'Compilation et téléversement — ouvre le journal pour suivre.';
   poste('/api/flash', {}).then(r => { $('#message').textContent = r.message; rafraichir(); });
+};
+$('#b-sortie').onclick = () => {
+  if (!confirm("Préparer cette carte pour l'envoi ?\n\n"
+    + "Deux choses, dans cet ordre :\n\n"
+    + "1. Effacement des réglages d'atelier. La carte a été reliée au Wi-Fi d'ici : "
+    + "sans cela elle partirait avec le mot de passe de la maison dans sa mémoire.\n\n"
+    + "2. L'image de sortie remplace celle du banc : la console d'atelier se ferme, "
+    + "et la carte ne répondra plus par le câble. C'est voulu — c'est ce qui "
+    + "empêche un client de la vider en la branchant sur un ordinateur.\n\n"
+    + "À faire APRÈS les tests, juste avant de fermer le boîtier.")) return;
+  $('#message').textContent = "Compilation de l'image de sortie — ouvre le journal.";
+  poste('/api/sortie', {}).then(r => { $('#message').textContent = r.message; rafraichir(); });
 };
 $('#b-tout').onclick = () => lancer(CAT.tests.map(t => t.clef));
 $('#b-auto').onclick = () => lancer(CAT.tests.filter(t=>t.groupe==='auto').map(t=>t.clef));
