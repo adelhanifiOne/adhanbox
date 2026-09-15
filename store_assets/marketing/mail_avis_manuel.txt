@@ -1,0 +1,61 @@
+Mail de demande d'avis — à envoyer à la main
+============================================
+
+Pour les premières commandes, passées avant que le bouton « 4 · Avis »
+n'existe. Même contenu que l'email automatique (commande_backend/lib/email.js,
+étape « avis »), réécrit pour un envoi depuis la boîte contact@adhanbox.fr.
+
+Remplacer [PRÉNOM]. Envoyer une dizaine de jours après la réception, pas avant :
+le client doit avoir vécu quelques adhans chez lui.
+
+À envoyer depuis contact@adhanbox.fr — et surtout PAS en copie groupée : un
+destinataire par message, sinon chacun voit l'adresse des autres.
+
+---
+
+OBJET : Comment se passe la vie avec votre AdhanBox ?
+
+---
+
+As-salāmu ʿalaykum [PRÉNOM] 🌙
+
+Votre AdhanBox est chez vous depuis quelques jours. J'espère qu'elle a trouvé sa
+place, et que l'adhan s'élève bien à l'heure.
+
+Je fabrique chaque boîtier à la main, et votre retour compte plus que tout :
+c'est lui qui aidera la prochaine famille à se décider.
+
+Deux minutes, deux gestes :
+
+• Un avis sur https://adhanbox.fr/avis.html
+  Quelques mots suffisent : ce que vous avez ressenti, à qui vous la
+  conseilleriez.
+
+• Une photo ou une courte vidéo du boîtier chez vous, en répondant simplement
+  à cet email. Avec votre accord, je la partagerai sur adhanbox.fr ou sur
+  Instagram, avec votre prénom seulement.
+
+Et si quelque chose ne va pas, même un détail, dites-le-moi d'abord : je le
+règle.
+
+BarakAllahu fikoum,
+
+Adel Hanifi
+AdhanBox — fabriqué à la main en France
+contact@adhanbox.fr — adhanbox.fr
+
+---
+
+Pourquoi la dernière phrase compte autant que les deux autres
+------------------------------------------------------------
+
+« Si quelque chose ne va pas, dites-le-moi d'abord » n'est pas une formule de
+politesse. Elle donne au client mécontent un endroit où écrire AVANT d'écrire en
+public. C'est la phrase qui transforme un avis à deux étoiles en un problème
+réglé — ne la retire pas pour raccourcir.
+
+Ce que le mail ne demande volontairement pas
+--------------------------------------------
+
+Ni note, ni formulation suggérée, ni « mettez cinq étoiles ». Un avis dicté se
+voit, et se retourne contre celui qui l'a sollicité.
