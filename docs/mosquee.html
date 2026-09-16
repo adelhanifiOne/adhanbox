@@ -239,7 +239,12 @@ if (!/^[0-9a-f]{12}$/.test(ID)) {
       etat.textContent = 'Prête — à vous de jouer';
     } else if (boitePresente === false) {
       pastille.className = 'pastille ko';
-      etat.textContent = 'La boîte ne répond pas — prévenez-nous';
+      // « Ne repond pas » disait « ce produit est en panne » et invitait le
+      // fidele a signaler un incident inexistant. A la mosquee de Bilal, les
+      // gerants debranchent la boite en dehors des heures d'ouverture : le cas
+      // le plus FREQUENT d'absence est donc parfaitement normal. On le dit
+      // comme tel.
+      etat.textContent = 'Elle est éteinte pour le moment';
     } else {
       pastille.className = 'pastille';
       etat.textContent = 'Recherche de la boîte…';
@@ -319,7 +324,7 @@ if (!/^[0-9a-f]{12}$/.test(ID)) {
 
   const envoyer = (sujet, valeur) => {
     if (!pret) { dire('Connexion en cours, un instant…'); return false; }
-    if (boitePresente === false) { dire('⚠ La boîte ne répond pas. Prévenez-nous, merci !', 5000); return false; }
+    if (boitePresente === false) { dire('La boîte est éteinte — revenez à l\'heure de la prière 🌙', 5000); return false; }
     client.publish(base + sujet, String(valeur));
     // Presence encore inconnue : cet appui sert de sonde. Une boite vivante
     // repond en une seconde ; passe six, on tranche et on le dit.
@@ -328,7 +333,7 @@ if (!/^[0-9a-f]{12}$/.test(ID)) {
       attenteReponse = setTimeout(() => {
         if (boitePresente !== true) {
           boitePresente = false; peindreEtat();
-          dire('⚠ La boîte ne répond pas. Prévenez-nous, merci !', 6000);
+          dire('La boîte est éteinte — revenez à l\'heure de la prière 🌙', 6000);
         }
       }, 6000);
     }
