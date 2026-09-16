@@ -65,6 +65,46 @@ que les vendeurs qui fournissent, avant achat :
 Ordre de grandeur : 5 à 9 € le module par 100, format galet de 56 à 60 mm de
 diamètre, 5 à 7 mm d'épaisseur aimants compris.
 
+## 2 bis. Fournisseurs identifiés le 16/09/2026
+
+Recherche faite sur le web et le catalogue WPC. Aucun distributeur classique
+(LCSC, Mouser, DigiKey) ne vend de module émetteur complet certifié : ce sont
+des kits d'évaluation ou des puces. Le module se prend chez un fabricant
+chinois de modules, et la certification se vérifie soi-même.
+
+| Candidat | Ce qu'il annonce | Ce qui manque | Contact |
+|---|---|---|---|
+| **Shenzhen Huagon Technology** (Longhua, Shenzhen, depuis 2013), module Qi2 MPP 15 W | Entrée 9 V 3 A (autre fiche : 4,75 à 12,25 V), bobine 50 mm, PCBA 55 mm, anneau d'aimants 8 N, **Qi ID QI-21992** annoncé, « KC, FCC, CE, BSMI, NCC, BPP 5 W et EPP/MPP 15 W », MOQ 1 pièce, garantie 3 ans | Épaisseur avec aimants, pastilles VIN/GND, sortie d'état, prix, et surtout **la déclaration UE et le rapport d'essai radio** | mike@Huagon.cn, +86 152 1948 6699 (Mike Zhu), huagoncharging.com |
+| **Shenzhen Wowoh Cool** (depuis 2013), chargeurs et modules Qi2 | « CE / FCC / Qi2 » | MOQ annoncé 500 et plus, pas de fiche module publique | wowohcool.com |
+| **Shenzhen Yongchangtai Electronics** (yctpcba, depuis 2009), PCBA 15 W double bobine | Entrée 9 V QC, 85 x 71 mm, 0,50 à 1 $ par pièce | Pas magnétique, « CE, UL, RoHS » seulement dans le profil société, aucun rapport | made-in-china.com/yctpcba |
+| **CowinLink** (Shenzhen), PCBA 10 / 15 W | Module de référence honnête : « ne revendique aucune certification sans dossier correspondant », propose d'identifier les essais manquants | Pas magnétique, prix et MOQ sur devis | info@mail.cowinlink.com |
+| **Shenzhen LazyCat** (chargingelfcat), PCBA Qi2 MPP 15 W | Entrée PD 20 W, une bobine, MOQ 1 000 en personnalisé, sans minimum sur stock | Aucune certification explicite | Kimi, +86 150 1920 0506 |
+
+Fabricants de puces Qi2 MPP dont les modules de référence sont certifiés WPC
+(source Chargerlab) : ConvenientPower (CPS812X/822X/823X, entrée PD ou 9 V
+continu), Generalplus (AH222-A), NuVolta (NU222), CVSMicro (CV222), WPINNO,
+Aohai, ESSON Tech. Ils vendent en volume par distributeurs ; utiles pour
+demander à un fabricant de module quelle puce il emploie.
+
+**Recommandation** : Huagon en premier, seul à publier un identifiant Qi et un
+MOQ de 1. Vérifier l'identifiant avant tout achat dans la base publique du
+WPC, <https://www.wirelesspowerconsortium.com/products/> (recherche
+« 21992 » ou « Huagon ») : le 16/09/2026 le site n'a pas répondu à une
+consultation automatique, la vérification est à faire à la main. Une
+certification Qi n'est pas la conformité radio européenne : demander en plus
+la déclaration UE et le rapport EN 303 417 / EN 301 489, chapitre 2.
+
+Message à envoyer, en anglais, aux deux premiers :
+
+> We are integrating a magnetic 15 W Qi2 transmitter module into a lit phone
+> stand sold in the EU. Please send: (1) the module datasheet with input
+> voltage range, VIN/GND solder pads, dimensions and total thickness with
+> magnets, status output; (2) your EU Declaration of Conformity naming
+> 2014/53/EU and the applied standards (EN 303 417, EN 301 489-1/-3,
+> EN 62368-1); (3) the corresponding RF/EMC test report; (4) the WPC Qi ID
+> and certificate; (5) price for 3 samples, 100 and 500 pieces, lead time
+> and supply commitment for 12 months.
+
 ## 3. Ce qui change sur la carte
 
 Quatre ajouts sur le PCB v1, tout le reste est conservé (24 LEDs, translateur,
