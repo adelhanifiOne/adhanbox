@@ -62,6 +62,7 @@
               '<li><a href="mentions-legales.html">Mentions légales</a></li>' +
               '<li><a href="horloge-adhan.html">Horloge adhan ou AdhanBox ?</a></li>' +
               '<li><a href="conformite.html">Déclaration UE de conformité</a></li>' +
+              '<li><a href="android.html">L\'application sur Android</a></li>' +
               '<li><a href="mailto:contact@adhanbox.fr">contact@adhanbox.fr</a></li>' +
             '</ul>' +
           '</div>' +
@@ -75,6 +76,12 @@
 
   document.body.insertAdjacentHTML('afterbegin', HEADER);
   document.body.insertAdjacentHTML('beforeend', FOOTER);
+
+  // Le plan du site en dur (<!-- plan:debut -->) existe pour les robots qui
+  // n'executent pas JavaScript : sans lui, le HTML servi ne relie pas les
+  // pages entre elles. Une fois le vrai pied de page pose, il fait doublon.
+  var plan = document.querySelector('nav[aria-label="Plan du site"]');
+  if (plan) plan.remove();
 
   // Lien actif
   if (page) {
