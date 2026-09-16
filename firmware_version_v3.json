@@ -1,6 +1,6 @@
 {
-  "version": "3.0.18",
+  "version": "3.0.41",
   "hardware": "v3",
   "url": "https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/build_temp_v3/adhanbox_v3.ino.bin",
-  "changelog": "Correction d un redémarrage qui pouvait interrompre l adhan en pleine lecture sur certains boîtiers."
+  "changelog": "Votre boîtier vérifie maintenant l identité des serveurs qu il interroge avant de télécharger quoi que ce soit. Le Coran et les azkar se lancent correctement depuis l application, et si un fichier manque sur la carte la boîte le dit au lieu de faire semblant de le jouer. Le bouton tactile peut désormais être désactivé à distance, pour les boîtiers dont le capteur se déclenche tout seul."
 }
