@@ -2,7 +2,7 @@
 // - Starts an AP when a long-press is detected on CONFIG_BUTTON_PIN
 // - Serves a small webpage that requests navigator.geolocation and POSTs lat/lon
 // - Stores lat/lon/accuracy/timestamp in Preferences (NVS)
-//Version: 3.0.40 (AdhanBox V3 / HW v3)
+//Version: 3.0.41 (AdhanBox V3 / HW v3)
 #include <Arduino.h>
 #include <esp_mac.h>   // esp_read_mac() : MAC eFuse, lisible sans Wi-Fi
 #include <Wire.h>
@@ -840,6 +840,7 @@ void handleLedStatus();     // [ETAT REEL] etat LED complet pour l'app   // [PLA
 void handleAudioPause();    // [PLAYER] pause
 void handleAudioResume();   // [PLAYER] reprise
 void handleDiag();
+void handleBouton();          // [BOUTON] couper / rallumer le capteur tactile
 void handlePlayFile();
 void handleStopPlay();
 bool tryReinitSD();
@@ -1889,7 +1890,7 @@ void handleOtaUploadComplete() {
 // GET /api/firmware/version
 void handleFirmwareVersion() {
   server.send(200, "application/json",
-              "{\"version\":\"3.0.40\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
+              "{\"version\":\"3.0.41\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
 }
 
 // Returns true if the request carries the correct API key (or if token not yet set).
@@ -2002,11 +2003,11 @@ void handleDeviceInfo() {
   char buf[512];
   if (pairingWindow || hasValidToken) {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.40\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
+             "{\"version\":\"3.0.41\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
              OTA_HOSTNAME, deviceIdHex().c_str(), _apiToken.c_str(), _otaPass.c_str());
   } else {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.40\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
+             "{\"version\":\"3.0.41\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
              OTA_HOSTNAME, deviceIdHex().c_str());
   }
   server.send(200, "application/json", buf);
@@ -3165,6 +3166,7 @@ void setupServerRoutes() {
   server.on("/api/audio/pause", HTTP_GET, handleAudioPause);     // [PLAYER] pause
   server.on("/api/audio/resume", HTTP_GET, handleAudioResume);   // [PLAYER] reprise
   server.on("/api/diag", HTTP_GET, handleDiag);
+  server.on("/api/bouton", HTTP_GET, handleBouton);          // [BOUTON] capteur tactile
   server.on("/api/mosquee", HTTP_GET, handleMosqueeGet);     // [MOSQUEE] etat + sujets MQTT
   server.on("/api/mosquee", HTTP_POST, handleMosqueeSet);    // [MOSQUEE] activer / regler
 #if ENABLE_BLE
@@ -3241,6 +3243,18 @@ void ledFlushSave(){
 // personne n'a touche la boite, des maintiens de plusieurs secondes (le chip
 // recalibre sa base et relache tout seul), des rejets en rafale. Le banc les
 // affiche : laisser la boite seule dix minutes et regarder si ca bouge.
+// [BOUTON] Interrupteur du capteur tactile, boitier par boitier. Sur certaines
+// boites le TTP223 est declenche par le SON du haut-parleur (nappe qui passe
+// trop pres du capteur, vu au montage) : l'adhan s'arrete tout seul en pleine
+// lecture, sans que personne ne touche la boite. Tant que la cause materielle
+// n'est pas reprise sur la carte, on coupe le capteur CHEZ CELLES-LA, sans rien
+// changer pour les autres — d'ou un reglage en NVS, actif par defaut.
+// Le client ne perd que l'arret manuel et le changement de scene lumineuse
+// depuis la boite ; les deux restent dans l'application. Rien ne depend de ce
+// bouton pour le Wi-Fi (les commentaires de l'en-tete qui l'affirment datent du
+// croquis d'origine : startConfigAP() n'a qu'un appelant, la commande serie).
+bool boutonActif = true;
+
 uint32_t g_btnActions = 0;    // appuis retenus (une action a ete faite)
 uint32_t g_btnIgnores = 0;    // appuis rejetes (trop courts, ou fenetre bruyante)
 uint32_t g_btnMaxMs   = 0;    // plus long maintien observe, en ms
@@ -3255,6 +3269,7 @@ void checkConfigButton(){
   // (repos bas) comme pour un bouton actif-bas (repos haut), sans se soucier de
   // la polarite. Un "appui" = niveau oppose au repos.
   if(!inited){ idleLevel = digitalRead(CONFIG_BUTTON_PIN); lastState = idleLevel; inited = true; return; }
+  if(!boutonActif) return;          // [BOUTON] capteur coupe pour ce boitier
 
   // [COUPURE] Avant : la PREMIERE lecture d'un niveau « appuye » declenchait,
   // une impulsion de quelques ms suffisait. Une nappe de haut-parleur qui passe
@@ -4503,6 +4518,29 @@ void handleMosqueeSet() {
   handleMosqueeGet();
 }
 
+// GET /api/bouton            -> etat du capteur tactile
+// GET /api/bouton?actif=0|1  -> le coupe ou le rallume, et le retient
+//
+// [BOUTON] Cette route n'exige pas la cle d'API, a la difference des autres
+// routes qui ecrivent. Elle existe pour qu'un client dont le capteur se
+// declenche au son puisse le couper depuis le navigateur de son telephone : une
+// fois la boite appairee, /api/device/info ne rend plus le jeton, et une mise a
+// jour de l'application prendrait des jours. Elle ne lit rien, n'expose rien, et
+// son seul effet est un booleen que la meme URL remet a 1.
+void handleBouton() {
+  if (server.hasArg("actif")) {
+    boutonActif = (server.arg("actif").toInt() != 0);
+    prefs.begin("adhancfg", false);
+    prefs.putBool("btn_actif", boutonActif);
+    prefs.end();
+    Serial.printf("[BOUTON] capteur tactile %s\n", boutonActif ? "ACTIF" : "coupe");
+  }
+  char buf[96];
+  snprintf(buf, sizeof(buf), "{\"bouton_actif\":%d,\"message\":\"Bouton tactile %s\"}",
+           boutonActif ? 1 : 0, boutonActif ? "actif" : "desactive");
+  server.send(200, "application/json", buf);
+}
+
 // Diagnostic : horloge SD reelle + debit de lecture (ko/s) + heap/PSRAM.
 // Sert a savoir si la SD tient le 128 kbps (16 ko/s) ou pas.
 void handleDiag() {
@@ -4510,7 +4548,7 @@ void handleDiag() {
   stopPlay("diagnostic");  // mesure au repos (pas de contention SPI avec l'audio)
   g_coupure = coupureAvant;
   int kBs = audio.sdBenchKBs("/quran/afs/001.mp3", 256 * 1024);
-  char buf[896];
+  char buf[960];
   snprintf(buf, sizeof(buf),
     "{\"sd_clock_hz\":%lu,\"sd_read_kBs\":%d,\"need_kBs\":16,"
     "\"lecture_max_ms\":%lu,\"gels\":%lu,\"wifi_veille\":\"%s\","
@@ -4518,6 +4556,7 @@ void handleDiag() {
     "\"avant_plantage\":\"%s\",\"avant_plantage_info\":%lu,"
     "\"coupure\":\"%s\",\"coupure_fichier\":\"%s\",\"coupure_apres_ms\":%lu,\"coupure_pct\":%u,\"coupure_bouton_ms\":%lu,"
     "\"btn_actions\":%lu,\"btn_ignores\":%lu,\"btn_max_ms\":%lu,\"btn_niveau\":%d,"
+    "\"bouton_actif\":%d,"
     "\"audio_tours\":%lu,\"audio_ecart_max_ms\":%lu,\"audio_sup_dma\":%lu,"
     "\"audio_n50_90\":%lu,\"audio_n90_200\":%lu,\"audio_n200_500\":%lu,\"audio_n500\":%lu,"
     "\"audio_pump_max_ms\":%lu,\"audio_tick_max_ms\":%lu,\"audio_http_max_ms\":%lu,"
@@ -4531,6 +4570,7 @@ void handleDiag() {
     g_mietteAvant[0] ? g_mietteAvant : "-", (unsigned long)g_mietteAvantInfo,
     g_coupure.cause, g_coupure.fichier, (unsigned long)g_coupure.apresMs, (unsigned)g_coupure.positionPct, (unsigned long)g_coupure.boutonMs,
     (unsigned long)g_btnActions, (unsigned long)g_btnIgnores, (unsigned long)g_btnMaxMs, digitalRead(CONFIG_BUTTON_PIN),
+    boutonActif ? 1 : 0,
     (unsigned long)g_blocage.tours, (unsigned long)(g_blocage.ecartMaxUs / 1000),
     (unsigned long)g_blocage.supDma,
     (unsigned long)g_blocage.n50_90, (unsigned long)g_blocage.n90_200,
@@ -4794,6 +4834,7 @@ void setup() {
   ledBrightness = prefs.getInt("brightness", 50);
   ledScenario = prefs.getInt("led_scenario", 8);
   ledCustomActive = prefs.getBool("led_custom", false);
+  boutonActif   = prefs.getBool("btn_actif", true);          // [BOUTON] capteur tactile
   demoActif     = prefs.getBool("demo_actif", false);        // [MOSQUEE]
   demoVolumeMax = constrain(prefs.getInt("demo_vmax", 15), 1, 30);
   demoDelaiS    = (uint32_t)constrain(prefs.getInt("demo_delai", 45), 0, 600);
@@ -5322,11 +5363,11 @@ static void bancCommande(String c) {
   String verbe = (esp < 0) ? c : c.substring(0, esp);
   String arg   = (esp < 0) ? String("") : c.substring(esp + 1);
   arg.trim();
-  char buf[896];
+  char buf[960];
 
   if (verbe == "info") {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.40\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
+             "{\"version\":\"3.0.41\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
              deviceIdHex().c_str());
     bancRep(buf);
 
@@ -5342,6 +5383,7 @@ static void bancCommande(String c) {
              "\"avant_plantage\":\"%s\",\"avant_plantage_info\":%lu,"
              "\"coupure\":\"%s\",\"coupure_fichier\":\"%s\",\"coupure_apres_ms\":%lu,\"coupure_pct\":%u,\"coupure_bouton_ms\":%lu,"
              "\"btn_actions\":%lu,\"btn_ignores\":%lu,\"btn_max_ms\":%lu,\"btn_niveau\":%d,"
+             "\"bouton_actif\":%d,"
              "\"audio_tours\":%lu,\"audio_ecart_max_ms\":%lu,\"audio_sup_dma\":%lu,"
              "\"audio_n50_90\":%lu,\"audio_n90_200\":%lu,\"audio_n200_500\":%lu,\"audio_n500\":%lu,"
              "\"audio_pump_max_ms\":%lu,\"audio_tick_max_ms\":%lu,\"audio_http_max_ms\":%lu,"
@@ -5355,6 +5397,7 @@ static void bancCommande(String c) {
              g_mietteAvant[0] ? g_mietteAvant : "-", (unsigned long)g_mietteAvantInfo,
              g_coupure.cause, g_coupure.fichier, (unsigned long)g_coupure.apresMs, (unsigned)g_coupure.positionPct, (unsigned long)g_coupure.boutonMs,
              (unsigned long)g_btnActions, (unsigned long)g_btnIgnores, (unsigned long)g_btnMaxMs, digitalRead(CONFIG_BUTTON_PIN),
+             boutonActif ? 1 : 0,
              (unsigned long)g_blocage.tours, (unsigned long)(g_blocage.ecartMaxUs / 1000),
              (unsigned long)g_blocage.supDma,
              (unsigned long)g_blocage.n50_90, (unsigned long)g_blocage.n90_200,
