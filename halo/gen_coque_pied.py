@@ -34,8 +34,9 @@ Socle et col (PETG noir, imprimes d'un seul tenant, a plat)
     son plan, qui monte d'un socle galet 90 x 72 x 11 (angles R16, dessus R3) ;
     il reste 31 mm de vide sous le disque de part et d'autre du col.
   - le disque s'emboite dans le haut du col (fente a sa forme exacte, jeu 0.3,
-    languette d'appui comprise) ; le telephone pose son bord sur la languette
-    de la coque et s'appuie sur la face avant du PCB.
+    languette d'appui comprise) et se CLIPSE : une nervure sur la levre arriere
+    du col claque sous l'arrondi du dos de la coque. Le telephone pose son bord
+    sur la languette de la coque et s'appuie sur la face avant du PCB.
   - prise USB-C DROITE logee dans le col dans l'axe de la languette, canal de
     cable qui descend dans le col puis rainure sous le socle jusqu'a l'arriere.
     Plus besoin de cable coude.
@@ -202,6 +203,15 @@ def pied():
     # fente : enveloppe de la coque avec jeu, languette comprise (le disque s'emboite dans le haut du col)
     env = cq.Workplane("XY").circle(R_OUT + PLAY).extrude(Z_BACK - Z_FRONT + LIP_H + 2 * PLAY).translate((0, 0, Z_FRONT - LIP_H - PLAY))
     block = block.cut(to_world(env))
+
+    # clipsage : une nervure triangulaire sur la face interne de la levre arriere du col, qui vient se
+    # loger SOUS l'arrondi du dos de la coque (R_BACK). A l'insertion, le dos plat de la coque (z = 9.6)
+    # force la levre a s'ecarter de 0.4 mm, puis l'arrondi arrive et la nervure claque dessous. Aucune
+    # modification de la coque : l'arrondi existant sert de rampe et de cran.
+    y_clip = R_OUT - 1.1                                    # 49.3 : la surface arrondie y est a z = 9.1
+    clip = (cq.Workplane("YZ").polyline([(y_clip - 0.6, Z_BACK + PLAY), (y_clip + 0.6, Z_BACK + PLAY), (y_clip, Z_BACK - 0.4)])
+            .close().extrude(COL_W / 2 - 1.5, both=True))
+    block = block.union(to_world(clip))
 
     # poche languette + prise droite, dans l'axe de la languette (repere carte)
     zc = T_PCB + USB["h"] / 2                                # axe du connecteur
