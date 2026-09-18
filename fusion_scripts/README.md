@@ -1,5 +1,35 @@
 # Scripts Fusion 360
 
+## ⚠ LIRE EN PREMIER — pourquoi le travail disparaissait
+
+Les pièces `support_led`, `diffusion_lum` et `couvercle` ne sont **pas** des
+composants de `AdhanBox_Fusion` : ce sont des **documents liés**. Les fonctions
+créées par ces scripts atterrissent dans le timeline du document lié, pas dans
+celui de l'assemblage.
+
+Constat du 18/09/2026 : l'assemblage était en **version 16**, les trois liés en
+**version 1** — jamais enregistrés depuis leur création. D'où trois pertes
+(24/08, 05/09, 18/09) alors que la sauvegarde avait bien été faite : sur le
+mauvais document.
+
+**Après avoir lancé un script, enregistrer DANS CET ORDRE :**
+
+1. onglet **`support_led`** → Cmd+S
+2. onglet **`diffusion_lum`** → Cmd+S
+3. onglet **`AdhanBox_Fusion`** → Cmd+S
+
+Les liés sont ouverts en arrière-plan : ils n'apparaissent pas au premier plan,
+il faut aller les chercher dans la liste des onglets. La troisième sauvegarde
+n'est pas facultative — c'est elle qui fige la référence de l'assemblage vers
+la nouvelle version des liés.
+
+`Document.save()` par l'API ne marche pas sur ces documents liés (renvoie True
+sans rien enregistrer). Seul un Cmd+S dans l'interface fonctionne.
+
+**Contrôle à l'ouverture** : si `Plots_aimants_support`, `Encoche_fils_LED` ou
+`reduction_cercles_mur_Y0` manquent, rejouer les scripts concernés — ils sont
+idempotents — puis enregistrer selon les trois étapes ci-dessus.
+
 Ce dossier existe parce qu'un travail Fusion a été perdu le 24/08/2026 en
 fermant le document sans enregistrer. Tout ce qui est conçu par script y est
 versionné : le modèle Fusion peut disparaître, la conception se rejoue.
