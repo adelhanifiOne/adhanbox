@@ -13,6 +13,13 @@ oublier une balise et casser la page. Ce script le fait a la place.
 COMMENT AJOUTER UNE PHOTO. La deposer dans docs/photos/, puis relancer ce
 script. Rien d'autre.
 
+LES PHOTOS SONT OPTIMISEES AUTOMATIQUEMENT. Une photo de telephone pese 3 a
+5 Mo et fait 4000 px de large : telle quelle, elle mettrait plusieurs secondes
+a s'afficher sur un mobile en 4G, et c'est la PREMIERE chose que voit un
+visiteur. Le script la ramene donc a LARGEUR_MAX px et la recompresse (sips,
+fourni avec macOS). Les originaux ne sont pas conserves ici : garder les
+siens dans sa photothèque.
+
 LE NOM DU FICHIER DEVIENT LA LEGENDE. `03-couvercle-ajoure.jpg` donne
 « Couvercle ajoure ». Le numero sert a ordonner, il n'apparait pas. Une photo
 sans texte apres le numero n'aura pas de legende, ce qui est permis.
@@ -28,6 +35,7 @@ import argparse
 import io
 import os
 import re
+import subprocess
 import sys
 
 RACINE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -36,6 +44,43 @@ PAGE = os.path.join(RACINE, 'docs', 'index.html')
 DEBUT = '<!-- carrousel:debut -->'
 FIN = '<!-- carrousel:fin -->'
 EXTENSIONS = ('.jpg', '.jpeg', '.png', '.webp')
+VIDEOS = ('.mp4',)
+SUFFIXE_POSTER = '-poster'   # 01-xxx-poster.jpg accompagne 01-xxx.mp4
+LARGEUR_MAX = 1400      # px : au-dela, invisible a l'oeil sur le site
+POIDS_MAX = 400 * 1024  # octets : au-dela, on recompresse
+QUALITE = 78            # compression JPEG appliquee si besoin
+
+
+def optimiser(noms):
+    """Redimensionne et recompresse ce qui est trop lourd. Renvoie le rapport."""
+    faits = []
+    for n in noms:
+        if est_video(n):
+            continue                       # deja compressee par ffmpeg, sips n'y peut rien
+        chemin = os.path.join(DOSSIER, n)
+        avant = os.path.getsize(chemin)
+        try:
+            larg = int(subprocess.run(['sips', '-g', 'pixelWidth', chemin],
+                                      capture_output=True, text=True).stdout.split(':')[-1])
+        except Exception:
+            continue                       # format illisible par sips : on n'y touche pas
+        if larg <= LARGEUR_MAX and avant <= POIDS_MAX:
+            continue
+        cmd = ['sips']
+        if larg > LARGEUR_MAX:
+            cmd += ['--resampleWidth', str(LARGEUR_MAX)]
+        if n.lower().endswith(('.jpg', '.jpeg')):
+            cmd += ['-s', 'formatOptions', str(QUALITE)]
+        cmd += [chemin]
+        if subprocess.run(cmd, capture_output=True).returncode != 0:
+            continue
+        apres = os.path.getsize(chemin)
+        faits.append((n, larg, avant, apres))
+    return faits
+
+
+def est_video(nom):
+    return nom.lower().endswith(VIDEOS)
 
 
 def legende(nom):
@@ -55,7 +100,10 @@ def photos():
     if not os.path.isdir(DOSSIER):
         return None, 'dossier introuvable : docs/photos/'
     noms = sorted(f for f in os.listdir(DOSSIER)
-                  if f.lower().endswith(EXTENSIONS) and not f.startswith('.'))
+                  if f.lower().endswith(EXTENSIONS + VIDEOS)
+                  and not f.startswith('.')
+                  # l'image d'attente d'une video n'est pas une vue du carrousel
+                  and SUFFIXE_POSTER not in os.path.splitext(f)[0])
     if not noms:
         return None, 'aucune photo dans docs/photos/'
     return noms, ''
@@ -78,10 +126,23 @@ def figures(noms):
         # fait defiler, attendent.
         premiere = (rang == 0)
         bloc = ['          <figure>']
-        bloc.append('            <img src="photos/%s" width="548" height="630"' % echapper(n))
-        bloc.append('                 alt="%s"' % echapper(alt))
-        bloc.append('                 %s decoding="async">'
-                    % ('fetchpriority="high"' if premiere else 'loading="lazy"'))
+        if est_video(n):
+            # muted + playsinline : sans les deux, iOS refuse la lecture
+            # automatique. preload="none" hors premiere vue : on ne telecharge
+            # pas une video que le visiteur n'a pas encore fait defiler.
+            poster = os.path.splitext(n)[0] + SUFFIXE_POSTER + '.jpg'
+            attrs = 'autoplay muted loop playsinline'
+            if os.path.exists(os.path.join(DOSSIER, poster)):
+                attrs += ' poster="photos/%s"' % echapper(poster)
+            if not premiere:
+                attrs += ' preload="none"'
+            bloc.append('            <video src="photos/%s" %s' % (echapper(n), attrs))
+            bloc.append('                   width="548" height="630" aria-label="%s"></video>' % echapper(alt))
+        else:
+            bloc.append('            <img src="photos/%s" width="548" height="630"' % echapper(n))
+            bloc.append('                 alt="%s"' % echapper(alt))
+            bloc.append('                 %s decoding="async">'
+                        % ('fetchpriority="high"' if premiere else 'loading="lazy"'))
         if leg:
             bloc.append('            <figcaption>%s</figcaption>' % echapper(leg))
         bloc.append('          </figure>')
@@ -99,9 +160,15 @@ def main():
         print('ECHEC : %s' % err)
         return 2
 
+    if not args.lire:
+        for n, larg, avant, apres in optimiser(noms):
+            print('   allege : %-32s %d px, %.1f Mo -> %.0f Ko'
+                  % (n, larg, avant / 1048576.0, apres / 1024.0))
+
     print('%d photo(s) dans docs/photos/ :' % len(noms))
     for n in noms:
-        print('   %-38s -> %s' % (n, legende(n) or '(sans legende)'))
+        ko = os.path.getsize(os.path.join(DOSSIER, n)) / 1024.0
+        print('   %-38s %6.0f Ko  -> %s' % (n, ko, legende(n) or '(sans legende)'))
 
     s = io.open(PAGE, encoding='utf-8').read()
     if DEBUT not in s or FIN not in s:

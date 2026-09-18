@@ -375,12 +375,14 @@
       background: var(--ivory-deep);
       box-shadow: var(--shadow-md);
     }
-    .carrousel-piste img {
+    .carrousel-piste img,
+    .carrousel-piste video {
       display: block;
       width: 100%;
       aspect-ratio: 4 / 3;
       object-fit: cover;
       object-position: center;
+      background: var(--ivory-deep);
     }
     .carrousel-piste figcaption {
       position: absolute;
@@ -456,7 +458,8 @@
       flex:0 0 100%; height:100%;
       border-radius:0; box-shadow:none; background:transparent;
     }
-    .hero-photo .carrousel-piste img {
+    .hero-photo .carrousel-piste img,
+    .hero-photo .carrousel-piste video {
       aspect-ratio:auto; height:100%;
       object-fit:cover; object-position:center 46%;
     }
@@ -514,10 +517,39 @@
              aria-roledescription="carrousel" aria-label="Photos de l'AdhanBox">
 <!-- carrousel:debut -->
           <figure>
-            <img src="photos/01-boitier-allume.jpg" width="548" height="630"
-                 alt="Boitier allume"
-                 fetchpriority="high" decoding="async">
-            <figcaption>Boitier allume</figcaption>
+            <video src="photos/01-le-boitier-allume.mp4" autoplay muted loop playsinline poster="photos/01-le-boitier-allume-poster.jpg"
+                   width="548" height="630" aria-label="Le boitier allume"></video>
+            <figcaption>Le boitier allume</figcaption>
+          </figure>
+          <figure>
+            <img src="photos/02-lumiere-a-travers-les-arches.jpg" width="548" height="630"
+                 alt="Lumiere a travers les arches"
+                 loading="lazy" decoding="async">
+            <figcaption>Lumiere a travers les arches</figcaption>
+          </figure>
+          <figure>
+            <img src="photos/03-dix-coloris-au-choix.jpg" width="548" height="630"
+                 alt="Dix coloris au choix"
+                 loading="lazy" decoding="async">
+            <figcaption>Dix coloris au choix</figcaption>
+          </figure>
+          <figure>
+            <img src="photos/04-dans-le-salon.jpg" width="548" height="630"
+                 alt="Dans le salon"
+                 loading="lazy" decoding="async">
+            <figcaption>Dans le salon</figcaption>
+          </figure>
+          <figure>
+            <img src="photos/05-trois-coloris.jpg" width="548" height="630"
+                 alt="Trois coloris"
+                 loading="lazy" decoding="async">
+            <figcaption>Trois coloris</figcaption>
+          </figure>
+          <figure>
+            <img src="photos/06-motif-dore-sur-vert.jpg" width="548" height="630"
+                 alt="Motif dore sur vert"
+                 loading="lazy" decoding="async">
+            <figcaption>Motif dore sur vert</figcaption>
           </figure>
 <!-- carrousel:fin -->
         </div>
@@ -948,6 +980,16 @@ var SHIP_DATE = "sous 1 à 2 semaines";
   var carrousels = document.querySelectorAll('[data-carrousel]');
   if (!carrousels.length) return;
 
+  var moinsAnime = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (moinsAnime) {
+    Array.prototype.forEach.call(document.querySelectorAll('[data-carrousel] video'), function (v) {
+      v.removeAttribute('autoplay');
+      v.removeAttribute('loop');
+      v.controls = true;
+      v.pause();
+    });
+  }
+
   Array.prototype.forEach.call(carrousels, function (car) {
     var piste = car.querySelector('.carrousel-piste');
     var prec = car.querySelector('.carrousel-prec');
@@ -985,6 +1027,11 @@ var SHIP_DATE = "sous 1 à 2 semaines";
     // cours), le recalculer fait sauter une photo. Il n'est relu depuis la
     // position qu'a la fin d'un defilement, dans peindre().
     var courant = 0;
+    // Pendant un defilement PILOTE (fleche, point, clavier), la position n'est
+    // pas encore arrivee : la relire ferait revenir l'index en arriere et le
+    // premier clic semblerait sans effet. On l'ignore donc jusqu'a la fin de
+    // l'animation. Seul un defilement LIBRE (doigt, molette) fait autorite.
+    var pilotageJusqua = 0;
 
     function index() {
       // La photo la plus proche du centre de la piste
@@ -1001,6 +1048,7 @@ var SHIP_DATE = "sous 1 à 2 semaines";
     function aller(n) {
       n = Math.max(0, Math.min(vues.length - 1, n));
       courant = n;
+      pilotageJusqua = Date.now() + 800;
       piste.scrollTo({ left: vues[n].offsetLeft, behavior: 'smooth' });
       peindre();
     }
@@ -1026,7 +1074,11 @@ var SHIP_DATE = "sous 1 à 2 semaines";
     var minuteur;
     piste.addEventListener('scroll', function () {
       clearTimeout(minuteur);
-      minuteur = setTimeout(function () { courant = index(); peindre(); }, 120);
+      minuteur = setTimeout(function () {
+        if (Date.now() < pilotageJusqua) return;   // defilement pilote en cours
+        courant = index();
+        peindre();
+      }, 120);
     }, { passive: true });
 
     window.addEventListener('resize', function () {

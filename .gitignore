@@ -35,3 +35,17 @@ _maptest_tmp/
 build_banc_v3/
 
 __pycache__/
+
+# KiCad : etat local de l editeur
+*.kicad_prl
+
+# Historique local de l editeur et verrous KiCad
+.history/
+*.lck
+
+# visuels de reference generes (lourds, non reglementaires)
+store_assets/packaging/reference/
+
+# Originaux des photos produit : lourds, et seules les versions allegees de
+# docs/photos/ sont publiees. Ils restent en local pour pouvoir recompresser.
+store_assets/photos_originales/
