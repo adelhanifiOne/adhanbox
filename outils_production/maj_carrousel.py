@@ -44,6 +44,8 @@ PAGE = os.path.join(RACINE, 'docs', 'index.html')
 DEBUT = '<!-- carrousel:debut -->'
 FIN = '<!-- carrousel:fin -->'
 EXTENSIONS = ('.jpg', '.jpeg', '.png', '.webp')
+VIDEOS = ('.mp4',)
+SUFFIXE_POSTER = '-poster'   # 01-xxx-poster.jpg accompagne 01-xxx.mp4
 LARGEUR_MAX = 1400      # px : au-dela, invisible a l'oeil sur le site
 POIDS_MAX = 400 * 1024  # octets : au-dela, on recompresse
 QUALITE = 78            # compression JPEG appliquee si besoin
@@ -53,6 +55,8 @@ def optimiser(noms):
     """Redimensionne et recompresse ce qui est trop lourd. Renvoie le rapport."""
     faits = []
     for n in noms:
+        if est_video(n):
+            continue                       # deja compressee par ffmpeg, sips n'y peut rien
         chemin = os.path.join(DOSSIER, n)
         avant = os.path.getsize(chemin)
         try:
@@ -75,6 +79,10 @@ def optimiser(noms):
     return faits
 
 
+def est_video(nom):
+    return nom.lower().endswith(VIDEOS)
+
+
 def legende(nom):
     """« 03-couvercle-ajoure.jpg » -> « Couvercle ajoure »."""
     base = os.path.splitext(nom)[0]
@@ -92,7 +100,10 @@ def photos():
     if not os.path.isdir(DOSSIER):
         return None, 'dossier introuvable : docs/photos/'
     noms = sorted(f for f in os.listdir(DOSSIER)
-                  if f.lower().endswith(EXTENSIONS) and not f.startswith('.'))
+                  if f.lower().endswith(EXTENSIONS + VIDEOS)
+                  and not f.startswith('.')
+                  # l'image d'attente d'une video n'est pas une vue du carrousel
+                  and SUFFIXE_POSTER not in os.path.splitext(f)[0])
     if not noms:
         return None, 'aucune photo dans docs/photos/'
     return noms, ''
@@ -115,10 +126,23 @@ def figures(noms):
         # fait defiler, attendent.
         premiere = (rang == 0)
         bloc = ['          <figure>']
-        bloc.append('            <img src="photos/%s" width="548" height="630"' % echapper(n))
-        bloc.append('                 alt="%s"' % echapper(alt))
-        bloc.append('                 %s decoding="async">'
-                    % ('fetchpriority="high"' if premiere else 'loading="lazy"'))
+        if est_video(n):
+            # muted + playsinline : sans les deux, iOS refuse la lecture
+            # automatique. preload="none" hors premiere vue : on ne telecharge
+            # pas une video que le visiteur n'a pas encore fait defiler.
+            poster = os.path.splitext(n)[0] + SUFFIXE_POSTER + '.jpg'
+            attrs = 'autoplay muted loop playsinline'
+            if os.path.exists(os.path.join(DOSSIER, poster)):
+                attrs += ' poster="photos/%s"' % echapper(poster)
+            if not premiere:
+                attrs += ' preload="none"'
+            bloc.append('            <video src="photos/%s" %s' % (echapper(n), attrs))
+            bloc.append('                   width="548" height="630" aria-label="%s"></video>' % echapper(alt))
+        else:
+            bloc.append('            <img src="photos/%s" width="548" height="630"' % echapper(n))
+            bloc.append('                 alt="%s"' % echapper(alt))
+            bloc.append('                 %s decoding="async">'
+                        % ('fetchpriority="high"' if premiere else 'loading="lazy"'))
         if leg:
             bloc.append('            <figcaption>%s</figcaption>' % echapper(leg))
         bloc.append('          </figure>')
