@@ -1,6 +1,6 @@
 {
-  "version": "3.0.41",
+  "version": "3.0.42",
   "hardware": "v3",
   "url": "https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/build_temp_v3/adhanbox_v3.ino.bin",
-  "changelog": "Votre boîtier vérifie maintenant l identité des serveurs qu il interroge avant de télécharger quoi que ce soit. Le Coran et les azkar se lancent correctement depuis l application, et si un fichier manque sur la carte la boîte le dit au lieu de faire semblant de le jouer. Le bouton tactile peut désormais être désactivé à distance, pour les boîtiers dont le capteur se déclenche tout seul."
+  "changelog": "Si le bouton tactile de votre boîtier se déclenche tout seul quand le son est fort et interrompt l adhan, vous pouvez maintenant le désactiver depuis la page de dépannage du boîtier (adhanbox.local), et le réactiver quand vous voulez. L application continue de tout commander."
 }
