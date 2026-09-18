@@ -2,7 +2,7 @@
 // - Starts an AP when a long-press is detected on CONFIG_BUTTON_PIN
 // - Serves a small webpage that requests navigator.geolocation and POSTs lat/lon
 // - Stores lat/lon/accuracy/timestamp in Preferences (NVS)
-//Version: 3.0.41 (AdhanBox V3 / HW v3)
+//Version: 3.0.42 (AdhanBox V3 / HW v3)
 #include <Arduino.h>
 #include <esp_mac.h>   // esp_read_mac() : MAC eFuse, lisible sans Wi-Fi
 #include <Wire.h>
@@ -1076,6 +1076,20 @@ const char index_html[] PROGMEM = R"HTML(
   <div class="msg" id="testMsg"></div>
 </div>
 
+<div class="card">
+  <h2>👆 Bouton tactile</h2>
+  <p class="hint">Le bouton du boîtier arrête le son en cours et change la scène
+  lumineuse. Sur certains boîtiers, le capteur se déclenche tout seul quand le
+  son est fort : l'adhan s'arrête alors sans que personne n'y touche. Le couper
+  règle le problème — l'application continue de tout commander.</p>
+  <p>État actuel : <b id="btnEtat">…</b></p>
+  <div class="btn-row">
+    <button class="btn-red" id="btnCouper">Désactiver le bouton</button>
+    <button class="btn-emerald" id="btnRallumer">Réactiver le bouton</button>
+  </div>
+  <div class="msg" id="btnMsg"></div>
+</div>
+
 <div class="card hidden" id="usineCard">
   <h2>🧹 Remise à zéro</h2>
   <p class="hint">Avant de donner ou de revendre ce boîtier : efface le Wi-Fi
@@ -1149,6 +1163,38 @@ const char index_html[] PROGMEM = R"HTML(
 
   $('testBtn').onclick=function(){ $('testMsg').textContent="Lecture de l'adhan…"; fetch('/play?track=2').catch(function(){}); };
   $('stopBtn').onclick=function(){ $('testMsg').textContent=''; fetch('/stopplay').catch(function(){}); };
+
+  // ── Bouton tactile : lire l'etat, puis l'activer ou le couper ──
+  // NB : que des fonctions ANONYMES ici. Une declaration « function nom(){} »
+  // en debut de ligne, meme au milieu de cette chaine HTML, est ramassee par
+  // le generateur de prototypes d'Arduino, qui en fait du C++ invalide en tete
+  // de fichier et casse la compilation. Tout le reste du script suit deja
+  // cette regle.
+  var btnPeindre = function(actif){
+    $('btnEtat').textContent = actif ? 'activé' : 'désactivé';
+    $('btnCouper').disabled = !actif;
+    $('btnRallumer').disabled = actif;
+  };
+  var btnLire = function(){
+    fetch('/api/bouton').then(function(r){return r.json();})
+      .then(function(j){ btnPeindre(j.bouton_actif === 1); })
+      .catch(function(){ $('btnEtat').textContent = 'inconnu'; });
+  };
+  var btnRegler = function(actif){
+    $('btnMsg').textContent = '…';
+    fetch('/api/bouton?actif=' + (actif ? 1 : 0))
+      .then(function(r){return r.json();})
+      .then(function(j){
+        btnPeindre(j.bouton_actif === 1);
+        $('btnMsg').textContent = j.bouton_actif
+          ? '✅ Le bouton du boîtier fonctionne de nouveau.'
+          : '✅ Bouton coupé. Passez par l\'application pour arrêter le son ou changer la lumière.';
+      })
+      .catch(function(){ $('btnMsg').textContent = '❌ Le boîtier n\'a pas répondu.'; });
+  };
+  $('btnCouper').onclick = function(){ btnRegler(false); };
+  $('btnRallumer').onclick = function(){ btnRegler(true); };
+  btnLire();
 
   $('usineBtn').onclick=function(){
     var attendu = $('usineId').textContent.trim();
@@ -1890,7 +1936,7 @@ void handleOtaUploadComplete() {
 // GET /api/firmware/version
 void handleFirmwareVersion() {
   server.send(200, "application/json",
-              "{\"version\":\"3.0.41\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
+              "{\"version\":\"3.0.42\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
 }
 
 // Returns true if the request carries the correct API key (or if token not yet set).
@@ -2003,11 +2049,11 @@ void handleDeviceInfo() {
   char buf[512];
   if (pairingWindow || hasValidToken) {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.41\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
+             "{\"version\":\"3.0.42\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
              OTA_HOSTNAME, deviceIdHex().c_str(), _apiToken.c_str(), _otaPass.c_str());
   } else {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.41\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
+             "{\"version\":\"3.0.42\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
              OTA_HOSTNAME, deviceIdHex().c_str());
   }
   server.send(200, "application/json", buf);
@@ -5367,7 +5413,7 @@ static void bancCommande(String c) {
 
   if (verbe == "info") {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.41\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
+             "{\"version\":\"3.0.42\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
              deviceIdHex().c_str());
     bancRep(buf);
 
