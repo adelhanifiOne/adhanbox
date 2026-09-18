@@ -162,6 +162,7 @@
 
     .hero-visual { position:relative; }
     .hero-photo {
+      position:relative;
       width:100%; aspect-ratio:1/1.05; max-height:520px;
       border-radius:calc(var(--radius) + 6px);
       background:var(--ivory-deep);
@@ -341,6 +342,129 @@
     .gift-grid .g h3 { font-size:1.05rem; margin-bottom:.4rem; }
     .gift-grid .g p { color:var(--muted); font-size:.95rem; line-height:1.6; margin:0; }
     @media (max-width:760px){ .gift-grid { grid-template-columns:1fr; } }
+  
+
+
+    /* ═══════════════════════════════════════════════════════
+       CARROUSEL PHOTOS
+       Defilement par scroll-snap : le swipe tactile est natif
+       (pas de JS a ecrire pour le doigt), et sans JavaScript le
+       visiteur peut toujours faire defiler a la main.
+       ═══════════════════════════════════════════════════════ */
+    .carrousel { position: relative; }
+
+    .carrousel-piste {
+      display: flex;
+      gap: 14px;
+      overflow-x: auto;
+      scroll-snap-type: x mandatory;
+      scroll-behavior: smooth;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+      padding-bottom: 4px;
+    }
+    .carrousel-piste::-webkit-scrollbar { display: none; }
+
+    .carrousel-piste figure {
+      flex: 0 0 100%;
+      scroll-snap-align: center;
+      margin: 0;
+      position: relative;
+      border-radius: var(--radius);
+      overflow: hidden;
+      background: var(--ivory-deep);
+      box-shadow: var(--shadow-md);
+    }
+    .carrousel-piste img {
+      display: block;
+      width: 100%;
+      aspect-ratio: 4 / 3;
+      object-fit: cover;
+      object-position: center;
+    }
+    .carrousel-piste figcaption {
+      position: absolute;
+      left: 0; right: 0; bottom: 0;
+      padding: 30px 20px 14px;
+      color: #fff;
+      font-size: .9rem;
+      line-height: 1.4;
+      background: linear-gradient(to top, rgba(8, 24, 18, .78), transparent);
+    }
+
+    /* Fleches : masquees au doigt, le swipe suffit */
+    .carrousel-fleche {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 44px; height: 44px;
+      display: flex; align-items: center; justify-content: center;
+      border: 1px solid var(--line);
+      border-radius: 50%;
+      background: rgba(255, 255, 255, .92);
+      color: var(--ink);
+      cursor: pointer;
+      box-shadow: var(--shadow-sm);
+      transition: background .2s, transform .2s, opacity .2s;
+      z-index: 2;
+    }
+    .carrousel-fleche:hover { background: #fff; transform: translateY(-50%) scale(1.06); }
+    .carrousel-fleche:focus-visible { outline: 2px solid var(--emerald); outline-offset: 2px; }
+    .carrousel-fleche[disabled] { opacity: .3; cursor: default; }
+    .carrousel-fleche svg { width: 20px; height: 20px; }
+    .carrousel-prec { left: 12px; }
+    .carrousel-suiv { right: 12px; }
+
+    /* Points de position */
+    .carrousel-points {
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      margin-top: 18px;
+    }
+    .carrousel-points button {
+      width: 8px; height: 8px;
+      padding: 0;
+      border: none;
+      border-radius: 50%;
+      background: var(--line);
+      cursor: pointer;
+      transition: background .2s, width .2s;
+    }
+    .carrousel-points button[aria-current="true"] {
+      background: var(--emerald);
+      width: 24px;
+      border-radius: 4px;
+    }
+    .carrousel-points button:focus-visible { outline: 2px solid var(--emerald); outline-offset: 3px; }
+
+    @media (max-width: 880px) {
+      .carrousel-piste img { aspect-ratio: 1 / 1; }
+      .carrousel-fleche { display: none; }   /* au doigt, on swipe */
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .carrousel-piste { scroll-behavior: auto; }
+      .carrousel-fleche { transition: none; }
+    }
+  
+
+    /* Le carrousel dans le cadre du hero : il epouse le cadre existant
+       (ratio 1/1.05, coins arrondis, ombre) au lieu d'en ajouter un second. */
+    .hero-photo .carrousel-piste { height:100%; gap:0; padding:0; }
+    .hero-photo .carrousel-piste figure {
+      flex:0 0 100%; height:100%;
+      border-radius:0; box-shadow:none; background:transparent;
+    }
+    .hero-photo .carrousel-piste img {
+      aspect-ratio:auto; height:100%;
+      object-fit:cover; object-position:center 46%;
+    }
+    /* Pas de legende dans le hero : le badge « Photo reelle » occupe deja ce
+       coin, les deux se chevauchaient. Le texte du nom de fichier reste utile,
+       il sert d'alternative textuelle sur l'image. */
+    .hero-photo .carrousel-piste figcaption { display:none; }
+    .hero-visual .carrousel-points { margin-top:14px; }
   </style>
 </head>
 <body>
@@ -381,13 +505,31 @@
         <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg>Fabriqué à la commande, en France</span>
       </div>
     </div>
-    <div class="hero-visual">
+    <!-- Le visuel du hero est un carrousel. La liste des photos est ECRITE PAR
+         outils_production/maj_carrousel.py, qui lit docs/photos/. Pour ajouter
+         une photo : la deposer dans ce dossier et relancer le script. -->
+    <div class="hero-visual" data-carrousel>
       <div class="hero-photo">
-        <img src="adhanbox-photo.jpg" width="548" height="630"
-             alt="AdhanBox allumé sur une table en bois : les arches et le couvercle ajouré laissent passer une lumière chaude, un motif géométrique orne la façade."
-             fetchpriority="high" decoding="async">
+        <div class="carrousel-piste" tabindex="0" role="group"
+             aria-roledescription="carrousel" aria-label="Photos de l'AdhanBox">
+<!-- carrousel:debut -->
+          <figure>
+            <img src="photos/01-boitier-allume.jpg" width="548" height="630"
+                 alt="Boitier allume"
+                 fetchpriority="high" decoding="async">
+            <figcaption>Boitier allume</figcaption>
+          </figure>
+<!-- carrousel:fin -->
+        </div>
+        <button class="carrousel-fleche carrousel-prec" type="button" aria-label="Photo précédente">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+        </button>
+        <button class="carrousel-fleche carrousel-suiv" type="button" aria-label="Photo suivante">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+        </button>
       </div>
       <span class="tag">Photo réelle — chaque boîtier est fait main</span>
+      <div class="carrousel-points" aria-label="Choisir une photo"></div>
     </div>
   </div>
 </section>
@@ -661,6 +803,7 @@
           <li><a href="#precommande">Commander</a></li>
           <li><a href="personnaliser.html">Personnaliser</a></li>
           <li><a href="produit.html">Le produit en détail</a></li>
+          <li><a href="avis.html">Avis clients</a></li>
         </ul>
       </div>
       <div class="foot-col">
@@ -668,6 +811,8 @@
         <ul>
           <li><a href="faq.html">FAQ complète</a></li>
           <li><a href="contact.html">Contact</a></li>
+          <li><a href="horloge-adhan.html">Horloge adhan ou AdhanBox ?</a></li>
+          <li><a href="android.html">L'application sur Android</a></li>
           <li><a href="mailto:contact@adhanbox.fr">contact@adhanbox.fr</a></li>
         </ul>
       </div>
@@ -677,6 +822,7 @@
           <li><a href="cgv.html">CGV</a></li>
           <li><a href="mentions-legales.html">Mentions légales</a></li>
           <li><a href="privacy.html">Confidentialité</a></li>
+          <li><a href="conformite.html">Déclaration UE de conformité</a></li>
         </ul>
       </div>
     </div>
@@ -790,23 +936,107 @@ var SHIP_DATE = "sous 1 à 2 semaines";
   })();
 
 })();
+
+/* ════════════════════════════════════════════════════════════
+   CARROUSEL PHOTOS
+   Le defilement lui-meme est fait par le CSS (scroll-snap) : le
+   doigt marche tout seul, et sans ce script on peut encore faire
+   defiler a la main. Ici on n'ajoute que le confort : fleches,
+   points, clavier — et on masque tout s'il n'y a qu'une photo.
+   ════════════════════════════════════════════════════════════ */
+(function () {
+  var carrousels = document.querySelectorAll('[data-carrousel]');
+  if (!carrousels.length) return;
+
+  Array.prototype.forEach.call(carrousels, function (car) {
+    var piste = car.querySelector('.carrousel-piste');
+    var prec = car.querySelector('.carrousel-prec');
+    var suiv = car.querySelector('.carrousel-suiv');
+    var pots = car.querySelector('.carrousel-points');
+    var vues = piste ? piste.querySelectorAll('figure') : [];
+    if (!piste || !vues.length) return;
+
+    // Une seule photo : ni fleches ni points, ce serait du decor inutile.
+    if (vues.length < 2) {
+      if (prec) prec.remove();
+      if (suiv) suiv.remove();
+      if (pots) pots.remove();
+      piste.style.overflowX = 'visible';
+      return;
+    }
+
+    // Les points
+    var puces = [];
+    if (pots) {
+      for (var i = 0; i < vues.length; i++) {
+        (function (n) {
+          var b = document.createElement('button');
+          b.type = 'button';
+          b.setAttribute('aria-label', 'Photo ' + (n + 1) + ' sur ' + vues.length);
+          b.addEventListener('click', function () { aller(n); });
+          pots.appendChild(b);
+          puces.push(b);
+        })(i);
+      }
+    }
+
+    // L'index courant est MEMORISE, pas rededuit au moment du clic : si le
+    // defilement n'est pas exactement au repos (inertie du doigt, snap en
+    // cours), le recalculer fait sauter une photo. Il n'est relu depuis la
+    // position qu'a la fin d'un defilement, dans peindre().
+    var courant = 0;
+
+    function index() {
+      // La photo la plus proche du centre de la piste
+      var centre = piste.scrollLeft + piste.clientWidth / 2;
+      var meilleur = 0, ecart = Infinity;
+      for (var i = 0; i < vues.length; i++) {
+        var c = vues[i].offsetLeft + vues[i].offsetWidth / 2;
+        var d = Math.abs(c - centre);
+        if (d < ecart) { ecart = d; meilleur = i; }
+      }
+      return meilleur;
+    }
+
+    function aller(n) {
+      n = Math.max(0, Math.min(vues.length - 1, n));
+      courant = n;
+      piste.scrollTo({ left: vues[n].offsetLeft, behavior: 'smooth' });
+      peindre();
+    }
+
+    function peindre() {
+      for (var i = 0; i < puces.length; i++) {
+        puces[i].setAttribute('aria-current', i === courant ? 'true' : 'false');
+      }
+      if (prec) prec.disabled = (courant === 0);
+      if (suiv) suiv.disabled = (courant === vues.length - 1);
+    }
+
+    if (prec) prec.addEventListener('click', function () { aller(courant - 1); });
+    if (suiv) suiv.addEventListener('click', function () { aller(courant + 1); });
+
+    piste.addEventListener('keydown', function (e) {
+      if (e.key === 'ArrowRight') { e.preventDefault(); aller(courant + 1); }
+      if (e.key === 'ArrowLeft') { e.preventDefault(); aller(courant - 1); }
+    });
+
+    // On ne repeint qu'a la fin du defilement : pendant le swipe, ca
+    // declencherait des dizaines de fois par seconde pour rien.
+    var minuteur;
+    piste.addEventListener('scroll', function () {
+      clearTimeout(minuteur);
+      minuteur = setTimeout(function () { courant = index(); peindre(); }, 120);
+    }, { passive: true });
+
+    window.addEventListener('resize', function () {
+      clearTimeout(minuteur);
+      minuteur = setTimeout(function () { courant = index(); peindre(); }, 150);
+    });
+
+    peindre();
+  });
+})();
 </script>
-<!-- plan:debut -->
-<nav aria-label="Plan du site" style="max-width:1100px;margin:0 auto;padding:18px 20px 34px;font-size:.82rem;line-height:1.9;opacity:.55">
-  <ul style="list-style:none;display:flex;flex-wrap:wrap;gap:0 18px;margin:0;padding:0">
-    <li><a href="produit.html">Le produit</a></li>
-    <li><a href="personnaliser.html">Personnaliser et commander</a></li>
-    <li><a href="avis.html">Avis clients</a></li>
-    <li><a href="faq.html">Questions fréquentes</a></li>
-    <li><a href="horloge-adhan.html">Horloge adhan</a></li>
-    <li><a href="android.html">L'application sur Android</a></li>
-    <li><a href="contact.html">Contact</a></li>
-    <li><a href="conformite.html">Conformité</a></li>
-    <li><a href="cgv.html">Conditions générales de vente</a></li>
-    <li><a href="mentions-legales.html">Mentions légales</a></li>
-    <li><a href="privacy.html">Confidentialité</a></li>
-  </ul>
-</nav>
-<!-- plan:fin -->
 </body>
 </html>
