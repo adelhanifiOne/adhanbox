@@ -8,17 +8,17 @@ la carte et la dalle. Ce script ouvre une saignee sur UN cote du carre, celui
 qui regarde le port USB-C de la coque — la carte principale et ses
 connecteurs sont dessous, les fils descendent tout droit.
 
-RAINURE, PAS TROU TRAVERSANT (corrige le 18/09/2026, demande d'Adel)
-La premiere version percait les 5 mm de dalle de part en part : trop profond,
-et ca ouvrait le dessous du support. Desormais la saignee part de l'EPAULEMENT
-du lamage (Z = 3 en local) et descend de PROFONDEUR mm seulement. Il reste
-1,5 mm de dalle dessous : les fils passent sous la carte sans etre pinces, et
-la dalle reste fermee.
+LARGEUR REDUITE, MAIS TRAVERSANTE (corrige le 18/09/2026, demande d'Adel)
+La premiere version etait trop large : elle mordait jusqu'a X 67,5, bien
+au-dela du lamage, et enlevait de la matiere la ou la dalle est pleine sur
+5 mm. Desormais la saignee part de l'EPAULEMENT du lamage (Z = 3 en local) et
+descend jusqu'au DESSOUS de la dalle : elle debouche, les fils montent du
+dessous jusque sous la carte sans etre pinces.
 
-ELLE S'ARRETE AU BORD DU LAMAGE. Au-dela, la dalle est pleine jusqu'a Z = 5 :
-y creuser une rainure a Z 1,5..3 creerait une CAVITE FERMEE sous 2 mm de
-matiere — impossible a imprimer, et inutile. La borne est donc mesuree sur le
-lamage, pas choisie.
+ELLE S'ARRETE AU BORD DU LAMAGE (X 63,70). C'est la que se termine la zone
+ouverte au-dessus, donc la que les fils cessent d'etre pinces par la carte.
+Aller au-dela n'apporterait rien et entamerait la dalle pleine. La borne est
+mesuree sur le lamage, pas choisie.
 
 Comme fermeture_aimantee.py, rien n'est code en dur : le carre est mesure sur
 la boucle interieure de la face du dessous, l'epaulement sur la face de
@@ -31,17 +31,19 @@ TOUT EN COORDONNEES LOCALES. L'occurrence support_led est translatee de
 coupe ne creait aucune face). Utiliser comp.bRepBodies, jamais occ.bRepBodies.
 
 Resultat attendu (valide le 18/09/2026, en local support) :
-  - cote +X du carre, rainure X 61,00 -> 63,70 (bord du lamage),
-    Y 39,50 -> 59,50 (20 mm, centree), Z 3,00 -> 1,50.
-  - fond de rainure : face de 44,0 mm2 a Z = 1,50 (2,2 x 20).
-  - epaulement ramene de 327,4 a 283,4 mm2 ; dessous de dalle INTACT a
-    7427,1 mm2 (preuve qu'elle ne debouche pas).
+  - cote +X du carre, saignee X 61,00 -> 63,70 (bord du lamage),
+    Y 39,50 -> 59,50 (20 mm, centree), Z 3,00 -> 0,00 : TRAVERSANTE.
+  - epaulement ramene de 327,4 a 283,4 mm2.
+  - dessous de dalle : son ouverture s'elargit de 2,2 x 20 mm (preuve que la
+    saignee debouche bien). Si elle reste a 7427,1 mm2, la coupe n'a pas
+    traverse.
 """
 
 import adsk.core, adsk.fusion
 
-LARGEUR    = 20.0   # le long du cote du carre (demande d'Adel)
-PROFONDEUR = 1.5    # retires sous l'epaulement ; il reste 1,5 mm de dalle
+LARGEUR = 20.0      # le long du cote du carre (demande d'Adel)
+# La profondeur n'est pas figee : la saignee descend de l'epaulement jusqu'au
+# dessous de la dalle, mesure sur la piece. Elle DOIT deboucher.
 NOM = 'Encoche_fils_LED'
 CUT = adsk.fusion.FeatureOperations.CutFeatureOperation
 
@@ -147,30 +149,32 @@ def run(_context: str):
     if sk.profiles.count != 1:
         raise RuntimeError('encoche : %d profils' % sk.profiles.count)
 
+    profondeur = z_ep - zmin          # de l'epaulement au dessous : traversante
     ei = comp.features.extrudeFeatures.createInput(sk.profiles.item(0), CUT)
     sens = -1.0 if pl.geometry.normal.z > 0 else 1.0     # toujours vers le bas
-    ei.setDistanceExtent(False, adsk.core.ValueInput.createByReal(sens * PROFONDEUR / 10.0))
+    ei.setDistanceExtent(False, adsk.core.ValueInput.createByReal(sens * profondeur / 10.0))
     ei.participantBodies = [b]
     f = comp.features.extrudeFeatures.add(ei); f.name = NOM
-    print('  + %s : cote %s, X %.2f..%.2f  Y %.2f..%.2f, Z %.2f -> %.2f (%d faces coupees)'
-          % (NOM, cote, rx0, rx1, ry0, ry1, z_ep, z_ep - PROFONDEUR, f.faces.count))
+    print('  + %s : cote %s, X %.2f..%.2f  Y %.2f..%.2f, Z %.2f -> %.2f TRAVERSANTE (%d faces coupees)'
+          % (NOM, cote, rx0, rx1, ry0, ry1, z_ep, z_ep - profondeur, f.faces.count))
     if f.faces.count == 0:
         raise RuntimeError('la coupe n a rien enleve : repere local/monde melange ?')
 
-    # ---------- 5) preuve : elle ne debouche pas ----------
-    dessous = None
-    fond = None
+    # ---------- 5) preuve : l'ouverture du dessous a pris la forme du carre + saignee ----------
     for ff in b.faces:
         g = ff.geometry
         if not isinstance(g, adsk.core.Plane) or abs(g.normal.z) < .99:
             continue
-        fb = ff.boundingBox
-        if abs(fb.minPoint.z * 10 - zmin) < .05 and ff.area * 100 > 5000:
-            dessous = ff.area * 100
-        if abs(fb.minPoint.z * 10 - (z_ep - PROFONDEUR)) < .05:
-            fond = (ff.area * 100, fb.minPoint.x * 10, fb.maxPoint.x * 10)
-    print('  fond de rainure : %s' % ('%.1f mm2, X %.2f..%.2f' % fond if fond else 'INTROUVABLE'))
-    print('  dessous de dalle : %.1f mm2 (doit rester plein : la rainure ne debouche pas)'
-          % (dessous or -1))
-    print('  dalle restante sous la rainure : %.2f mm' % (z_ep - PROFONDEUR - zmin))
+        if abs(ff.boundingBox.minPoint.z * 10 - zmin) > .05:
+            continue
+        for li in range(ff.loops.count):
+            lp = ff.loops.item(li)
+            lb = lp.boundingBox
+            if not lp.isOuter and (lb.maxPoint.x - lb.minPoint.x) * 10 > 30 \
+               and (lb.maxPoint.y - lb.minPoint.y) * 10 > 30:
+                print('  ouverture du dessous : X %.2f..%.2f  Y %.2f..%.2f  (%d aretes)'
+                      % (lb.minPoint.x * 10, lb.maxPoint.x * 10,
+                         lb.minPoint.y * 10, lb.maxPoint.y * 10, lp.edges.count))
+                if lp.edges.count <= 4:
+                    raise RuntimeError('la saignee n a pas traverse : le dessous est encore un simple carre')
     print('\nPense a ENREGISTRER : support_led, puis diffusion_lum, puis AdhanBox_Fusion.')
