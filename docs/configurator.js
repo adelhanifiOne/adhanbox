@@ -4,22 +4,35 @@
     // Palette unique partagée entre le châssis et le motif.
     // Matériaux volontairement mats (rugosité élevée, metalness quasi nul) :
     // les reflets brillants écrasaient le relief des motifs.
-    const PALETTE = {
-      'marbre': { label: 'Marbre',  hex: '#E4E2DC', color: 0xE4E2DC, roughness: 0.8,  metalness: 0.0 },
-      'blanc':  { label: 'Blanc',   hex: '#F2F0EB', color: 0xF2F0EB, roughness: 0.85, metalness: 0.0 },
-      'gris':   { label: 'Gris',    hex: '#8A8A8A', color: 0x8A8A8A, roughness: 0.85, metalness: 0.0 },
-      'noir':   { label: 'Noir',    hex: '#2A2A2A', color: 0x2A2A2A, roughness: 0.85, metalness: 0.0 },
-      'dore':   { label: 'Doré',    hex: '#C9A227', color: 0xC9A227, roughness: 0.7,  metalness: 0.15 },
-      'rouge':  { label: 'Rouge',   hex: '#B23A3A', color: 0xB23A3A, roughness: 0.85, metalness: 0.0 },
-      'vert':   { label: 'Vert',    hex: '#4A7A52', color: 0x4A7A52, roughness: 0.85, metalness: 0.0 },
-      'bleu':   { label: 'Bleu',    hex: '#3D5A8C', color: 0x3D5A8C, roughness: 0.85, metalness: 0.0 },
-      'violet': { label: 'Violet',  hex: '#6B4E8C', color: 0x6B4E8C, roughness: 0.85, metalness: 0.0 }
-      // 9 finitions. « Bois » retirée le 28/08/2026 (voir api/checkout.js, même liste).
+    // Le chassis et le motif n'ont PAS la meme palette : ce sont deux stocks de
+    // filament differents. Une seule liste partagee (jusqu'au 19/09/2026)
+    // proposait des teintes qu'Adel n'a pas en bobine pour l'une ou pour
+    // l'autre. Toute modification ici doit etre reportee dans
+    // commande_backend/api/checkout.js, qui refuse ce qu'il ne connait pas.
+    const FINISHES = {
+      'beige':        { label: 'Beige',            hex: '#D9C7A7', color: 0xD9C7A7, roughness: 0.85, metalness: 0.0 },
+      'noir':         { label: 'Noir',             hex: '#2A2A2A', color: 0x2A2A2A, roughness: 0.85, metalness: 0.0 },
+      'blanc':        { label: 'Blanc',            hex: '#F2F0EB', color: 0xF2F0EB, roughness: 0.85, metalness: 0.0 },
+      'marbre':       { label: 'Marbre',           hex: '#E4E2DC', color: 0xE4E2DC, roughness: 0.80, metalness: 0.0 },
+      'marron':       { label: 'Marron',           hex: '#6B4A32', color: 0x6B4A32, roughness: 0.85, metalness: 0.0 },
+      'creme':        { label: 'Crème',            hex: '#EFE3CB', color: 0xEFE3CB, roughness: 0.85, metalness: 0.0 },
+      'gris':         { label: 'Gris',             hex: '#8A8A8A', color: 0x8A8A8A, roughness: 0.85, metalness: 0.0 },
+      'cacahuete':    { label: 'Marron cacahuète', hex: '#A9825C', color: 0xA9825C, roughness: 0.85, metalness: 0.0 },
+      'vert-foret':   { label: 'Vert forêt',       hex: '#35543C', color: 0x35543C, roughness: 0.85, metalness: 0.0 },
+      'gris-texture': { label: 'Gris texturé',     hex: '#9A9A94', color: 0x9A9A94, roughness: 0.95, metalness: 0.0 }
     };
-    const FINISHES = PALETTE;
-    const MANDALA_COLORS = PALETTE;
+    const MANDALA_COLORS = {
+      'noir':       { label: 'Noir',       hex: '#2A2A2A', color: 0x2A2A2A, roughness: 0.85, metalness: 0.0 },
+      'blanc':      { label: 'Blanc',      hex: '#F2F0EB', color: 0xF2F0EB, roughness: 0.85, metalness: 0.0 },
+      'rouge':      { label: 'Rouge',      hex: '#B23A3A', color: 0xB23A3A, roughness: 0.85, metalness: 0.0 },
+      'rose':       { label: 'Rose',       hex: '#D96A96', color: 0xD96A96, roughness: 0.85, metalness: 0.0 },
+      'bleu':       { label: 'Bleu',       hex: '#3D5A8C', color: 0x3D5A8C, roughness: 0.85, metalness: 0.0 },
+      'vert-foret': { label: 'Vert forêt', hex: '#35543C', color: 0x35543C, roughness: 0.85, metalness: 0.0 },
+      'or':         { label: 'Or',         hex: '#C9A227', color: 0xC9A227, roughness: 0.70, metalness: 0.15 },
+      'marron':     { label: 'Marron',     hex: '#6B4A32', color: 0x6B4A32, roughness: 0.85, metalness: 0.0 }
+    };
 
-    const state = { finish: 'noir', mandala: 0, mandalaColor: 'dore' };
+    const state = { finish: 'noir', mandala: 0, mandalaColor: 'or' };
     let scene, camera, renderer, controls, boxGroup, boxMesh = null, mandalaMesh = null, lidMesh = null;
     let boxSize = null, boxCenter = null;
     let threeStarted = false;
@@ -313,10 +326,10 @@
     }
 
     // Génère les pastilles de couleur à partir de la palette partagée
-    function buildSwatches(containerId, activeKey, onPick) {
+    function buildSwatches(containerId, activeKey, onPick, palette) {
       const container = document.getElementById(containerId);
       const buttons = [];
-      Object.entries(PALETTE).forEach(([key, c]) => {
+      Object.entries(palette).forEach(([key, c]) => {
         const btn = document.createElement('button');
         btn.className = 'swatch' + (key === activeKey ? ' active' : '');
         btn.style.background = c.hex;
@@ -335,15 +348,15 @@
 
     buildSwatches('finish-swatches', state.finish, (key) => {
       state.finish = key;
-      document.getElementById('finish-note').textContent = PALETTE[key].label + ' — finition mate.';
+      document.getElementById('finish-note').textContent = FINISHES[key].label + ' — finition mate.';
       applyFinish();
-    });
+    }, FINISHES);
 
     buildSwatches('mcolor-swatches', state.mandalaColor, (key) => {
       state.mandalaColor = key;
       applyMandalaColor();
       if (state.mandala !== 0) focusMotifFace();
-    });
+    }, MANDALA_COLORS);
 
     const mandalaBtns = document.querySelectorAll('[data-mandala]');
     mandalaBtns.forEach((btn) => {

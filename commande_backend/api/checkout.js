@@ -17,10 +17,20 @@
 // réponses en Node pur, comportement identique en local et en prod.
 import Stripe from 'stripe';
 
-// Palette alignée sur docs/configurator.js (10 couleurs).
-const PALETTE = {
-  marbre: 'Marbre', blanc: 'Blanc', gris: 'Gris', noir: 'Noir',
-  dore: 'Doré', rouge: 'Rouge', vert: 'Vert', bleu: 'Bleu', violet: 'Violet',
+// Deux palettes DISTINCTES, alignées sur docs/configurator.js : le châssis et
+// le motif ne se font pas dans les mêmes bobines. Ce qui n'est pas dans ces
+// listes est refusé plus bas — donc toute couleur ajoutée au configurateur
+// doit l'être ici AVANT la mise en ligne, sinon la commande échoue sur
+// « Configuration invalide ».
+const CHASSIS = {
+  beige: 'Beige', noir: 'Noir', blanc: 'Blanc', marbre: 'Marbre',
+  marron: 'Marron', creme: 'Crème', gris: 'Gris',
+  cacahuete: 'Marron cacahuète', 'vert-foret': 'Vert forêt',
+  'gris-texture': 'Gris texturé',
+};
+const MOTIFS = {
+  noir: 'Noir', blanc: 'Blanc', rouge: 'Rouge', rose: 'Rose',
+  bleu: 'Bleu', 'vert-foret': 'Vert forêt', or: 'Or', marron: 'Marron',
 };
 
 const ALLOWED_ORIGINS = [
@@ -73,9 +83,9 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return sendJson(res, 405, { error: 'Méthode non autorisée' });
 
   const body = await readJson(req);
-  const chassis = PALETTE[body.finish];
+  const chassis = CHASSIS[body.finish];
   const m = parseInt(body.mandala, 10);
-  const motifColor = PALETTE[body.mandalaColor];
+  const motifColor = MOTIFS[body.mandalaColor];
   // Validation stricte côté serveur : le prix et les options ne peuvent pas
   // être manipulés depuis le navigateur.
   if (!chassis || !(m >= 0 && m <= 5) || (m > 0 && !motifColor)) {
