@@ -10,26 +10,26 @@
     // l'autre. Toute modification ici doit etre reportee dans
     // commande_backend/api/checkout.js, qui refuse ce qu'il ne connait pas.
     const FINISHES = {
-      'beige':        { label: 'Beige',            hex: '#D9C7A7', color: 0xD9C7A7, roughness: 0.85, metalness: 0.0 },
+      'beige':        { label: 'Beige',            hex: '#D4B996', color: 0xD4B996, roughness: 0.85, metalness: 0.0 },
       'noir':         { label: 'Noir',             hex: '#2A2A2A', color: 0x2A2A2A, roughness: 0.85, metalness: 0.0 },
       'blanc':        { label: 'Blanc',            hex: '#F2F0EB', color: 0xF2F0EB, roughness: 0.85, metalness: 0.0 },
       'marbre':       { label: 'Marbre',           hex: '#E4E2DC', color: 0xE4E2DC, roughness: 0.80, metalness: 0.0 },
-      'marron':       { label: 'Marron',           hex: '#6B4A32', color: 0x6B4A32, roughness: 0.85, metalness: 0.0 },
-      'creme':        { label: 'Crème',            hex: '#EFE3CB', color: 0xEFE3CB, roughness: 0.85, metalness: 0.0 },
-      'gris':         { label: 'Gris',             hex: '#8A8A8A', color: 0x8A8A8A, roughness: 0.85, metalness: 0.0 },
-      'cacahuete':    { label: 'Marron cacahuète', hex: '#A9825C', color: 0xA9825C, roughness: 0.85, metalness: 0.0 },
-      'vert-foret':   { label: 'Vert forêt',       hex: '#35543C', color: 0x35543C, roughness: 0.85, metalness: 0.0 },
-      'gris-texture': { label: 'Gris texturé',     hex: '#9A9A94', color: 0x9A9A94, roughness: 0.95, metalness: 0.0 }
+      'marron':       { label: 'Marron',           hex: '#927968', color: 0x927968, roughness: 0.85, metalness: 0.0 },
+      'creme':        { label: 'Crème',            hex: '#F9DFB9', color: 0xF9DFB9, roughness: 0.85, metalness: 0.0 },
+      'gris':         { label: 'Gris',             hex: '#97999B', color: 0x97999B, roughness: 0.85, metalness: 0.0 },
+      'cacahuete':    { label: 'Marron cacahuète', hex: '#A9754F', color: 0xA9754F, roughness: 0.85, metalness: 0.0 },
+      'vert-foret':   { label: 'Vert forêt',       hex: '#43523B', color: 0x43523B, roughness: 0.85, metalness: 0.0 },
+      'gris-texture': { label: 'Gris texturé',     hex: '#75787B', color: 0x75787B, roughness: 0.95, metalness: 0.0 }
     };
     const MANDALA_COLORS = {
       'noir':       { label: 'Noir',       hex: '#2A2A2A', color: 0x2A2A2A, roughness: 0.85, metalness: 0.0 },
       'blanc':      { label: 'Blanc',      hex: '#F2F0EB', color: 0xF2F0EB, roughness: 0.85, metalness: 0.0 },
       'rouge':      { label: 'Rouge',      hex: '#B23A3A', color: 0xB23A3A, roughness: 0.85, metalness: 0.0 },
-      'rose':       { label: 'Rose',       hex: '#D96A96', color: 0xD96A96, roughness: 0.85, metalness: 0.0 },
-      'bleu':       { label: 'Bleu',       hex: '#3D5A8C', color: 0x3D5A8C, roughness: 0.85, metalness: 0.0 },
-      'vert-foret': { label: 'Vert forêt', hex: '#35543C', color: 0x35543C, roughness: 0.85, metalness: 0.0 },
+      'rose':       { label: 'Rose',       hex: '#E8308C', color: 0xE8308C, roughness: 0.85, metalness: 0.0 },
+      'bleu':       { label: 'Bleu',       hex: '#4A7FC9', color: 0x4A7FC9, roughness: 0.85, metalness: 0.0 },
+      'vert-foret': { label: 'Vert forêt', hex: '#43523B', color: 0x43523B, roughness: 0.85, metalness: 0.0 },
       'or':         { label: 'Or',         hex: '#C9A227', color: 0xC9A227, roughness: 0.70, metalness: 0.15 },
-      'marron':     { label: 'Marron',     hex: '#6B4A32', color: 0x6B4A32, roughness: 0.85, metalness: 0.0 }
+      'marron':     { label: 'Marron',     hex: '#927968', color: 0x927968, roughness: 0.85, metalness: 0.0 }
     };
 
     const state = { finish: 'noir', mandala: 0, mandalaColor: 'or' };
