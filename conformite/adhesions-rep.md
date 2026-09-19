@@ -18,6 +18,12 @@ base ADEME. Ce n'est donc pas seulement pour ouvrir des marketplaces.
 
 ## 0. À faire AVANT, sinon l'adhésion bloque
 
+> **DEMANDE ENVOYÉE LE 19/09/2026** par la messagerie sécurisée de l'espace
+> professionnel impots.gouv.fr, créé le jour même. Numéro théorique attendu :
+> **FR96932355589** (clé 96 + SIREN) — vérifié invalide sur VIES avant la
+> demande, donc bien à attribuer. Une tâche planifiée interroge VIES chaque
+> matin et préviendra dès qu'il sera actif.
+
 **Numéro de TVA intracommunautaire.** Il est exigé pour adhérer à un
 éco-organisme, et en franchise en base (article 293 B) tu n'en as pas par
 défaut. Il s'obtient **gratuitement** auprès de ton service des impôts des
