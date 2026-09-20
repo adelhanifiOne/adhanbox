@@ -1,5 +1,6 @@
 // GET /api/order-step?session=cs_…&step=preparation|montage|expedition|avis&token=…
 //     GET /api/order-step?ref=0P4SHMBE&step=…&token=…
+//     GET /api/order-step?ref=A,B,C&step=avis&trace=1&token=…   (marque sans envoyer)
 //
 // Envoie au client l'email correspondant à l'étape de sa commande. Pensé pour
 // être cliqué depuis l'email de notification reçu à chaque commande : un lien
@@ -11,6 +12,14 @@
 // Idempotent : chaque envoi laisse une trace dans Blob (orders/<ref>/<step>),
 // un deuxième clic ne renvoie pas l'email. Indispensable quand on clique
 // depuis un téléphone et qu'on ne sait plus si ça a marché.
+//
+// MODE trace=1 : ecrit la trace SANS envoyer d'email. Sert quand le message a
+// deja ete envoye autrement — a la main depuis la boite contact@adhanbox.fr,
+// par exemple. Sans cela api/cron-avis, qui ne connait que les traces, relance
+// dix jours apres l'expedition un client deja sollicite. C'est arrive aux
+// premieres commandes, passees avant que ces boutons existent.
+// Il accepte plusieurs references separees par des virgules, et ne touche ni a
+// Stripe ni a Resend : seule la reference courte est necessaire.
 //
 // La trace ne contient AUCUNE donnée personnelle : ni email, ni prénom, ni
 // numéro de suivi. Le store Blob est public (mode fixé à sa création, non
@@ -128,6 +137,39 @@ export default async function handler(req, res) {
   }
   if (!session && !ref) {
     return page(res, 400, 'Requête invalide', 'Il manque la commande (session ou ref).', 'err');
+  }
+
+  // Marquage seul : aucune commande n'est lue chez Stripe, aucun email n'part.
+  if (p.trace === '1') {
+    if (!ref) {
+      return page(res, 400, 'Requête invalide', 'Le marquage demande des références (ref=…).', 'err');
+    }
+    const refs = ref.split(',').map((r) => r.trim().toUpperCase()).filter(Boolean);
+    const mauvaises = refs.filter((r) => !/^[A-Z0-9]{6,12}$/.test(r));
+    if (mauvaises.length) {
+      return page(res, 400, 'Requête invalide',
+        `Référence mal formée&nbsp;: ${esc(mauvaises.join(', '))}.`, 'err');
+    }
+    const faits = [];
+    const deja = [];
+    for (const r of refs) {
+      const cible = `orders/${r}/${step}.json`;
+      try {
+        const { blobs } = await list({ prefix: `orders/${r}/` });
+        if (blobs.some((b) => b.pathname === cible)) { deja.push(r); continue; }
+        await put(cible, JSON.stringify({
+          step, ref: r, sentAt: new Date().toISOString(), par: 'trace-manuelle',
+        }), { access: 'public', contentType: 'application/json', addRandomSuffix: false });
+        faits.push(r);
+      } catch (e) {
+        return page(res, 500, 'Échec du marquage',
+          `${esc(r)}&nbsp;: ${esc(e.message)}. Les précédentes sont marquées.`, 'err');
+      }
+    }
+    const lignes = [];
+    if (faits.length) lignes.push(`<b>${esc(faits.join(', '))}</b> — marquée(s)&nbsp;: la relance automatique ne partira plus.`);
+    if (deja.length) lignes.push(`${esc(deja.join(', '))} — l'étape était déjà tracée, rien à faire.`);
+    return page(res, 200, 'Marquage effectué', lignes.join('<br>'));
   }
   if (!process.env.STRIPE_SECRET_KEY || !process.env.RESEND_API_KEY) {
     return page(res, 500, 'Configuration incomplète', 'Clé Stripe ou Resend absente côté serveur.', 'err');
