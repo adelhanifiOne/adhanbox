@@ -48,6 +48,26 @@ const sansAccents = (s) => String(s || '')
   .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
   .toLowerCase().replace(/\s+/g, ' ').trim();
 
+// Deux ecritures d'une meme personne ? « Kadim » et « Kadim Benali », oui.
+// « Fatima Zahra » et « Kadim Benali », non. Sert a decider si le nom porte
+// par la carte signale un cadeau ou redit simplement le destinataire.
+function memeNom(a, b) {
+  const x = sansAccents(a), y = sansAccents(b);
+  if (!x || !y) return false;
+  if (x === y) return true;
+  const mx = x.split(' '), my = y.split(' ');
+  const court = mx.length <= my.length ? mx : my;
+  const long = mx.length <= my.length ? my : mx;
+  // Une initiale vaut le mot qu'elle abrege : beaucoup de cartes portent
+  // « K BENALI » la ou le client ecrit « Kadim Benali ». Sans ca, chaque
+  // commande de ce type declencherait une fausse alerte cadeau.
+  // L'initiale doit valoir des DEUX cotes : la carte peut porter « K BENALI »
+  // quand le client ecrit « Kadim Benali », et l'inverse arrive aussi.
+  const correspond = (a2, b2) =>
+    a2 === b2 || (a2.length === 1 && b2[0] === a2) || (b2.length === 1 && a2[0] === b2);
+  return court.every((mot) => long.some((l) => correspond(mot, l)));
+}
+
 function nomEtiquette(nomLivraison, nomCarte) {
   const liv = String(nomLivraison || '').trim();
   const carte = String(nomCarte || '').trim();
@@ -270,7 +290,15 @@ export default async function handler(req, res) {
   const ref = (piId || session.id).slice(-8).toUpperCase();
   const config = session.metadata?.config || 'Configuration standard';
   // Message cadeau saisi sur la page de paiement (champ facultatif).
-  const giftMsg = ((session.custom_fields || []).find((f) => f.key === 'message_carte')?.text?.value || '').trim();
+  const champ = (k) => ((session.custom_fields || [])
+    .find((f) => f.key === k)?.text?.value || '').trim();
+  const giftMsg = champ('message_carte');
+  // Prenom + nom saisis explicitement sur la page de paiement (obligatoires
+  // depuis le 21/09/2026, voir api/checkout.js). Absents des commandes
+  // anterieures et du Payment Link de secours : on retombe alors sur le nom
+  // de livraison complete par celui de la carte.
+  const nomSaisi = [champ('destinataire_prenom'), champ('destinataire_nom')]
+    .filter(Boolean).join(' ');
   const amount = euros(session.amount_total ?? 0);
   // Mode de livraison choisi sur le site (voir api/checkout.js) : le relais
   // porte son code, indispensable pour creer l'expedition chez Boxtal.
@@ -293,8 +321,11 @@ export default async function handler(req, res) {
       console.error('  -> nom sur la carte illisible:', err && err.message);
     }
   }
-  const { nom: destinataire, autre: nomCarteDifferent } =
-    nomEtiquette(shipping?.name || details.name, nomCarte);
+  // Le nom saisi a la main prime : c'est le seul que le client a explicitement
+  // donne pour l'etiquette. La carte ne sert plus alors qu'a repérer un cadeau.
+  const { nom: destinataire, autre: nomCarteDifferent } = nomSaisi
+    ? { nom: nomSaisi, autre: (nomCarte && !memeNom(nomSaisi, nomCarte)) ? nomCarte : '' }
+    : nomEtiquette(shipping?.name || details.name, nomCarte);
   console.log(`  -> etiquette: "${destinataire}"` +
     (nomCarteDifferent ? ` | carte au nom de "${nomCarteDifferent}"` : ''));
 

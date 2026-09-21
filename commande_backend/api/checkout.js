@@ -186,9 +186,27 @@ export default async function handler(req, res) {
           metadata,
         },
       },
-      // Cadeau : message facultatif, recopie a la main sur la carte signee.
-      // Lu par le webhook (session.custom_fields) et transmis au vendeur.
+      // Stripe ne collecte qu'UN champ « nom complet » sur son formulaire de
+      // livraison, et n'impose pas d'y mettre deux mots : beaucoup de clients
+      // n'y tapaient qu'un prenom, et l'etiquette partait incomplete. Deux
+      // champs separes et obligatoires sont le seul moyen d'exiger les deux.
+      // Le libelle dit « pour l'etiquette » pour que le client comprenne
+      // pourquoi on lui redemande son nom apres l'adresse.
+      // ATTENTION : Stripe plafonne custom_fields a 3 entrees. Les trois sont
+      // prises — ajouter un champ oblige a en retirer un.
       custom_fields: [{
+        key: 'destinataire_prenom',
+        label: { type: 'custom', custom: 'Prénom (pour l\'étiquette du colis)' },
+        type: 'text',
+        text: { minimum_length: 2, maximum_length: 50 },
+      }, {
+        key: 'destinataire_nom',
+        label: { type: 'custom', custom: 'Nom de famille (pour l\'étiquette)' },
+        type: 'text',
+        text: { minimum_length: 2, maximum_length: 50 },
+      }, {
+        // Cadeau : message facultatif, recopie a la main sur la carte signee.
+        // Lu par le webhook (session.custom_fields) et transmis au vendeur.
         key: 'message_carte',
         label: { type: 'custom', custom: 'Message pour la carte (facultatif)' },
         type: 'text',
