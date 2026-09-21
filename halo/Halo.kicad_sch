@@ -1794,8 +1794,7 @@
 			(property "Value" "WS2812B" (at 0 -8.89 0) (effects (font (size 1.27 1.27))))
 			(property "Footprint" "" (at 0 0 0) (effects (font (size 1.27 1.27)) (hide yes)))
 			(property "Datasheet" "~" (at 0 0 0) (effects (font (size 1.27 1.27)) (hide yes)))
-			(property "Description" "LED RGB adressable 2 x 2 Worldsemi, 4 broches : 1 DO, 2 GND, 3 DI, 4 VDD.
-    WS2812C-2020-V1 (le WS2812B-2020 est arrete) : meme boitier, meme brochage" (at 0 0 0) (effects (font (size 1.27 1.27)) (hide yes)))
+			(property "Description" "LED RGB adressable 2 x 2 Worldsemi, 4 broches : 1 DO, 2 GND, 3 DI, 4 VDD. WS2812C-2020-V1 (le WS2812B-2020 est arrete) : meme boitier, meme brochage" (at 0 0 0) (effects (font (size 1.27 1.27)) (hide yes)))
 			(symbol "WS2812B_0_1" (rectangle (start -5.08 5.08) (end 5.08 -5.08) (stroke (width 0.254) (type default)) (fill (type background))))
 			(symbol "WS2812B_1_1"
 				(pin output line (at 7.62 0 180) (length 2.54) (name "DO" (effects (font (size 1.27 1.27)))) (number "1" (effects (font (size 1.27 1.27)))))
@@ -1847,6 +1846,70 @@
 				(pin passive line (at 0 -3.81 90) (length 2.54) (name "" (effects (font (size 1.27 1.27)))) (number "2" (effects (font (size 1.27 1.27)))))
 			)
 		)
+		(symbol "Halo:CH224A" (pin_names (offset 1.016)) (exclude_from_sim no) (in_bom yes) (on_board yes)
+			(property "Reference" "U" (at 0 19.05 0) (effects (font (size 1.27 1.27))))
+			(property "Value" "CH224A" (at 0 -19.05 0) (effects (font (size 1.27 1.27))))
+			(property "Footprint" "" (at 0 0 0) (effects (font (size 1.27 1.27)) (hide yes)))
+			(property "Datasheet" "~" (at 0 0 0) (effects (font (size 1.27 1.27)) (hide yes)))
+			(property "Description" "Recepteur USB PD : demande 9 V au chargeur par CC1/CC2 (Rset 6.8k sur CFG1), ESSOP-10 a pad thermique" (at 0 0 0) (effects (font (size 1.27 1.27)) (hide yes)))
+			(symbol "CH224A_0_1" (rectangle (start -12.7 15.24) (end 12.7 -15.24) (stroke (width 0.254) (type default)) (fill (type background))))
+			(symbol "CH224A_1_1"
+				(pin power_in line (at 0 -17.78 90) (length 2.54) (name "GND" (effects (font (size 1.27 1.27)))) (number "0" (effects (font (size 1.27 1.27)))))
+				(pin power_in line (at 0 17.78 270) (length 2.54) (name "VHV" (effects (font (size 1.27 1.27)))) (number "1" (effects (font (size 1.27 1.27)))))
+				(pin input line (at -15.24 10.16 0) (length 2.54) (name "CFG2/SCL" (effects (font (size 1.27 1.27)))) (number "2" (effects (font (size 1.27 1.27)))))
+				(pin input line (at -15.24 5.08 0) (length 2.54) (name "CFG3/SDA" (effects (font (size 1.27 1.27)))) (number "3" (effects (font (size 1.27 1.27)))))
+				(pin bidirectional line (at -15.24 0 0) (length 2.54) (name "DP" (effects (font (size 1.27 1.27)))) (number "4" (effects (font (size 1.27 1.27)))))
+				(pin bidirectional line (at -15.24 -5.08 0) (length 2.54) (name "DM" (effects (font (size 1.27 1.27)))) (number "5" (effects (font (size 1.27 1.27)))))
+				(pin bidirectional line (at 15.24 -5.08 180) (length 2.54) (name "CC2" (effects (font (size 1.27 1.27)))) (number "6" (effects (font (size 1.27 1.27)))))
+				(pin bidirectional line (at 15.24 0 180) (length 2.54) (name "CC1" (effects (font (size 1.27 1.27)))) (number "7" (effects (font (size 1.27 1.27)))))
+				(pin input line (at 15.24 10.16 180) (length 2.54) (name "VBUS" (effects (font (size 1.27 1.27)))) (number "8" (effects (font (size 1.27 1.27)))))
+				(pin input line (at -15.24 -10.16 0) (length 2.54) (name "CFG1" (effects (font (size 1.27 1.27)))) (number "9" (effects (font (size 1.27 1.27)))))
+				(pin open_collector line (at 15.24 5.08 180) (length 2.54) (name "~{PG}" (effects (font (size 1.27 1.27)))) (number "10" (effects (font (size 1.27 1.27)))))
+			)
+		)
+		(symbol "Halo:MT2492" (pin_names (offset 1.016)) (exclude_from_sim no) (in_bom yes) (on_board yes)
+			(property "Reference" "U" (at 0 13.97 0) (effects (font (size 1.27 1.27))))
+			(property "Value" "MT2492" (at 0 -13.97 0) (effects (font (size 1.27 1.27))))
+			(property "Footprint" "" (at 0 0 0) (effects (font (size 1.27 1.27)) (hide yes)))
+			(property "Datasheet" "~" (at 0 0 0) (effects (font (size 1.27 1.27)) (hide yes)))
+			(property "Description" "Buck synchrone 2 A, 4.5 a 16 V, 600 kHz, reference 0.6 V, SOT-23-6" (at 0 0 0) (effects (font (size 1.27 1.27)) (hide yes)))
+			(symbol "MT2492_0_1" (rectangle (start -10.16 10.16) (end 10.16 -10.16) (stroke (width 0.254) (type default)) (fill (type background))))
+			(symbol "MT2492_1_1"
+				(pin passive line (at 12.7 5.08 180) (length 2.54) (name "BS" (effects (font (size 1.27 1.27)))) (number "1" (effects (font (size 1.27 1.27)))))
+				(pin power_in line (at 0 -12.7 90) (length 2.54) (name "GND" (effects (font (size 1.27 1.27)))) (number "2" (effects (font (size 1.27 1.27)))))
+				(pin input line (at -12.7 -5.08 0) (length 2.54) (name "FB" (effects (font (size 1.27 1.27)))) (number "3" (effects (font (size 1.27 1.27)))))
+				(pin input line (at -12.7 0 0) (length 2.54) (name "EN" (effects (font (size 1.27 1.27)))) (number "4" (effects (font (size 1.27 1.27)))))
+				(pin power_in line (at -12.7 5.08 0) (length 2.54) (name "IN" (effects (font (size 1.27 1.27)))) (number "5" (effects (font (size 1.27 1.27)))))
+				(pin output line (at 12.7 -5.08 180) (length 2.54) (name "SW" (effects (font (size 1.27 1.27)))) (number "6" (effects (font (size 1.27 1.27)))))
+			)
+		)
+		(symbol "Halo:AP2112K" (pin_names (offset 1.016)) (exclude_from_sim no) (in_bom yes) (on_board yes)
+			(property "Reference" "U" (at 0 8.89 0) (effects (font (size 1.27 1.27))))
+			(property "Value" "AP2112K-3.3" (at 0 -8.89 0) (effects (font (size 1.27 1.27))))
+			(property "Footprint" "" (at 0 0 0) (effects (font (size 1.27 1.27)) (hide yes)))
+			(property "Datasheet" "~" (at 0 0 0) (effects (font (size 1.27 1.27)) (hide yes)))
+			(property "Description" "LDO 3.3 V 600 mA a faible chute (250 mV), SOT-23-5 : tient le 3V3 quand le buck ne sort que 4.6 V" (at 0 0 0) (effects (font (size 1.27 1.27)) (hide yes)))
+			(symbol "AP2112K_0_1" (rectangle (start -7.62 5.08) (end 7.62 -5.08) (stroke (width 0.254) (type default)) (fill (type background))))
+			(symbol "AP2112K_1_1"
+				(pin power_in line (at -10.16 2.54 0) (length 2.54) (name "VIN" (effects (font (size 1.27 1.27)))) (number "1" (effects (font (size 1.27 1.27)))))
+				(pin power_in line (at 0 -7.62 90) (length 2.54) (name "GND" (effects (font (size 1.27 1.27)))) (number "2" (effects (font (size 1.27 1.27)))))
+				(pin input line (at -10.16 -2.54 0) (length 2.54) (name "EN" (effects (font (size 1.27 1.27)))) (number "3" (effects (font (size 1.27 1.27)))))
+				(pin no_connect line (at 10.16 -2.54 180) (length 2.54) (name "NC" (effects (font (size 1.27 1.27)))) (number "4" (effects (font (size 1.27 1.27)))))
+				(pin power_out line (at 10.16 2.54 180) (length 2.54) (name "VOUT" (effects (font (size 1.27 1.27)))) (number "5" (effects (font (size 1.27 1.27)))))
+			)
+		)
+		(symbol "Halo:L" (pin_names (offset 1.016)) (exclude_from_sim no) (in_bom yes) (on_board yes)
+			(property "Reference" "L" (at 0 6.35 0) (effects (font (size 1.27 1.27))))
+			(property "Value" "L" (at 0 -6.35 0) (effects (font (size 1.27 1.27))))
+			(property "Footprint" "" (at 0 0 0) (effects (font (size 1.27 1.27)) (hide yes)))
+			(property "Datasheet" "~" (at 0 0 0) (effects (font (size 1.27 1.27)) (hide yes)))
+			(property "Description" "Self de puissance" (at 0 0 0) (effects (font (size 1.27 1.27)) (hide yes)))
+			(symbol "L_0_1" (rectangle (start -1.016 2.54) (end 1.016 -2.54) (stroke (width 0.254) (type default)) (fill (type background))))
+			(symbol "L_1_1"
+				(pin passive line (at 0 3.81 270) (length 2.54) (name "" (effects (font (size 1.27 1.27)))) (number "1" (effects (font (size 1.27 1.27)))))
+				(pin passive line (at 0 -3.81 90) (length 2.54) (name "" (effects (font (size 1.27 1.27)))) (number "2" (effects (font (size 1.27 1.27)))))
+			)
+		)
 		(symbol "Halo:Q_Photo_NPN" (pin_names (offset 1.016)) (exclude_from_sim no) (in_bom yes) (on_board yes)
 			(property "Reference" "Q" (at 0 7.62 0) (effects (font (size 1.27 1.27))))
 			(property "Value" "Q_Photo_NPN" (at 0 -7.62 0) (effects (font (size 1.27 1.27))))
@@ -1891,6 +1954,30 @@
 	(no_connect
 		(at 53.34 81.28)
 		(uuid "df2611e2-5e5f-5e06-888e-9e444fb21e46")
+	)
+	(no_connect
+		(at 200.66 68.58)
+		(uuid "be2b2328-6e8b-572b-98be-fd96232e4cdb")
+	)
+	(no_connect
+		(at 73.66 96.52)
+		(uuid "85677b36-7591-5758-9abc-7143d731af05")
+	)
+	(no_connect
+		(at 73.66 101.6)
+		(uuid "d480a1bf-3520-5263-8212-58bde90077d3")
+	)
+	(no_connect
+		(at 73.66 106.68)
+		(uuid "449c1adf-1c7b-5d9b-914c-24a3d200f469")
+	)
+	(no_connect
+		(at 73.66 111.76)
+		(uuid "7981e8a3-90a3-5d0b-b637-45874c834641")
+	)
+	(no_connect
+		(at 104.14 101.6)
+		(uuid "56455f57-5686-53df-8e32-6b024ba1cf65")
 	)
 	(no_connect
 		(at 48.26 157.48)
@@ -2028,11 +2115,11 @@
 			(at 76.2 33.72 0)
 			(effects (font (size 1.27 1.27)))
 		)
-		(property "Value" "1.1A 6V"
+		(property "Value" "2.5A 16V"
 			(at 76.2 57.72 0)
 			(effects (font (size 1.27 1.27)))
 		)
-		(property "Footprint" "Fuse:Fuse_1206_3216Metric"
+		(property "Footprint" "Fuse:Fuse_1812_4532Metric"
 			(at 76.2 45.72 0)
 			(effects (font (size 1.27 1.27)) (hide yes))
 		)
@@ -2054,96 +2141,6 @@
 			(project "Halo"
 				(path "/5c1ea366-10f2-55bd-b5fc-457e28fdddd0"
 					(reference "F1")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
-		(lib_id "Device:R")
-		(at 88.9 66.04 0)
-		(unit 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(dnp no)
-		(fields_autoplaced yes)
-		(uuid "82da46d4-524d-5aec-8848-2e565e29127a")
-		(property "Reference" "R5"
-			(at 88.9 54.04 0)
-			(effects (font (size 1.27 1.27)))
-		)
-		(property "Value" "5.1k"
-			(at 88.9 78.04 0)
-			(effects (font (size 1.27 1.27)))
-		)
-		(property "Footprint" "Resistor_SMD:R_0805_2012Metric"
-			(at 88.9 66.04 0)
-			(effects (font (size 1.27 1.27)) (hide yes))
-		)
-		(property "Datasheet" "~"
-			(at 88.9 66.04 0)
-			(effects (font (size 1.27 1.27)) (hide yes))
-		)
-		(property "Description" ""
-			(at 88.9 66.04 0)
-			(effects (font (size 1.27 1.27)) (hide yes))
-		)
-		(pin "1"
-			(uuid "d31572ad-75c8-5420-8c86-0977fa0fc607")
-		)
-		(pin "2"
-			(uuid "ed70ccdc-0ff9-5b5f-ae24-9c0e0a1f04be")
-		)
-		(instances
-			(project "Halo"
-				(path "/5c1ea366-10f2-55bd-b5fc-457e28fdddd0"
-					(reference "R5")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
-		(lib_id "Device:R")
-		(at 99.06 66.04 0)
-		(unit 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(dnp no)
-		(fields_autoplaced yes)
-		(uuid "64cf58ba-2cb0-57d5-986a-ff2c898ac047")
-		(property "Reference" "R6"
-			(at 99.06 54.04 0)
-			(effects (font (size 1.27 1.27)))
-		)
-		(property "Value" "5.1k"
-			(at 99.06 78.04 0)
-			(effects (font (size 1.27 1.27)))
-		)
-		(property "Footprint" "Resistor_SMD:R_0805_2012Metric"
-			(at 99.06 66.04 0)
-			(effects (font (size 1.27 1.27)) (hide yes))
-		)
-		(property "Datasheet" "~"
-			(at 99.06 66.04 0)
-			(effects (font (size 1.27 1.27)) (hide yes))
-		)
-		(property "Description" ""
-			(at 99.06 66.04 0)
-			(effects (font (size 1.27 1.27)) (hide yes))
-		)
-		(pin "1"
-			(uuid "0bd46fc6-06fe-5ccb-9c52-1c28773f93e2")
-		)
-		(pin "2"
-			(uuid "6bac2d93-1e36-58b5-bfc5-db1f1a33b657")
-		)
-		(instances
-			(project "Halo"
-				(path "/5c1ea366-10f2-55bd-b5fc-457e28fdddd0"
-					(reference "R6")
 					(unit 1)
 				)
 			)
@@ -2252,7 +2249,7 @@
 		)
 	)
 	(symbol
-		(lib_id "Halo:AMS1117-3.3")
+		(lib_id "Halo:AP2112K")
 		(at 190.5 66.04 0)
 		(unit 1)
 		(exclude_from_sim no)
@@ -2265,11 +2262,11 @@
 			(at 190.5 54.04 0)
 			(effects (font (size 1.27 1.27)))
 		)
-		(property "Value" "AMS1117-3.3"
+		(property "Value" "AP2112K-3.3"
 			(at 190.5 78.04 0)
 			(effects (font (size 1.27 1.27)))
 		)
-		(property "Footprint" "Package_TO_SOT_SMD:SOT-223-3_TabPin2"
+		(property "Footprint" "Package_TO_SOT_SMD:SOT-23-5"
 			(at 190.5 66.04 0)
 			(effects (font (size 1.27 1.27)) (hide yes))
 		)
@@ -2290,10 +2287,595 @@
 		(pin "3"
 			(uuid "eb191772-9968-594f-9973-2636def46d77")
 		)
+		(pin "4"
+			(uuid "49267b00-9809-5a39-81b0-6f85284c2506")
+		)
+		(pin "5"
+			(uuid "a40e22c9-274a-590b-a496-dcd67d5ed15c")
+		)
 		(instances
 			(project "Halo"
 				(path "/5c1ea366-10f2-55bd-b5fc-457e28fdddd0"
 					(reference "U2")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Halo:CH224A")
+		(at 88.9 106.68 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "9450d11e-9b9b-55bd-93d4-341b7a147946")
+		(property "Reference" "U4"
+			(at 88.9 94.68 0)
+			(effects (font (size 1.27 1.27)))
+		)
+		(property "Value" "CH224A"
+			(at 88.9 118.68 0)
+			(effects (font (size 1.27 1.27)))
+		)
+		(property "Footprint" "Package_SO:SSOP-10_3.9x4.9mm_P1.00mm"
+			(at 88.9 106.68 0)
+			(effects (font (size 1.27 1.27)) (hide yes))
+		)
+		(property "Datasheet" "~"
+			(at 88.9 106.68 0)
+			(effects (font (size 1.27 1.27)) (hide yes))
+		)
+		(property "Description" ""
+			(at 88.9 106.68 0)
+			(effects (font (size 1.27 1.27)) (hide yes))
+		)
+		(pin "0"
+			(uuid "9d599268-94a8-5bfb-84ee-5605d7ebf59f")
+		)
+		(pin "1"
+			(uuid "9b872f7f-845b-525f-be06-34a719bf4c65")
+		)
+		(pin "2"
+			(uuid "cdd6237f-8cd5-5099-842d-d1138a29ee76")
+		)
+		(pin "3"
+			(uuid "452de8e2-2185-5185-9403-3d682059d9e9")
+		)
+		(pin "4"
+			(uuid "07bea06d-ea2b-5ca8-8716-d9ca25cf7c7c")
+		)
+		(pin "5"
+			(uuid "fe444e08-82a7-53d5-a14d-7dd840db52af")
+		)
+		(pin "6"
+			(uuid "f39ac459-53f8-5587-9a42-d38a92f54b85")
+		)
+		(pin "7"
+			(uuid "6f0a21b6-0438-59ad-a7f0-bcdbd3bca926")
+		)
+		(pin "8"
+			(uuid "7e40f544-0313-5266-8d4b-29f9e1be0335")
+		)
+		(pin "9"
+			(uuid "60497b1f-e5f6-5158-9cc9-d284ec389f00")
+		)
+		(pin "10"
+			(uuid "1bd77bf7-62a6-5ecb-9d88-7fa42ac30873")
+		)
+		(instances
+			(project "Halo"
+				(path "/5c1ea366-10f2-55bd-b5fc-457e28fdddd0"
+					(reference "U4")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Device:C")
+		(at 63.5 106.68 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "b8f63a06-b563-5dde-86b3-51b644563461")
+		(property "Reference" "C34"
+			(at 63.5 94.68 0)
+			(effects (font (size 1.27 1.27)))
+		)
+		(property "Value" "1uF"
+			(at 63.5 118.68 0)
+			(effects (font (size 1.27 1.27)))
+		)
+		(property "Footprint" "Capacitor_SMD:C_0805_2012Metric"
+			(at 63.5 106.68 0)
+			(effects (font (size 1.27 1.27)) (hide yes))
+		)
+		(property "Datasheet" "~"
+			(at 63.5 106.68 0)
+			(effects (font (size 1.27 1.27)) (hide yes))
+		)
+		(property "Description" ""
+			(at 63.5 106.68 0)
+			(effects (font (size 1.27 1.27)) (hide yes))
+		)
+		(pin "1"
+			(uuid "13f6f4e9-6f5c-553c-b303-f75795adbe4d")
+		)
+		(pin "2"
+			(uuid "14d907a4-21cf-5d8c-9303-97330c630819")
+		)
+		(instances
+			(project "Halo"
+				(path "/5c1ea366-10f2-55bd-b5fc-457e28fdddd0"
+					(reference "C34")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Device:R")
+		(at 116.84 106.68 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "bac235e0-1f43-58d4-b9b7-cf161e36e2ff")
+		(property "Reference" "R9"
+			(at 116.84 94.68 0)
+			(effects (font (size 1.27 1.27)))
+		)
+		(property "Value" "6.8k"
+			(at 116.84 118.68 0)
+			(effects (font (size 1.27 1.27)))
+		)
+		(property "Footprint" "Resistor_SMD:R_0805_2012Metric"
+			(at 116.84 106.68 0)
+			(effects (font (size 1.27 1.27)) (hide yes))
+		)
+		(property "Datasheet" "~"
+			(at 116.84 106.68 0)
+			(effects (font (size 1.27 1.27)) (hide yes))
+		)
+		(property "Description" ""
+			(at 116.84 106.68 0)
+			(effects (font (size 1.27 1.27)) (hide yes))
+		)
+		(pin "1"
+			(uuid "298594d1-ca6d-57bd-89d1-dd8f56ef62d5")
+		)
+		(pin "2"
+			(uuid "f06996ec-ae72-52dd-b3bd-70e5ef649ea3")
+		)
+		(instances
+			(project "Halo"
+				(path "/5c1ea366-10f2-55bd-b5fc-457e28fdddd0"
+					(reference "R9")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Halo:MT2492")
+		(at 162.56 106.68 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "4b3341c2-9dcd-5849-9bf9-b2a2090305fa")
+		(property "Reference" "U5"
+			(at 162.56 94.68 0)
+			(effects (font (size 1.27 1.27)))
+		)
+		(property "Value" "MT2492"
+			(at 162.56 118.68 0)
+			(effects (font (size 1.27 1.27)))
+		)
+		(property "Footprint" "Package_TO_SOT_SMD:SOT-23-6"
+			(at 162.56 106.68 0)
+			(effects (font (size 1.27 1.27)) (hide yes))
+		)
+		(property "Datasheet" "~"
+			(at 162.56 106.68 0)
+			(effects (font (size 1.27 1.27)) (hide yes))
+		)
+		(property "Description" ""
+			(at 162.56 106.68 0)
+			(effects (font (size 1.27 1.27)) (hide yes))
+		)
+		(pin "1"
+			(uuid "6dde559b-07fc-5041-a832-0bc6eb52644b")
+		)
+		(pin "2"
+			(uuid "9479f784-b47e-5266-aa88-cb9f232bf60c")
+		)
+		(pin "3"
+			(uuid "4b3c5694-5518-59be-8874-a84f81b60d16")
+		)
+		(pin "4"
+			(uuid "1f560202-fbbd-53a9-bc84-11ae7961bad9")
+		)
+		(pin "5"
+			(uuid "a6c7992b-12f0-5e69-90bc-ace5a27db18e")
+		)
+		(pin "6"
+			(uuid "8fd5746e-8a22-5b14-bca3-15baab157156")
+		)
+		(instances
+			(project "Halo"
+				(path "/5c1ea366-10f2-55bd-b5fc-457e28fdddd0"
+					(reference "U5")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Device:C")
+		(at 137.16 106.68 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "c545ca20-66bb-5dba-86e5-d639efa084bb")
+		(property "Reference" "C36"
+			(at 137.16 94.68 0)
+			(effects (font (size 1.27 1.27)))
+		)
+		(property "Value" "10uF"
+			(at 137.16 118.68 0)
+			(effects (font (size 1.27 1.27)))
+		)
+		(property "Footprint" "Capacitor_SMD:C_0805_2012Metric"
+			(at 137.16 106.68 0)
+			(effects (font (size 1.27 1.27)) (hide yes))
+		)
+		(property "Datasheet" "~"
+			(at 137.16 106.68 0)
+			(effects (font (size 1.27 1.27)) (hide yes))
+		)
+		(property "Description" ""
+			(at 137.16 106.68 0)
+			(effects (font (size 1.27 1.27)) (hide yes))
+		)
+		(pin "1"
+			(uuid "29211f53-0fbd-5f1e-994a-f5ecb0c9fe82")
+		)
+		(pin "2"
+			(uuid "52ebd210-80d9-5d0e-b036-f58b6ba71cea")
+		)
+		(instances
+			(project "Halo"
+				(path "/5c1ea366-10f2-55bd-b5fc-457e28fdddd0"
+					(reference "C36")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Device:C")
+		(at 187.96 96.52 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "3200438f-1e98-5af2-b0f4-c9123146d95a")
+		(property "Reference" "C35"
+			(at 187.96 84.52 0)
+			(effects (font (size 1.27 1.27)))
+		)
+		(property "Value" "100nF"
+			(at 187.96 108.52 0)
+			(effects (font (size 1.27 1.27)))
+		)
+		(property "Footprint" "Capacitor_SMD:C_0805_2012Metric"
+			(at 187.96 96.52 0)
+			(effects (font (size 1.27 1.27)) (hide yes))
+		)
+		(property "Datasheet" "~"
+			(at 187.96 96.52 0)
+			(effects (font (size 1.27 1.27)) (hide yes))
+		)
+		(property "Description" ""
+			(at 187.96 96.52 0)
+			(effects (font (size 1.27 1.27)) (hide yes))
+		)
+		(pin "1"
+			(uuid "b1167561-136b-5516-86d1-29eb1b04e12b")
+		)
+		(pin "2"
+			(uuid "07d6986d-6ec2-5863-8a5c-aed793181848")
+		)
+		(instances
+			(project "Halo"
+				(path "/5c1ea366-10f2-55bd-b5fc-457e28fdddd0"
+					(reference "C35")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Halo:L")
+		(at 200.66 106.68 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "98bde55e-8438-5eeb-a8cf-0e2c67811ec2")
+		(property "Reference" "L1"
+			(at 200.66 94.68 0)
+			(effects (font (size 1.27 1.27)))
+		)
+		(property "Value" "4.7uH"
+			(at 200.66 118.68 0)
+			(effects (font (size 1.27 1.27)))
+		)
+		(property "Footprint" "Inductor_SMD:L_Taiyo-Yuden_NR-50xx"
+			(at 200.66 106.68 0)
+			(effects (font (size 1.27 1.27)) (hide yes))
+		)
+		(property "Datasheet" "~"
+			(at 200.66 106.68 0)
+			(effects (font (size 1.27 1.27)) (hide yes))
+		)
+		(property "Description" ""
+			(at 200.66 106.68 0)
+			(effects (font (size 1.27 1.27)) (hide yes))
+		)
+		(pin "1"
+			(uuid "6fb9ad3e-63be-512e-ba29-54b8ac8b6860")
+		)
+		(pin "2"
+			(uuid "b3d4ed4f-5b78-5c73-ae35-a2e3840db867")
+		)
+		(instances
+			(project "Halo"
+				(path "/5c1ea366-10f2-55bd-b5fc-457e28fdddd0"
+					(reference "L1")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Device:R")
+		(at 213.36 106.68 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "ab177933-3148-5232-b884-1629c36b997d")
+		(property "Reference" "R10"
+			(at 213.36 94.68 0)
+			(effects (font (size 1.27 1.27)))
+		)
+		(property "Value" "100k"
+			(at 213.36 118.68 0)
+			(effects (font (size 1.27 1.27)))
+		)
+		(property "Footprint" "Resistor_SMD:R_0805_2012Metric"
+			(at 213.36 106.68 0)
+			(effects (font (size 1.27 1.27)) (hide yes))
+		)
+		(property "Datasheet" "~"
+			(at 213.36 106.68 0)
+			(effects (font (size 1.27 1.27)) (hide yes))
+		)
+		(property "Description" ""
+			(at 213.36 106.68 0)
+			(effects (font (size 1.27 1.27)) (hide yes))
+		)
+		(pin "1"
+			(uuid "c16db40c-a88a-527a-924d-048f142701a6")
+		)
+		(pin "2"
+			(uuid "3b794f00-8761-5985-a1c5-3f14801fa84e")
+		)
+		(instances
+			(project "Halo"
+				(path "/5c1ea366-10f2-55bd-b5fc-457e28fdddd0"
+					(reference "R10")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Device:R")
+		(at 223.52 106.68 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "df102a9d-2bb0-5555-96c1-2d79af8d4d3b")
+		(property "Reference" "R11"
+			(at 223.52 94.68 0)
+			(effects (font (size 1.27 1.27)))
+		)
+		(property "Value" "13.7k"
+			(at 223.52 118.68 0)
+			(effects (font (size 1.27 1.27)))
+		)
+		(property "Footprint" "Resistor_SMD:R_0805_2012Metric"
+			(at 223.52 106.68 0)
+			(effects (font (size 1.27 1.27)) (hide yes))
+		)
+		(property "Datasheet" "~"
+			(at 223.52 106.68 0)
+			(effects (font (size 1.27 1.27)) (hide yes))
+		)
+		(property "Description" ""
+			(at 223.52 106.68 0)
+			(effects (font (size 1.27 1.27)) (hide yes))
+		)
+		(pin "1"
+			(uuid "1c9c4c67-3ede-5f2d-ba7b-b759ad929f0e")
+		)
+		(pin "2"
+			(uuid "04ca261c-ed7e-5dda-86e8-62f9ec14fdc6")
+		)
+		(instances
+			(project "Halo"
+				(path "/5c1ea366-10f2-55bd-b5fc-457e28fdddd0"
+					(reference "R11")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Device:R")
+		(at 137.16 91.44 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "cbd644dd-797a-5b6d-909b-a7ce2aed0b4a")
+		(property "Reference" "R12"
+			(at 137.16 79.44 0)
+			(effects (font (size 1.27 1.27)))
+		)
+		(property "Value" "100k"
+			(at 137.16 103.44 0)
+			(effects (font (size 1.27 1.27)))
+		)
+		(property "Footprint" "Resistor_SMD:R_0805_2012Metric"
+			(at 137.16 91.44 0)
+			(effects (font (size 1.27 1.27)) (hide yes))
+		)
+		(property "Datasheet" "~"
+			(at 137.16 91.44 0)
+			(effects (font (size 1.27 1.27)) (hide yes))
+		)
+		(property "Description" ""
+			(at 137.16 91.44 0)
+			(effects (font (size 1.27 1.27)) (hide yes))
+		)
+		(pin "1"
+			(uuid "2318df67-67e0-5c1d-b9a1-033a04992bd8")
+		)
+		(pin "2"
+			(uuid "911e2192-84de-53f0-8122-2d1833092603")
+		)
+		(instances
+			(project "Halo"
+				(path "/5c1ea366-10f2-55bd-b5fc-457e28fdddd0"
+					(reference "R12")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Device:R")
+		(at 147.32 91.44 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "614c4ae1-2487-5f09-a2f1-f9d27201aaf3")
+		(property "Reference" "R13"
+			(at 147.32 79.44 0)
+			(effects (font (size 1.27 1.27)))
+		)
+		(property "Value" "100k"
+			(at 147.32 103.44 0)
+			(effects (font (size 1.27 1.27)))
+		)
+		(property "Footprint" "Resistor_SMD:R_0805_2012Metric"
+			(at 147.32 91.44 0)
+			(effects (font (size 1.27 1.27)) (hide yes))
+		)
+		(property "Datasheet" "~"
+			(at 147.32 91.44 0)
+			(effects (font (size 1.27 1.27)) (hide yes))
+		)
+		(property "Description" ""
+			(at 147.32 91.44 0)
+			(effects (font (size 1.27 1.27)) (hide yes))
+		)
+		(pin "1"
+			(uuid "00a0ccc1-c381-5de1-80d4-51a57059ae2a")
+		)
+		(pin "2"
+			(uuid "dbb00b8b-5030-5d2c-9ac2-1255c941af0b")
+		)
+		(instances
+			(project "Halo"
+				(path "/5c1ea366-10f2-55bd-b5fc-457e28fdddd0"
+					(reference "R13")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Connector_Generic:Conn_01x02")
+		(at 243.84 106.68 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp yes)
+		(fields_autoplaced yes)
+		(uuid "146d589c-f7f5-5635-b23c-1aec605a01c7")
+		(property "Reference" "J3"
+			(at 243.84 94.68 0)
+			(effects (font (size 1.27 1.27)))
+		)
+		(property "Value" "Module Qi VIN / GND"
+			(at 243.84 118.68 0)
+			(effects (font (size 1.27 1.27)))
+		)
+		(property "Footprint" "Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical"
+			(at 243.84 106.68 0)
+			(effects (font (size 1.27 1.27)) (hide yes))
+		)
+		(property "Datasheet" "~"
+			(at 243.84 106.68 0)
+			(effects (font (size 1.27 1.27)) (hide yes))
+		)
+		(property "Description" ""
+			(at 243.84 106.68 0)
+			(effects (font (size 1.27 1.27)) (hide yes))
+		)
+		(pin "1"
+			(uuid "059feaf7-d0e5-53fd-bb2e-b55a4a2a7b30")
+		)
+		(pin "2"
+			(uuid "2bf00bfb-e539-5642-bbcf-e89b2983c4f7")
+		)
+		(instances
+			(project "Halo"
+				(path "/5c1ea366-10f2-55bd-b5fc-457e28fdddd0"
+					(reference "J3")
 					(unit 1)
 				)
 			)
@@ -2726,6 +3308,48 @@
 			(project "Halo"
 				(path "/5c1ea366-10f2-55bd-b5fc-457e28fdddd0"
 					(reference "#FLG2")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "power:PWR_FLAG")
+		(at 55.88 30.48 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "fe3b4c86-ee4d-55ea-a31d-7a40dec8d8ed")
+		(property "Reference" "#FLG3"
+			(at 55.88 18.48 0)
+			(effects (font (size 1.27 1.27)))
+		)
+		(property "Value" "PWR_FLAG"
+			(at 55.88 42.48 0)
+			(effects (font (size 1.27 1.27)))
+		)
+		(property "Footprint" ""
+			(at 55.88 30.48 0)
+			(effects (font (size 1.27 1.27)) (hide yes))
+		)
+		(property "Datasheet" "~"
+			(at 55.88 30.48 0)
+			(effects (font (size 1.27 1.27)) (hide yes))
+		)
+		(property "Description" ""
+			(at 55.88 30.48 0)
+			(effects (font (size 1.27 1.27)) (hide yes))
+		)
+		(pin "1"
+			(uuid "88547e96-4951-543b-88e1-d0581440e408")
+		)
+		(instances
+			(project "Halo"
+				(path "/5c1ea366-10f2-55bd-b5fc-457e28fdddd0"
+					(reference "#FLG3")
 					(unit 1)
 				)
 			)
@@ -5977,35 +6601,11 @@
 		(effects (font (size 1.27 1.27)) (justify left))
 		(uuid "bb30bf02-ff23-5e17-89fd-098c312d735d")
 	)
-	(global_label "5V"
+	(global_label "VBUS_F"
 		(shape bidirectional)
 		(at 76.2 49.53 270)
 		(effects (font (size 1.27 1.27)) (justify right))
 		(uuid "29eb24a7-c3a4-51a6-871c-0005a3cc1cb6")
-	)
-	(global_label "CC1"
-		(shape bidirectional)
-		(at 88.9 62.23 90)
-		(effects (font (size 1.27 1.27)) (justify left))
-		(uuid "956866ff-5f6c-5a97-aa80-9e446f32b2f8")
-	)
-	(global_label "GND"
-		(shape bidirectional)
-		(at 88.9 69.85 270)
-		(effects (font (size 1.27 1.27)) (justify right))
-		(uuid "e75a98d8-b6ce-53db-b6f0-bdf99e2a60d2")
-	)
-	(global_label "CC2"
-		(shape bidirectional)
-		(at 99.06 62.23 90)
-		(effects (font (size 1.27 1.27)) (justify left))
-		(uuid "c8b1a357-bad2-5c22-befc-b47c92cc453a")
-	)
-	(global_label "GND"
-		(shape bidirectional)
-		(at 99.06 69.85 270)
-		(effects (font (size 1.27 1.27)) (justify right))
-		(uuid "38795bbf-cd87-53c7-923f-30afce4469bf")
 	)
 	(global_label "USB_DP"
 		(shape bidirectional)
@@ -6057,21 +6657,219 @@
 	)
 	(global_label "5V"
 		(shape bidirectional)
-		(at 182.88 66.04 180)
+		(at 180.34 63.5 180)
 		(effects (font (size 1.27 1.27)) (justify right))
-		(uuid "629e5213-72be-521d-8b4f-b56c260e5b74")
-	)
-	(global_label "3V3"
-		(shape bidirectional)
-		(at 198.12 66.04 0)
-		(effects (font (size 1.27 1.27)) (justify left))
-		(uuid "0d30a0e7-c5e1-5818-9632-b2ef58b7b5e2")
+		(uuid "6a6a95d2-502f-5e23-baa2-f32ca81d6cb4")
 	)
 	(global_label "GND"
 		(shape bidirectional)
 		(at 190.5 73.66 270)
 		(effects (font (size 1.27 1.27)) (justify right))
-		(uuid "6a6a95d2-502f-5e23-baa2-f32ca81d6cb4")
+		(uuid "0d30a0e7-c5e1-5818-9632-b2ef58b7b5e2")
+	)
+	(global_label "5V"
+		(shape bidirectional)
+		(at 180.34 68.58 180)
+		(effects (font (size 1.27 1.27)) (justify right))
+		(uuid "629e5213-72be-521d-8b4f-b56c260e5b74")
+	)
+	(global_label "3V3"
+		(shape bidirectional)
+		(at 200.66 63.5 0)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "e0bd4b1e-f365-5bbc-b0c2-e1b2c26a12ad")
+	)
+	(global_label "GND"
+		(shape bidirectional)
+		(at 88.9 124.46 270)
+		(effects (font (size 1.27 1.27)) (justify right))
+		(uuid "83e1a2af-e366-5785-8172-0a9d36227bb8")
+	)
+	(global_label "VBUS_F"
+		(shape bidirectional)
+		(at 88.9 88.9 90)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "b2bea3e4-f364-543f-8799-4793f06c3778")
+	)
+	(global_label "VBUS_F"
+		(shape bidirectional)
+		(at 104.14 96.52 0)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "2a533ef3-9b4b-5a67-812b-e9bcf25ea837")
+	)
+	(global_label "CC1"
+		(shape bidirectional)
+		(at 104.14 106.68 0)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "64a3993c-6390-57de-8f40-6ba49f8d0fff")
+	)
+	(global_label "CC2"
+		(shape bidirectional)
+		(at 104.14 111.76 0)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "568f3547-0d25-5b4a-ae6a-2e91067b77d8")
+	)
+	(global_label "CFG1"
+		(shape bidirectional)
+		(at 73.66 116.84 180)
+		(effects (font (size 1.27 1.27)) (justify right))
+		(uuid "7206d977-a5ee-5039-bd8a-d7de354eddb1")
+	)
+	(global_label "VBUS_F"
+		(shape bidirectional)
+		(at 63.5 102.87 90)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "cd5c4f3e-65b0-500a-ae6a-4bf4e8b8c133")
+	)
+	(global_label "GND"
+		(shape bidirectional)
+		(at 63.5 110.49 270)
+		(effects (font (size 1.27 1.27)) (justify right))
+		(uuid "1a42c42f-b725-5623-988a-4c5579b62d0d")
+	)
+	(global_label "CFG1"
+		(shape bidirectional)
+		(at 116.84 102.87 90)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "3b9e5718-3cb9-53c7-b24a-6b9407b0874f")
+	)
+	(global_label "GND"
+		(shape bidirectional)
+		(at 116.84 110.49 270)
+		(effects (font (size 1.27 1.27)) (justify right))
+		(uuid "be372700-d74f-596d-a9bd-b153f9be4eb9")
+	)
+	(global_label "VBUS_F"
+		(shape bidirectional)
+		(at 149.86 101.6 180)
+		(effects (font (size 1.27 1.27)) (justify right))
+		(uuid "284c5bce-e140-50de-afc2-5c58dfa8a6f6")
+	)
+	(global_label "EN_BUCK"
+		(shape bidirectional)
+		(at 149.86 106.68 180)
+		(effects (font (size 1.27 1.27)) (justify right))
+		(uuid "62e3e1bd-78ff-5ca3-a8e5-5d01e7c0d7c9")
+	)
+	(global_label "BS"
+		(shape bidirectional)
+		(at 175.26 101.6 0)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "f16e91f4-4e29-5a88-9053-0ac2561834b2")
+	)
+	(global_label "SW"
+		(shape bidirectional)
+		(at 175.26 111.76 0)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "af76e76f-b789-5a20-8b02-be5ba73e346c")
+	)
+	(global_label "FB"
+		(shape bidirectional)
+		(at 149.86 111.76 180)
+		(effects (font (size 1.27 1.27)) (justify right))
+		(uuid "9279a06a-21f0-5a54-8685-5ec89baa8b6a")
+	)
+	(global_label "GND"
+		(shape bidirectional)
+		(at 162.56 119.38 270)
+		(effects (font (size 1.27 1.27)) (justify right))
+		(uuid "07b4d4b9-8b66-544b-967e-efd5e735ee44")
+	)
+	(global_label "VBUS_F"
+		(shape bidirectional)
+		(at 137.16 102.87 90)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "4f5f5d40-6946-51a0-9eab-5714cf1cb25f")
+	)
+	(global_label "GND"
+		(shape bidirectional)
+		(at 137.16 110.49 270)
+		(effects (font (size 1.27 1.27)) (justify right))
+		(uuid "5a12e6b3-d31c-520a-b8dd-68d4ffd92f8a")
+	)
+	(global_label "BS"
+		(shape bidirectional)
+		(at 187.96 92.71 90)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "92c9ff6a-59e9-53f3-a955-082a933c339b")
+	)
+	(global_label "SW"
+		(shape bidirectional)
+		(at 187.96 100.33 270)
+		(effects (font (size 1.27 1.27)) (justify right))
+		(uuid "2766c2a2-0f79-56b2-a480-1fb97e086ea5")
+	)
+	(global_label "SW"
+		(shape bidirectional)
+		(at 200.66 102.87 90)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "7f46d848-297a-56b4-8781-b37442e7bcc7")
+	)
+	(global_label "5V"
+		(shape bidirectional)
+		(at 200.66 110.49 270)
+		(effects (font (size 1.27 1.27)) (justify right))
+		(uuid "eb8f3a32-cf04-559c-8f99-e357d9edc83f")
+	)
+	(global_label "5V"
+		(shape bidirectional)
+		(at 213.36 102.87 90)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "9dafadcc-8352-5e50-b8b0-7564b4f06c09")
+	)
+	(global_label "FB"
+		(shape bidirectional)
+		(at 213.36 110.49 270)
+		(effects (font (size 1.27 1.27)) (justify right))
+		(uuid "0cf189ba-7a61-5bcf-a5ab-c3d6e7658f27")
+	)
+	(global_label "FB"
+		(shape bidirectional)
+		(at 223.52 102.87 90)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "45f56bca-b24d-540c-847b-d014577017ae")
+	)
+	(global_label "GND"
+		(shape bidirectional)
+		(at 223.52 110.49 270)
+		(effects (font (size 1.27 1.27)) (justify right))
+		(uuid "514167fa-5c11-541b-98bc-1c142460774b")
+	)
+	(global_label "VBUS_F"
+		(shape bidirectional)
+		(at 137.16 87.63 90)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "48a14010-4cc2-5e77-9094-315cac4b3cb0")
+	)
+	(global_label "EN_BUCK"
+		(shape bidirectional)
+		(at 137.16 95.25 270)
+		(effects (font (size 1.27 1.27)) (justify right))
+		(uuid "4143a2c2-0d6d-5a01-8a64-c7ea7364f27f")
+	)
+	(global_label "EN_BUCK"
+		(shape bidirectional)
+		(at 147.32 87.63 90)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "844a7d26-6cb0-580b-acd5-d106235b29b0")
+	)
+	(global_label "GND"
+		(shape bidirectional)
+		(at 147.32 95.25 270)
+		(effects (font (size 1.27 1.27)) (justify right))
+		(uuid "256dad27-f2b0-5175-94d3-a94bcb1c08d9")
+	)
+	(global_label "VBUS_F"
+		(shape bidirectional)
+		(at 238.76 106.68 180)
+		(effects (font (size 1.27 1.27)) (justify right))
+		(uuid "46ecf113-6142-5728-926a-2b0b3671b04b")
+	)
+	(global_label "GND"
+		(shape bidirectional)
+		(at 238.76 109.22 180)
+		(effects (font (size 1.27 1.27)) (justify right))
+		(uuid "e758f49c-3fcf-500d-9762-04391bdc1475")
 	)
 	(global_label "5V"
 		(shape bidirectional)
@@ -6156,6 +6954,12 @@
 		(at 40.64 30.48 270)
 		(effects (font (size 1.27 1.27)) (justify right))
 		(uuid "a5536cac-f19c-5fe9-8a31-d0a54253bc14")
+	)
+	(global_label "VBUS_F"
+		(shape bidirectional)
+		(at 55.88 30.48 270)
+		(effects (font (size 1.27 1.27)) (justify right))
+		(uuid "33f65ddd-aeea-5c2e-9497-ce83171abc83")
 	)
 	(global_label "3V3"
 		(shape bidirectional)

@@ -120,7 +120,7 @@ lib_symbols["Halo:ESP32-C3-MINI-1"] = compact_symbol(
 
 lib_symbols["Halo:WS2812B"] = compact_symbol(
     "Halo:WS2812B", "LED", "WS2812B",
-    "LED RGB adressable 2 x 2 Worldsemi, 4 broches : 1 DO, 2 GND, 3 DI, 4 VDD.\n    WS2812C-2020-V1 (le WS2812B-2020 est arrete) : meme boitier, meme brochage",
+    "LED RGB adressable 2 x 2 Worldsemi, 4 broches : 1 DO, 2 GND, 3 DI, 4 VDD. WS2812C-2020-V1 (le WS2812B-2020 est arrete) : meme boitier, meme brochage",
     5.08, 5.08, [
         pin("output", 7.62, 0, 180, "DO", "1"),
         pin("power_in", 0, -7.62, 90, "GND", "2"),
@@ -159,6 +159,55 @@ lib_symbols["Halo:Polyfuse"] = compact_symbol(
         pin("passive", 0, -3.81, 90, "", "2"),
     ],
     extra_gfx=' (polyline (pts (xy -1.016 -2.54) (xy 1.016 2.54)) (stroke (width 0) (type default)) (fill (type none)))')
+
+# ---- v2 : negociation 9 V, buck 5 V, LDO 3V3, self (datasheets WCH CH224 V2.0, Aerosemi MT2492, Diodes AP2112K)
+lib_symbols["Halo:CH224A"] = compact_symbol(
+    "Halo:CH224A", "U", "CH224A",
+    "Recepteur USB PD : demande 9 V au chargeur par CC1/CC2 (Rset 6.8k sur CFG1), ESSOP-10 a pad thermique",
+    12.7, 15.24, [
+        pin("power_in", 0, -17.78, 90, "GND", "0"),
+        pin("power_in", 0, 17.78, 270, "VHV", "1"),
+        pin("input", -15.24, 10.16, 0, "CFG2/SCL", "2"),
+        pin("input", -15.24, 5.08, 0, "CFG3/SDA", "3"),
+        pin("bidirectional", -15.24, 0, 0, "DP", "4"),
+        pin("bidirectional", -15.24, -5.08, 0, "DM", "5"),
+        pin("bidirectional", 15.24, -5.08, 180, "CC2", "6"),
+        pin("bidirectional", 15.24, 0, 180, "CC1", "7"),
+        pin("input", 15.24, 10.16, 180, "VBUS", "8"),
+        pin("input", -15.24, -10.16, 0, "CFG1", "9"),
+        pin("open_collector", 15.24, 5.08, 180, "~{PG}", "10"),
+    ])
+
+lib_symbols["Halo:MT2492"] = compact_symbol(
+    "Halo:MT2492", "U", "MT2492",
+    "Buck synchrone 2 A, 4.5 a 16 V, 600 kHz, reference 0.6 V, SOT-23-6",
+    10.16, 10.16, [
+        pin("passive", 12.7, 5.08, 180, "BS", "1"),
+        pin("power_in", 0, -12.7, 90, "GND", "2"),
+        pin("input", -12.7, -5.08, 0, "FB", "3"),
+        pin("input", -12.7, 0, 0, "EN", "4"),
+        pin("power_in", -12.7, 5.08, 0, "IN", "5"),
+        pin("output", 12.7, -5.08, 180, "SW", "6"),
+    ])
+
+lib_symbols["Halo:AP2112K"] = compact_symbol(
+    "Halo:AP2112K", "U", "AP2112K-3.3",
+    "LDO 3.3 V 600 mA a faible chute (250 mV), SOT-23-5 : tient le 3V3 quand le buck ne sort que 4.6 V",
+    7.62, 5.08, [
+        pin("power_in", -10.16, 2.54, 0, "VIN", "1"),
+        pin("power_in", 0, -7.62, 90, "GND", "2"),
+        pin("input", -10.16, -2.54, 0, "EN", "3"),
+        pin("no_connect", 10.16, -2.54, 180, "NC", "4"),
+        pin("power_out", 10.16, 2.54, 180, "VOUT", "5"),
+    ])
+
+lib_symbols["Halo:L"] = compact_symbol(
+    "Halo:L", "L", "L",
+    "Self de puissance",
+    1.016, 2.54, [
+        pin("passive", 0, 3.81, 270, "", "1"),
+        pin("passive", 0, -3.81, 90, "", "2"),
+    ])
 
 lib_symbols["Halo:Q_Photo_NPN"] = compact_symbol(
     "Halo:Q_Photo_NPN", "Q", "Q_Photo_NPN",
@@ -209,14 +258,34 @@ P("J1", USBC, "USB-C 16P", "Connector_USB:USB_C_Receptacle_HRO_TYPE-C-31-M-12",
                 "A5": "CC1", "B5": "CC2", "A6": "USB_DP", "B6": "USB_DP",
                 "A7": "USB_DM", "B7": "USB_DM", "A8": "NC", "B8": "NC",
                 "A1": "GND", "A12": "GND", "B1": "GND", "B12": "GND", "SH": "GND"})
-P("F1", "Halo:Polyfuse", "1.1A 6V", "Fuse:Fuse_1206_3216Metric", 76.2, 45.72, {"1": "VBUS", "2": "5V"})
-P("R5", "Device:R", "5.1k", FP["R"], 88.9, 66.04, {"1": "CC1", "2": "GND"})
-P("R6", "Device:R", "5.1k", FP["R"], 99.06, 66.04, {"1": "CC2", "2": "GND"})
+# v2 (16/09/2026, HALO_V2.md) : le bus apres fusible est a 9 V (VBUS_F), negocie par U4 ; un buck U5 en tire le 5 V des
+# LEDs ; le 3V3 vient d'un LDO a faible chute. La prise USB-C reste la seule entree, le module Qi est alimente en 9 V par J3.
+P("F1", "Halo:Polyfuse", "2.5A 16V", "Fuse:Fuse_1812_4532Metric", 76.2, 45.72, {"1": "VBUS", "2": "VBUS_F"})
 P("D1", "Halo:USBLC6-2SC6", "USBLC6-2SC6", "Package_TO_SOT_SMD:SOT-23-6", 127, 66.04,
-  {"1": "USB_DP", "3": "USB_DM", "2": "GND", "5": "5V", "6": "USB_DP", "4": "USB_DM"})
+  {"1": "USB_DP", "3": "USB_DM", "2": "GND", "5": "5V", "6": "USB_DP", "4": "USB_DM"})   # VBUS de la diode : 5.25 V max, donc sur le 5 V
 P("C7", "Device:C", "100uF", FP["CP"], 152.4, 66.04, {"1": "5V", "2": "GND"})
-P("U2", "Halo:AMS1117-3.3", "AMS1117-3.3", "Package_TO_SOT_SMD:SOT-223-3_TabPin2", 190.5, 66.04,
-  {"3": "5V", "2": "3V3", "1": "GND"})
+P("U2", "Halo:AP2112K", "AP2112K-3.3", "Package_TO_SOT_SMD:SOT-23-5", 190.5, 66.04,
+  {"1": "5V", "2": "GND", "3": "5V", "4": "NC", "5": "3V3"})
+# negociation PD : Rset 6.8k sur CFG1 = 9 V (table 5-1), CFG2/CFG3 en l'air, DP/DM non relies (ils restent a l'ESP32 pour
+# le flashage : le CH224 ne s'en sert que pour QC, dont on se passe), PG non utilise
+P("U4", "Halo:CH224A", "CH224A", "Package_SO:SSOP-10_3.9x4.9mm_P1.00mm", 88.9, 106.68,
+  {"0": "GND", "1": "VBUS_F", "8": "VBUS_F", "7": "CC1", "6": "CC2", "9": "CFG1",
+   "2": "NC", "3": "NC", "4": "NC", "5": "NC", "10": "NC"})
+P("C34", "Device:C", "1uF", FP["C"], 63.5, 106.68, {"1": "VBUS_F", "2": "GND"})
+P("R9", "Device:R", "6.8k", FP["R"], 116.84, 106.68, {"1": "CFG1", "2": "GND"})
+# buck 5 V : Vout = 0.6 x (1 + R10/R11) = 4.98 V ; EN par pont 100k/100k (EN limite a 6 V, VBUS_F vaut 9 V) ;
+# self 4.7 uH 3.9 A, ondulation ~0.8 A a 9 V ; sortie filtree par C1 10 uF + C7 100 uF
+P("U5", "Halo:MT2492", "MT2492", "Package_TO_SOT_SMD:SOT-23-6", 162.56, 106.68,
+  {"5": "VBUS_F", "4": "EN_BUCK", "1": "BS", "6": "SW", "3": "FB", "2": "GND"})
+P("C36", "Device:C", "10uF", FP["C"], 137.16, 106.68, {"1": "VBUS_F", "2": "GND"})
+P("C35", "Device:C", "100nF", FP["C"], 187.96, 96.52, {"1": "BS", "2": "SW"})
+P("L1", "Halo:L", "4.7uH", "Inductor_SMD:L_Taiyo-Yuden_NR-50xx", 200.66, 106.68, {"1": "SW", "2": "5V"})
+P("R10", "Device:R", "100k", FP["R"], 213.36, 106.68, {"1": "5V", "2": "FB"})
+P("R11", "Device:R", "13.7k", FP["R"], 223.52, 106.68, {"1": "FB", "2": "GND"})
+P("R12", "Device:R", "100k", FP["R"], 137.16, 91.44, {"1": "VBUS_F", "2": "EN_BUCK"})
+P("R13", "Device:R", "100k", FP["R"], 147.32, 91.44, {"1": "EN_BUCK", "2": "GND"})
+# module Qi certifie : deux trous pour ses fils, 9 V et masse (HALO_V2.md, chapitre 3)
+P("J3", "Connector_Generic:Conn_01x02", "Module Qi VIN / GND", FP["J2"], 243.84, 106.68, {"1": "VBUS_F", "2": "GND"}, dnp=True, in_bom=False)
 P("C1", "Device:C", "10uF", FP["C"], 170.18, 86.36, {"1": "5V", "2": "GND"})
 P("C3", "Device:C", "100nF", FP["C"], 180.34, 86.36, {"1": "5V", "2": "GND"})
 P("C2", "Device:C", "10uF", FP["C"], 208.28, 86.36, {"1": "3V3", "2": "GND"})
@@ -227,6 +296,7 @@ P("TP3", "Connector:TestPoint", "GND", FP["TP"], 276.86, 66.04, {"1": "GND"}, dn
 P("TP4", "Connector:TestPoint", "EN", FP["TP"], 287.02, 66.04, {"1": "EN"}, dnp=True, in_bom=False)
 P("#FLG1", "power:PWR_FLAG", "PWR_FLAG", "", 25.4, 30.48, {"1": "5V"}, in_bom=False)
 P("#FLG2", "power:PWR_FLAG", "PWR_FLAG", "", 40.64, 30.48, {"1": "GND"}, in_bom=False)
+P("#FLG3", "power:PWR_FLAG", "PWR_FLAG", "", 55.88, 30.48, {"1": "VBUS_F"}, in_bom=False)
 
 # ---- Feuille 2 : module, strapping, boutons, capteur (zone milieu) ----
 P("U1", "Halo:ESP32-C3-MINI-1", "ESP32-C3-MINI-1-N4", "Halo:ESP32-C3-MINI-1", 68.58, 157.48,

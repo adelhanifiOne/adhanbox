@@ -61,6 +61,13 @@ blanc faible pour dire "pas d'heure".
 
 ## 3. Schéma détaillé, bloc par bloc
 
+> **Depuis le 21/09/2026 le schéma généré est celui de la v2** (charge sans
+> fil par module certifié, voir `HALO_V2.md`) : le bus après F1 est à 9 V
+> (`VBUS_F`, négocié par U4 CH224A), U5 MT2492 en tire le 5 V, U2 est un
+> AP2112K-3.3, F1 un PTC 1812 16 V, R5/R6 n'existent plus, J3 alimente le
+> module Qi. Les paragraphes 3.1 et 3.2 ci-dessous décrivent la v1 ; le PCB,
+> lui, est encore celui de la v1.
+
 Convention : une ligne par connexion, colonne "Net" = nom du signal à donner
 dans KiCad. Tout ce qui n'est pas listé sur une broche est laissé en l'air.
 

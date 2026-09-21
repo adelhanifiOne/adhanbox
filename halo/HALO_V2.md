@@ -112,9 +112,12 @@ boutons, capteur, ESP32, connecteur USB-C sur la languette).
 
 | Ajout | Référence | LCSC | Stock au 16/09/2026 | Prix |
 |---|---|---|---|---|
-| Négociation PD, demande 9 V | WCH CH224D, QFN-20 | C3975094 | 4 784 | 0,34 $ |
+| Négociation PD, demande 9 V | WCH CH224A, ESSOP-10 (le CH224D en QFN-20 existe aussi, C3975094) | C42459160 | 19 917 | 0,45 $ |
 | Buck 9 V vers 5 V, 2 A | Aerosemi MT2492, SOT-23-6, plus self 4,7 µH et deux condensateurs | C89358 | 165 273 | 0,05 $ |
-| LDO 3V3 à faible chute, remplace l'AMS1117 | AP2112K-3.3 ou équivalent 600 mA | à choisir | | ~0,10 $ |
+| LDO 3V3 à faible chute, remplace l'AMS1117 | Diodes AP2112K-3.3TRG1, SOT-23-5 | C51118 | 51 724 | 0,17 $ |
+| Self du buck | APV ANR5040T4R7M, 4,7 µH, 3,9 A, 5 x 5 mm | C7427135 | 17 898 | 0,05 $ |
+| PTC 16 V 2,5 A, remplace F1 | Bourns MF-MSMF250/16X-2, 1812 | C210838 | 14 918 | 0,20 $ |
+| Rset 9 V, pont de retour, pont EN | 6,8 k (C17772), 13,7 k (C17448), 3 x 100 k (C149504), 0805 | | | 0,03 $ |
 | Deux pastilles MOD_VIN / GND près du passage de fils | | | | |
 
 Et trois retouches :
@@ -175,6 +178,22 @@ L'épaisseur exacte de la coupelle attend les échantillons.
   de bon sens quand les premières ventes le financeront.
 - **Dossier** : annexe Halo au dossier `conformite/` existant. Déclaration du
   module, certificat ESP32, schémas, notre déclaration UE.
+
+## 6 bis. État au 21/09/2026
+
+**Schéma v2 fait, ERC à zéro.** `gen_kicad_sch.py` porte désormais U4 CH224A
+(Rset 6,8 k sur CFG1, CFG2/CFG3 en l'air, DP/DM non reliés pour laisser le
+flashage USB à l'ESP32, PG inutilisé), U5 MT2492 avec L1 4,7 µH, pont de
+retour 100 k / 13,7 k pour 4,98 V et pont 100 k / 100 k sur EN, U2 AP2112K-3.3
+à la place de l'AMS1117, F1 en 1812 16 V, J3 deux trous pour le module, le net
+9 V nommé `VBUS_F`. R5 et R6 ont disparu. La protection ESD D1 reste
+référencée au 5 V, son entrée VBUS ne tolère pas 9 V. La BOM est à jour avec
+les codes LCSC vérifiés en stock.
+
+**Le PCB ne connaît pas encore ces pièces** : `gen_kicad_pcb.py` n'a ni leurs
+empreintes ni leurs positions, la chaîne `build.sh` s'arrête là tant que le
+routage v2 n'est pas fait. C'est l'étape 3 ci-dessous, qui attend surtout le
+module pour placer J3 et le trou central.
 
 ## 7. Plan de travail
 
