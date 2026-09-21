@@ -1,5 +1,23 @@
 # Adhésions REP — deux demandes, pas trois
 
+## État au 21/09/2026
+
+| filière | organisme | état |
+|---|---|---|
+| emballages ménagers **et** papiers graphiques | Citeo | ✅ **ADHÉSION FAITE** — client n° 50100991, périmètre EMPG |
+| équipements électriques **et** piles | ecosystem | ⏳ dossiers prêts, non envoyés |
+
+**Citeo n'a pas exigé le numéro de TVA intracommunautaire.** Vérifié le
+21/09/2026 : `FR96932355589` est toujours répondu INVALID par le registre
+français sur VIES (réponse ferme, pas une erreur technique), et l'adhésion est
+malgré tout passée. La section 0 ci-dessous présentait ce numéro comme un
+préalable bloquant pour les deux filières : c'est faux pour Citeo.
+
+**Conséquence à exploiter :** demander à ecosystem s'ils peuvent instruire le
+dossier sans attendre, en indiquant que la demande est déposée auprès du SIE.
+Ça peut débloquer plusieurs semaines. Voir [[adhanbox-conformite-reglementaire]].
+
+
 Vérifié le 10/09/2026. **Corepile a fusionné avec ecosystem** (portail de
 déclaration Corepile fermé le 15/07/2025) : l'électrique et les piles se
 traitent désormais **au même contrat**. C'est la réponse à la question laissée
@@ -191,7 +209,25 @@ Texte à coller dans le champ libre du formulaire, ou à envoyer par courriel :
 
 ---
 
-## 3. Demande à Citeo — emballages ménagers
+## 3. Demande à Citeo — emballages ménagers — ✅ FAITE
+
+> **Adhésion confirmée le 21/09/2026.** Client n° 50100991, intitulé
+> « HANIFI ADEL — EMPG » (emballages ménagers + papiers graphiques). Adel est
+> l'administrateur de l'espace client. Le texte ci-dessous est conservé pour
+> mémoire ; il n'y a plus rien à envoyer.
+>
+> **Calendrier annoncé par Citeo :**
+> - sous quelques jours : facture prévisionnelle de **110 € HT pour 2026**
+>   (contribution annuelle minimale) ;
+> - début 2027 : **deux** déclarations annuelles au titre de 2026, une pour les
+>   emballages ménagers, une pour les papiers ;
+> - début 2027 : facture de régularisation si la déclaration dépasse 110 € HT ;
+> - courant 2027 : facture(s) prévisionnelle(s) pour les mises en marché 2027.
+>
+> Les masses d'emballage listées en section 1 restent donc à peser : elles ne
+> servaient pas à l'adhésion, mais elles serviront à la déclaration de début
+> 2027, et c'est elle qui décide de la régularisation.
+
 
 Adhésion : <https://www.citeo.com>
 Attention, **Citeo Pro concerne les emballages professionnels**. Les tiens
@@ -237,7 +273,22 @@ partent chez des particuliers : c'est la filière **emballages ménagers**.
 Deux identifiants uniques t'arriveront, un par filière. Il faut les afficher.
 Les emplacements sont déjà réservés dans le site, marqués `TODO conformite` :
 
-- `docs/cgv.html`
-- `docs/conformite.html`
+- `docs/cgv.html` ligne 126
+- `docs/conformite.html` ligne 107
 
 Dis-le-moi quand tu les as et je les pose, avec la mention légale qui va avec.
+
+### Celui de Citeo : où le récupérer
+
+Citeo fait la démarche auprès de l'ADEME à la place d'Adel. L'identifiant
+apparaîtra **dans quelques jours** sur l'espace client Citeo, rubrique
+**« Mon Contrat »**. Il n'arrive pas par courriel : il faut aller le chercher.
+
+Obligatoire depuis le 1er janvier 2022, il doit figurer **dans les conditions
+générales de vente** et **sur le site internet**. Les deux emplacements sont
+déjà en place ci-dessus : dès qu'Adel donne le numéro, c'est deux lignes à
+poser et une publication.
+
+Rappel de l'enjeu, déjà noté plus haut : sans identifiant affiché, la DGCCRF
+peut sanctionner jusqu'à 30 000 €, et les marketplaces désactivent les annonces
+en interrogeant la base ADEME.
