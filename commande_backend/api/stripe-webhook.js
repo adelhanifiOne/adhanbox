@@ -37,6 +37,34 @@ function addressLines(name, a) {
     .filter(Boolean);
 }
 
+// Stripe ne collecte qu'UN champ « nom complet » sur son formulaire de
+// livraison, et rien n'oblige a y mettre deux mots : beaucoup de clients n'y
+// tapent qu'un prenom (ou qu'un nom), et l'etiquette part incomplete. Le nom
+// porte par la CARTE, lui, est presque toujours complet.
+// On s'en sert pour completer, jamais pour ecraser : une commande cadeau est
+// payee par une personne et livree a une autre, et mettre le nom du payeur
+// sur le colis enverrait le cadeau au mauvais nom.
+const sansAccents = (s) => String(s || '')
+  .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  .toLowerCase().replace(/\s+/g, ' ').trim();
+
+function nomEtiquette(nomLivraison, nomCarte) {
+  const liv = String(nomLivraison || '').trim();
+  const carte = String(nomCarte || '').trim();
+  if (!carte) return { nom: liv, autre: '' };
+  if (!liv) return { nom: carte, autre: '' };
+  const a = sansAccents(liv), b = sansAccents(carte);
+  if (a === b) return { nom: liv, autre: '' };
+  // Un seul mot cote livraison, et ce mot figure dans le nom de la carte :
+  // meme personne, simplement ecrite en entier sur la carte -> on complete.
+  if (a.split(' ').length === 1 && b.split(' ').includes(a)) {
+    return { nom: carte, autre: '' };
+  }
+  // Sinon les deux noms peuvent designer deux personnes : on montre les deux
+  // et c'est le vendeur qui tranche.
+  return { nom: liv, autre: carte };
+}
+
 // Version texte brut de l'email client — un multipart HTML+texte passe
 // nettement mieux les filtres anti-spam qu'un HTML seul.
 function clientEmailText({ firstName, ref, config, amount, shipToLines, livraison }) {
@@ -134,7 +162,7 @@ function clientEmailHtml({ firstName, ref, config, amount, shipTo, livraison }) 
 }
 
 // ── Email vendeur : notification nouvelle commande ──
-function sellerEmailHtml({ ref, config, amount, name, email, phone, shipTo, piId, sessionId, giftMsg, livraison }) {
+function sellerEmailHtml({ ref, config, amount, name, email, phone, shipTo, piId, sessionId, giftMsg, livraison, nomCarteDifferent }) {
   const li = (k, v) => v ? `<li><b>${k} :</b> ${v}</li>` : '';
   return `
 <div style="font-family:Arial,sans-serif;font-size:15px;color:#232323;line-height:1.7;">
@@ -153,6 +181,7 @@ function sellerEmailHtml({ ref, config, amount, name, email, phone, shipTo, piId
     ${li('Téléphone', phone)}
   </ul>
   ${shipTo ? `<p><b>${livraison.relais ? 'Destinataire (pour l\'étiquette)' : 'Adresse de livraison'} :</b><br>${shipTo}</p>` : ''}
+  ${nomCarteDifferent ? `<p style="background:#FBF3E3;padding:10px 12px;border-radius:8px;margin:12px 0;">🎁 <b>Carte au nom de ${escHtml(nomCarteDifferent)}</b> — différent du destinataire ci-dessus. Probablement un cadeau : garder le nom du destinataire sur l'étiquette.</p>` : ''}
   <p><a href="https://dashboard.stripe.com/payments/${piId}">Voir le paiement dans Stripe →</a></p>
   ${stepButtons(sessionId)}
 </div>`;
@@ -252,7 +281,24 @@ export default async function handler(req, res) {
         relais: { code: md.relais_code, network: md.relais_reseau || '', name: md.relais_nom || '', address: md.relais_adresse || '' } }
     : { label: shippingCents > 0 ? `Domicile — ${euros(shippingCents)}` : 'Domicile — offerte', relais: null };
   const firstName = (details.name || '').trim().split(/\s+/)[0] || '';
-  const shipToLines = shipping ? addressLines(shipping.name || details.name, shipping.address) : [];
+
+  // Nom porte par la carte, pour completer une etiquette incomplete.
+  // Jamais bloquant : si l'appel echoue, la commande part quand meme.
+  let nomCarte = '';
+  if (piId) {
+    try {
+      const pi = await stripe.paymentIntents.retrieve(piId, { expand: ['latest_charge'] });
+      nomCarte = pi?.latest_charge?.billing_details?.name || '';
+    } catch (err) {
+      console.error('  -> nom sur la carte illisible:', err && err.message);
+    }
+  }
+  const { nom: destinataire, autre: nomCarteDifferent } =
+    nomEtiquette(shipping?.name || details.name, nomCarte);
+  console.log(`  -> etiquette: "${destinataire}"` +
+    (nomCarteDifferent ? ` | carte au nom de "${nomCarteDifferent}"` : ''));
+
+  const shipToLines = shipping ? addressLines(destinataire, shipping.address) : [];
   const shipTo = shipToLines.join('<br>');
 
   if (!process.env.RESEND_API_KEY) {
@@ -288,7 +334,7 @@ export default async function handler(req, res) {
       to: NOTIF_EMAIL,
       subject: `🎉 Nouvelle commande — ${config} — ${amount}`,
       html: sellerEmailHtml({
-        ref, config, amount, giftMsg, livraison,
+        ref, config, amount, giftMsg, livraison, nomCarteDifferent,
         name: details.name, email: details.email, phone: details.phone,
         shipTo, piId, sessionId: session.id,
       }),
@@ -303,6 +349,7 @@ export default async function handler(req, res) {
           : 'Livraison : domicile (Colissimo suivi)',
         `Client : ${details.name || '-'} · ${details.email || '-'} · ${details.phone || '-'}`,
         ...(shipToLines.length ? [livraison.relais ? 'Destinataire :' : 'Adresse :', ...shipToLines] : []),
+        ...(nomCarteDifferent ? [`Carte au nom de ${nomCarteDifferent} — different du destinataire (cadeau ?)`] : []),
         `https://dashboard.stripe.com/payments/${piId}`,
       ].join('\n'),
     });
