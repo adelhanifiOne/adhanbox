@@ -2,7 +2,7 @@
 // - Starts an AP when a long-press is detected on CONFIG_BUTTON_PIN
 // - Serves a small webpage that requests navigator.geolocation and POSTs lat/lon
 // - Stores lat/lon/accuracy/timestamp in Preferences (NVS)
-//Version: 3.0.42 (AdhanBox V3 / HW v3)
+//Version: 3.0.44 (AdhanBox V3 / HW v3)
 #include <Arduino.h>
 #include <esp_mac.h>   // esp_read_mac() : MAC eFuse, lisible sans Wi-Fi
 #include <Wire.h>
@@ -942,6 +942,17 @@ static inline void hsv2rgb(uint8_t h, uint8_t s, uint8_t v, uint8_t &r, uint8_t 
 // Forward declarations for functions defined later but used above
 bool rtcSetAlarmDaily(uint8_t hour, uint8_t minute);
 void rtcDisableAlarms();
+
+// ---- Fuseau horaire et heure d'ete (voir la section « HEURE » plus bas) ----
+int  dernierDimancheDuMois(int annee, int mois);
+bool heureEteEurope(const DateTime &utc);
+bool heureEteActive(const DateTime &utc);   // heureEteEurope() ET regle activee
+int  offsetLocalMin(const DateTime &utc);
+DateTime heureLocale(const DateTime &utc);
+DateTime heureUtc(const DateTime &local);
+DateTime localNow();
+void chargerFuseau();
+void migrerRtcVersUtc();
 bool loadStoredLocation(double &outLat, double &outLon, double &outAcc);
 void stopPlay(const char *cause = "autre");
 bool playTrack(int track);
@@ -1303,11 +1314,35 @@ void handleSetTZ() {
     server.send(400, "text/plain", "Invalid payload");
     return;
   }
+  // L'application pousse un offset INSTANTANE (+60 en hiver, +120 en ete pour
+  // la France). On le traduit en offset STANDARD plus une regle, sinon le
+  // boitier resterait fige sur la saison du jour de l'appairage - c'est
+  // exactement le defaut corrige en 3.0.43.
+  int pousse = (int)tz;
+  int std; bool dstEu;
+  DateTime utcMaint;                  // par defaut 2000-01-01 (RTClib), jamais 1970
+  bool dateSure = false;
+  if (rtcPresent) {
+    utcMaint = rtc.now();
+    dateSure = (utcMaint.year() >= 2020 && utcMaint.year() <= 2100);
+  }
+  if (pousse == 60) {
+    std = 60; dstEu = true;                 // CET en hiver
+  } else if (pousse == 120 && dateSure && heureEteEurope(utcMaint)) {
+    std = 60; dstEu = true;                 // CET en ete
+  } else {
+    std = pousse; dstEu = false;            // zone a offset fixe (La Reunion...)
+  }
   prefs.begin("adhancfg", false);
-  prefs.putInt("tz_offset_min", (int)tz);
+  prefs.putInt("tz_offset_min", pousse);    // conservee : l'app la relit encore
+  prefs.putInt("tz_std_min", std);
+  prefs.putBool("tz_dst_eu", dstEu);
   prefs.end();
+  chargerFuseau();
+  if (rtcPresent) scheduleNextPrayerAlarm();
   server.send(200, "text/plain", "Timezone offset saved");
-  Serial.printf("Stored tz_offset_min=%d\n", (int)tz);
+  Serial.printf("Fuseau enregistre : pousse %+d min -> standard %+d min, heure d'ete %s\n",
+                pousse, std, dstEu ? "oui" : "non");
 }
 
 void handlePlayTest() {
@@ -1322,9 +1357,10 @@ void handleSetRTC() {
     server.send(200, "text/plain", "RTC not present");
     return;
   }
-  rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
+  // __DATE__ / __TIME__ sont l'heure LOCALE de la machine de compilation.
+  rtc.adjust(heureUtc(DateTime(F(__DATE__), F(__TIME__))));
   scheduleNextPrayerAlarm();
-  server.send(200, "text/plain", "RTC set to compile time");
+  server.send(200, "text/plain", "RTC set to compile time (converti en UTC)");
 }
 
 // Set RTC manually via POST JSON { "date": "YYYY-MM-DD", "time": "HH:MM:SS" }
@@ -1380,10 +1416,18 @@ void handleSetRtcManual() {
     server.send(400, "text/plain", "Invalid date/time");
     return;
   }
-  rtc.adjust(dt);
+  // L'APPLICATION ENVOIE DE L'HEURE LOCALE — celle que l'usager voit sur son
+  // telephone. Jusqu'a la 3.0.42 le RTC etait local et on l'ecrivait telle
+  // quelle ; depuis la 3.0.43 il porte de l'UTC, donc il FAUT convertir.
+  // Sans cette conversion la carte avance du fuseau entier a chaque appel de
+  // l'appli, et l'ecart se voit tout de suite : constate sur carte le
+  // 22/09/2026, RTC a 21:01 alors que l'UTC reel etait 19:01.
+  DateTime utc = heureUtc(dt);
+  rtc.adjust(utc);
   scheduleNextPrayerAlarm();
-  char buf[64];
-  snprintf(buf, sizeof(buf), "RTC set to %04d-%02d-%02d %02d:%02d:%02d", y, m, d, hh, mm, ss);
+  char buf[96];
+  snprintf(buf, sizeof(buf), "RTC regle : %04d-%02d-%02d %02d:%02d:%02d locale -> %02u:%02u:%02u UTC",
+           y, m, d, hh, mm, ss, utc.hour(), utc.minute(), utc.second());
   server.send(200, "text/plain", String(buf));
   Serial.println(buf);
 }
@@ -1394,12 +1438,12 @@ void handleSetAlarmTest() {
     server.send(200, "text/plain", "RTC not present");
     return;
   }
-  DateTime now = rtc.now();
+  DateTime now = localNow();
   int mm = (now.minute() + 1) % 60;
   int hh = now.hour() + (now.minute() == 59 ? 1 : 0);
-  rtcSetAlarmDaily(hh % 24, mm);
   scheduledPrayerIndex = 1;
   scheduledPrayerTime = DateTime(now.year(), now.month(), now.day(), hh % 24, mm, 0);
+  { DateTime _u = heureUtc(scheduledPrayerTime); rtcSetAlarmDaily(_u.hour(), _u.minute()); }
 
   // Clear last trigger NVS to ensure the test alarm fires
   prefs.begin("adhancfg", false);
@@ -1446,7 +1490,7 @@ void handleShowTime() {
     server.send(200, "text/plain", "RTC not present");
     return;
   }
-  DateTime now = rtc.now();
+  DateTime now = localNow();
   char buf[64];
   snprintf(buf, sizeof(buf), "%04u-%02u-%02u %02u:%02u:%02u", now.year(), now.month(), now.day(), now.hour(), now.minute(), now.second());
   server.send(200, "text/plain", buf);
@@ -1675,19 +1719,17 @@ void handleGetRTC() {
     server.send(200, "text/plain", "RTC not present");
     return;
   }
-  DateTime now = rtc.now();
-  char buf[64];
-  snprintf(buf, sizeof(buf), "%04u-%02u-%02u %02u:%02u:%02u", now.year(), now.month(), now.day(), now.hour(), now.minute(), now.second());
-  // append tz info if stored
-  prefs.begin("adhancfg", true);
-  int tz = prefs.getInt("tz_offset_min", 0x7fffffff);
-  prefs.end();
+  DateTime utc = rtc.now();
+  DateTime now = heureLocale(utc);
+  int off = offsetLocalMin(utc);
+  char buf[160];
+  snprintf(buf, sizeof(buf),
+           "%04u-%02u-%02u %02u:%02u:%02u (UTC%+d:%02d, %s) | UTC %04u-%02u-%02u %02u:%02u:%02u",
+           now.year(), now.month(), now.day(), now.hour(), now.minute(), now.second(),
+           off / 60, abs(off) % 60,
+           heureEteActive(utc) ? "heure d'ete" : "heure d'hiver",
+           utc.year(), utc.month(), utc.day(), utc.hour(), utc.minute(), utc.second());
   String out = String(buf);
-  if (tz != 0x7fffffff) {
-    char tzb[32];
-    snprintf(tzb, sizeof(tzb), " (UTC%+d)", tz / 60);
-    out += String(tzb);
-  }
   Serial.printf("handleGetRTC: returning '%s'\n", out.c_str());
   server.send(200, "text/plain", out);
 }
@@ -1936,7 +1978,7 @@ void handleOtaUploadComplete() {
 // GET /api/firmware/version
 void handleFirmwareVersion() {
   server.send(200, "application/json",
-              "{\"version\":\"3.0.42\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
+              "{\"version\":\"3.0.44\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
 }
 
 // Returns true if the request carries the correct API key (or if token not yet set).
@@ -2049,11 +2091,11 @@ void handleDeviceInfo() {
   char buf[512];
   if (pairingWindow || hasValidToken) {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.42\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
+             "{\"version\":\"3.0.44\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
              OTA_HOSTNAME, deviceIdHex().c_str(), _apiToken.c_str(), _otaPass.c_str());
   } else {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.42\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
+             "{\"version\":\"3.0.44\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
              OTA_HOSTNAME, deviceIdHex().c_str());
   }
   server.send(200, "application/json", buf);
@@ -2879,26 +2921,24 @@ bool syncTimeFromNtp(unsigned long timeoutMs) {
   int min = timeinfo.tm_min;
   int sec = timeinfo.tm_sec;
   Serial.printf("NTP UTC time: %04d-%02d-%02d %02d:%02d:%02d\n", year, mon, day, hour, min, sec);
-  // Apply timezone offset stored in prefs (minutes)
-  prefs.begin("adhancfg", true);
-  int tzMin = prefs.getInt("tz_offset_min", 0x7fffffff);
-  prefs.end();
-  int tzOffset = 0;
-  if (tzMin != 0x7fffffff) tzOffset = tzMin;  // minutes
-  // Construct DateTime adjusted to local time
-  time_t utc = mktime(&timeinfo);
-  time_t localt = utc + tzOffset * 60;
-  struct tm *lt = gmtime(&localt);
-  if (!lt) {
-    Serial.println("Failed to convert local time");
-    return false;
-  }
   if (!rtcPresent) {
     Serial.println("RTC not present; cannot set time");
     return false;
   }
-  rtc.adjust(DateTime(lt->tm_year + 1900, lt->tm_mon + 1, lt->tm_mday, lt->tm_hour, lt->tm_min, lt->tm_sec));
-  Serial.printf("RTC set to local time (tz offset %d min): %04d-%02d-%02d %02d:%02d:%02d\n", tzOffset, lt->tm_year + 1900, lt->tm_mon + 1, lt->tm_mday, lt->tm_hour, lt->tm_min, lt->tm_sec);
+  // Le RTC recoit de l'UTC, sans aucun offset : c'est offsetLocalMin() qui
+  // fabrique l'heure locale a la lecture, et lui seul connait l'heure d'ete.
+  rtc.adjust(DateTime(year, mon, day, hour, min, sec));
+  // La NVS peut porter un RTC encore en heure locale si le boitier n'avait
+  // jamais demarre avec cette version : NTP vient de le remettre en UTC, donc
+  // la migration n'a plus lieu d'etre.
+  prefs.begin("adhancfg", false);
+  prefs.putBool("rtc_en_utc", true);
+  prefs.end();
+  chargerFuseau();
+  DateTime _loc = localNow();
+  Serial.printf("RTC regle en UTC %04d-%02d-%02d %02d:%02d:%02d (local %02u:%02u, offset %+d min)\n",
+                year, mon, day, hour, min, sec, _loc.hour(), _loc.minute(),
+                offsetLocalMin(DateTime(year, mon, day, hour, min, sec)));
   // [COUPURES] heure sure -> adhans autorises + sauvegarde immediate
   _timeTrusted = true; _timeApprox = false;
   prefs.begin("adhancfg", false);
@@ -3456,13 +3496,14 @@ void computeAndPrintPrayerTimes(const DateTime &date) {
   solarDeclinationAndEqtime(doy, decl, eqt);
   // timezone offset: prefer stored tz_offset_min, otherwise estimate from longitude
   prefs.begin("adhancfg", true);
-  int tzOffsetMin = prefs.getInt("tz_offset_min", 0x7fffffff);
+  bool fuseauRegle = (prefs.getInt("tz_offset_min", 0x7fffffff) != 0x7fffffff);
   prefs.end();
   int tzMin;
   int tz;
-  if (tzOffsetMin != 0x7fffffff) {
-    tzMin = tzOffsetMin;
-    tz = tzOffsetMin / 60;
+  if (fuseauRegle) {
+    DateTime midi(date.year(), date.month(), date.day(), 12, 0, 0);
+    tzMin = offsetLocalMin(heureUtc(midi));   // offset en vigueur ce jour-la, cf. computePrayerTimesForDate
+    tz = tzMin / 60;
   } else {
     tz = (int)round(lon / 15.0);
     tzMin = tz * 60;
@@ -3516,12 +3557,20 @@ bool computePrayerTimesForDate(const DateTime &date, double outTimes[6], int &tz
   int doy = dayOfYear(date);
   double decl, eqt;
   solarDeclinationAndEqtime(doy, decl, eqt);
+  // L'offset est celui EN VIGUEUR LE JOUR DEMANDE, pas celui d'aujourd'hui :
+  // la veille d'une bascule, les horaires de demain se calculent deja avec le
+  // nouvel offset. On l'evalue a midi local de ce jour, donc toujours du bon
+  // cote des 03:00 ou l'heure change.
+  // Jusqu'a la 3.0.42 on lisait ici tz_offset_min, fige. Apres le 25 octobre,
+  // tout boitier retombant sur ce calcul (hors ligne, ou Mawaqit trop vieux)
+  // aurait sonne une heure trop tard : c'etait precisement le cas a proteger.
   prefs.begin("adhancfg", true);
-  int tzOffsetMin = prefs.getInt("tz_offset_min", 0x7fffffff);
+  bool fuseauRegle = (prefs.getInt("tz_offset_min", 0x7fffffff) != 0x7fffffff);
   prefs.end();
   int tzMin;
-  if (tzOffsetMin != 0x7fffffff) {
-    tzMin = tzOffsetMin;
+  if (fuseauRegle) {
+    DateTime midi(date.year(), date.month(), date.day(), 12, 0, 0);
+    tzMin = offsetLocalMin(heureUtc(midi));
     tzUsedMin = tzMin;
     tzSource = "preference";
   } else {
@@ -3631,7 +3680,7 @@ void handlePrayerTimes() {
     server.send(200, "application/json", "{\"error\":\"RTC missing\"}");
     return;
   }
-  DateTime now = rtc.now();
+  DateTime now = localNow();
   if (now.month() < 1 || now.month() > 12 || now.year() < 2020 || now.year() > 2100) {
     server.send(200, "application/json", "{\"error\":\"invalid RTC date\"}");
     return;
@@ -3733,7 +3782,7 @@ void handleDumpStatus() {
   bool rtc_ok = rtcPresent;
   String rtc_time = "";
   if (rtc_ok) {
-    DateTime now = rtc.now();
+    DateTime now = localNow();
     char b[64];
     snprintf(b, sizeof(b), "%04u-%02u-%02u %02u:%02u:%02u", now.year(), now.month(), now.day(), now.hour(), now.minute(), now.second());
     rtc_time = String(b);
@@ -3747,6 +3796,180 @@ void handleDumpStatus() {
            wifi_state.c_str(), ip.c_str(), rtc_ok ? 1 : 0, rtc_time.c_str(), lat.c_str(), lon.c_str(), acc.c_str(), (tz == 0x7fffffff ? -9999 : tz), (int)key.length());
   server.send(200, "application/json", String(out));
 }
+
+// ================================ HEURE ======================================
+// Le RTC stocke l'heure UTC. Jusqu'a la 3.0.42 il stockait l'heure LOCALE, avec
+// un offset fixe pousse par l'application : un boitier hors ligne se decalait
+// donc d'une heure au changement d'octobre, et l'adhan partait a la mauvaise
+// minute jusqu'a ce que quelqu'un rouvre l'application.
+//
+// Desormais : RTC en UTC, et l'offset est RECALCULE a chaque lecture a partir
+// de la date. Un boitier qui n'a jamais de reseau reste juste.
+//
+// Deux preferences remplacent l'ancienne :
+//   tz_std_min  offset NORMAL du lieu, en minutes (France metropolitaine : 60)
+//   tz_dst_eu   appliquer la regle europeenne d'heure d'ete (France : oui)
+// tz_offset_min reste ecrite pour que l'application actuelle continue de lire
+// quelque chose de sense, mais plus rien ne s'en sert pour calculer l'heure.
+//
+// La Reunion (UTC+4, sans heure d'ete) tombe naturellement sur tz_dst_eu=false :
+// son offset ne bouge jamais. Voir migrerRtcVersUtc() pour la deduction.
+
+// Cache RAM : offsetLocalMin() est appele dans loop(), on ne va pas ouvrir la
+// NVS a chaque tour. chargerFuseau() le rafraichit apres toute ecriture.
+static int  g_tzStdMin = 60;
+static bool g_tzDstEu  = true;
+
+static int joursDansMois(int annee, int mois) {
+  static const int d[12] = {31,28,31,30,31,30,31,31,30,31,30,31};
+  if (mois < 1 || mois > 12) return 30;
+  if (mois == 2 && ((annee % 4 == 0 && annee % 100 != 0) || annee % 400 == 0)) return 29;
+  return d[mois - 1];
+}
+
+// Jour de la semaine par la methode de Sakamoto. 0 = dimanche.
+static int jourSemaine(int annee, int mois, int jour) {
+  static const int t[12] = {0,3,2,5,0,3,5,1,4,6,2,4};
+  if (mois < 3) annee -= 1;
+  return (annee + annee/4 - annee/100 + annee/400 + t[mois - 1] + jour) % 7;
+}
+
+// Quantieme du dernier dimanche du mois : on part du dernier jour et on remonte.
+int dernierDimancheDuMois(int annee, int mois) {
+  int j = joursDansMois(annee, mois);
+  while (j > 1 && jourSemaine(annee, mois, j) != 0) j--;
+  return j;
+}
+
+// Regle europeenne (directive 2000/84/CE) : l'heure d'ete court du dernier
+// dimanche de mars a 01:00 UTC au dernier dimanche d'octobre a 01:00 UTC.
+// L'heure passee ici DOIT etre de l'UTC : c'est ce qui rend la bascule
+// simultanee dans toute l'Union, et ce qui evite l'heure ambigue de 2 h a 3 h.
+bool heureEteEurope(const DateTime &utc) {
+  int a = utc.year(), m = utc.month(), j = utc.day();
+  if (a < 2020 || a > 2100) return false;      // date aberrante : pas d'heure d'ete
+  if (m < 3 || m > 10) return false;           // novembre a fevrier : hiver
+  if (m > 3 && m < 10) return true;            // avril a septembre : ete
+  int bascule = dernierDimancheDuMois(a, m);
+  if (m == 3) {
+    if (j > bascule) return true;
+    if (j < bascule) return false;
+    return utc.hour() >= 1;
+  }
+  // octobre
+  if (j < bascule) return true;
+  if (j > bascule) return false;
+  return utc.hour() < 1;
+}
+
+// Minutes a AJOUTER a l'UTC pour obtenir l'heure locale.
+// France : +60 en hiver, +120 en ete.
+int offsetLocalMin(const DateTime &utc) {
+  if (g_tzDstEu && heureEteEurope(utc)) return g_tzStdMin + 60;
+  return g_tzStdMin;
+}
+
+// L'heure d'ete s'applique-t-elle vraiment ici ? Un boitier a La Reunion
+// traverse mars et octobre sans que rien ne bouge.
+bool heureEteActive(const DateTime &utc) {
+  return g_tzDstEu && heureEteEurope(utc);
+}
+
+DateTime heureLocale(const DateTime &utc) {
+  return utc + TimeSpan((int32_t)offsetLocalMin(utc) * 60);
+}
+
+// Local -> UTC. L'offset a retrancher est celui en vigueur A CET INSTANT-LA,
+// pas maintenant : une passe d'approximation suffit, les deux ne different que
+// dans la fenetre d'une heure autour d'une bascule.
+DateTime heureUtc(const DateTime &local) {
+  DateTime approx = local - TimeSpan((int32_t)offsetLocalMin(local) * 60);
+  return local - TimeSpan((int32_t)offsetLocalMin(approx) * 60);
+}
+
+// Heure locale courante. C'est ELLE que doit lire tout ce qui parle a l'usager
+// ou compare des horaires de priere ; rtc.now() ne rend plus que de l'UTC.
+DateTime localNow() {
+  DateTime utc = rtc.now();
+  return heureLocale(utc);
+}
+
+void chargerFuseau() {
+  prefs.begin("adhancfg", true);
+  int  std = prefs.getInt("tz_std_min", 0x7fffffff);
+  bool dst = prefs.getBool("tz_dst_eu", true);
+  if (std == 0x7fffffff) {            // avant migration : on retombe sur l'ancien
+    std = prefs.getInt("tz_offset_min", 60);
+    dst = false;                      // offset fige, comportement d'avant
+  }
+  prefs.end();
+  g_tzStdMin = std;
+  g_tzDstEu  = dst;
+  Serial.printf("[HEURE] fuseau : standard %+d min, heure d'ete europeenne %s\n",
+                g_tzStdMin, g_tzDstEu ? "oui" : "non");
+}
+
+// Migration des boitiers deja en circulation, dont le RTC porte l'heure LOCALE.
+// Executee une seule fois, gardee par rtc_en_utc. Elle fonctionne HORS LIGNE :
+// l'ancien offset stocke est exactement celui qui avait ete ajoute a l'UTC au
+// moment ou le RTC a ete regle, donc le retrancher redonne l'UTC.
+void migrerRtcVersUtc() {
+  if (!rtcPresent) return;
+  prefs.begin("adhancfg", true);
+  bool dejaUtc      = prefs.getBool("rtc_en_utc", false);
+  bool fuseauDeduit = (prefs.getInt("tz_std_min", 0x7fffffff) != 0x7fffffff);
+  int  ancien       = prefs.getInt("tz_offset_min", 0x7fffffff);
+  prefs.end();
+  // Deux choses independantes : deduire le reglage de fuseau, et convertir le
+  // RTC. Chacune ne se fait qu'une fois, mais SEPAREMENT : si NTP passait un
+  // jour avant nous (il pose rtc_en_utc lui-meme), le fuseau serait quand meme
+  // deduit, au lieu de rester fige sur l'ancien offset avec l'heure d'ete
+  // desactivee - silencieusement, pour toujours.
+  if (dejaUtc && fuseauDeduit) { chargerFuseau(); return; }
+
+  DateTime avant = rtc.now();
+  bool datePlausible = (avant.year() >= 2020 && avant.year() <= 2100);
+  int applique = (ancien == 0x7fffffff) ? 0 : ancien;
+
+  // Deduire le nouveau reglage de l'ancien offset fixe.
+  //   +60  -> France en hiver (ou zone CET) : heure d'ete europeenne
+  //   +120 -> France en ete SI on est bien dans la periode d'ete ; sinon c'est
+  //           une vraie zone UTC+2 fixe, on n'y touche pas
+  //   autre-> offset fixe, pas d'heure d'ete (La Reunion, etc.)
+  // L'UTC de reference : si le RTC est deja en UTC, le lire tel quel ; sinon
+  // retrancher l'ancien offset, celui-la meme qui avait ete ajoute.
+  DateTime utcApprox = !datePlausible ? avant
+                     : (dejaUtc ? avant : (avant - TimeSpan((int32_t)applique * 60)));
+
+  prefs.begin("adhancfg", false);
+  if (!fuseauDeduit) {
+    int  std; bool dstEu;
+    if (applique == 60) {
+      std = 60; dstEu = true;
+    } else if (applique == 120 && datePlausible && heureEteEurope(utcApprox)) {
+      std = 60; dstEu = true;
+    } else {
+      std = applique; dstEu = false;
+    }
+    prefs.putInt("tz_std_min", std);
+    prefs.putBool("tz_dst_eu", dstEu);
+  }
+  if (!dejaUtc) {
+    if (datePlausible && applique != 0) {
+      rtc.adjust(avant - TimeSpan((int32_t)applique * 60));
+    }
+    prefs.putBool("rtc_en_utc", true);
+  }
+  prefs.end();
+
+  DateTime apres = rtc.now();
+  Serial.printf("[HEURE] Migration RTC local -> UTC : %04u-%02u-%02u %02u:%02u -> %04u-%02u-%02u %02u:%02u "
+                "(ancien offset %+d min)\n",
+                avant.year(), avant.month(), avant.day(), avant.hour(), avant.minute(),
+                apres.year(), apres.month(), apres.day(), apres.hour(), apres.minute(), applique);
+  chargerFuseau();
+}
+// ============================== fin HEURE ====================================
 
 // ---------------- Alarme du RTC RX-8025T (acces registres I2C, alarme quotidienne) ----------------
 static inline uint8_t decToBcd(uint8_t val) {
@@ -3859,7 +4082,11 @@ bool computeNextPrayer(const DateTime &now, DateTime &nextDt, int &idx) {
   unsigned long mq_sync_ts = prefs.getULong("mq_sync_ts", 0);
   prefs.end();
 
-  unsigned long now_epoch = now.unixtime();
+  // « now » est une heure LOCALE : son unixtime() est decale du fuseau. Or
+  // mq_sync_ts a ete ecrit depuis rtc.now(), donc en UTC. Sans cette
+  // conversion, la fraicheur des horaires Mawaqit serait surestimee d'une a
+  // deux heures - assez pour garder une journee de retard en usage reel.
+  unsigned long now_epoch = heureUtc(now).unixtime();
   unsigned long age_sec = (mq_sync_ts > 0 && now_epoch >= mq_sync_ts) ? (now_epoch - mq_sync_ts) : 999999UL;
   bool mqValid = (mq[0].length() >= 5) && (mq[5].length() >= 5) && (age_sec < 25UL * 3600UL);
 
@@ -3937,7 +4164,7 @@ bool computeNextPrayer(const DateTime &now, DateTime &nextDt, int &idx) {
 // Schedule next prayer alarm: computes next prayer, programs Alarm2 daily at that hh:mm
 void scheduleNextPrayerAlarm() {
   if (!rtcPresent) return;
-  DateTime now = rtc.now();
+  DateTime now = localNow();
   // Guard against corrupt RTC data (I2C bus issue) to avoid out-of-bounds crash in dayOfYear()
   if (now.month() < 1 || now.month() > 12 || now.day() < 1 || now.day() > 31 || now.year() < 2020 || now.year() > 2100) {
     Serial.printf("scheduleNextPrayerAlarm: invalid RTC date %04u-%02u-%02u, skipping\n", now.year(), now.month(), now.day());
@@ -3947,8 +4174,12 @@ void scheduleNextPrayerAlarm() {
   int idx;
   if (computeNextPrayer(now, nextDt, idx)) {
     scheduledPrayerIndex = idx;
-    scheduledPrayerTime = nextDt;
-    rtcSetAlarmDaily(nextDt.hour(), nextDt.minute());
+    scheduledPrayerTime = nextDt;            // horaire de priere : heure LOCALE
+    // Mais la puce RTC compte en UTC : son alarme materielle doit etre
+    // programmee a l'heure UTC correspondante, sinon elle sonne avec l'ecart
+    // du fuseau. C'est le seul endroit ou la conversion est indispensable.
+    DateTime nextUtc = heureUtc(nextDt);
+    rtcSetAlarmDaily(nextUtc.hour(), nextUtc.minute());
     // Also schedule a software fallback alarm based on millis() to ensure
     // the prayer triggers even if the RTC interrupt/flag is missed.
     unsigned long deltaSec = 0;
@@ -3959,10 +4190,10 @@ void scheduleNextPrayerAlarm() {
       // convert to ms, guard overflow
       unsigned long deltaMs = (unsigned long)deltaSec * 1000UL;
       softwareAlarmAt = millis() + deltaMs;
-      Serial.printf("Scheduled alarm for prayer %d at %04u-%02u-%02u %02d:%02d (in %lu s, software fallback set)\n", idx, nextDt.year(), nextDt.month(), nextDt.day(), nextDt.hour(), nextDt.minute(), deltaSec);
+      Serial.printf("Alarme priere %d le %04u-%02u-%02u a %02d:%02d locale (%02u:%02u UTC, dans %lu s, secours logiciel arme)\n", idx, nextDt.year(), nextDt.month(), nextDt.day(), nextDt.hour(), nextDt.minute(), nextUtc.hour(), nextUtc.minute(), deltaSec);
     } else {
       softwareAlarmAt = 0;
-      Serial.printf("Scheduled alarm for prayer %d at %04u-%02u-%02u %02d:%02d (software fallback not set)\n", idx, nextDt.year(), nextDt.month(), nextDt.day(), nextDt.hour(), nextDt.minute());
+      Serial.printf("Alarme priere %d le %04u-%02u-%02u a %02d:%02d locale (%02u:%02u UTC, sans secours logiciel)\n", idx, nextDt.year(), nextDt.month(), nextDt.day(), nextDt.hour(), nextDt.minute(), nextUtc.hour(), nextUtc.minute());
     }
   } else {
     scheduledPrayerIndex = 0;
@@ -4107,7 +4338,7 @@ static bool demoAutorise() {
   // apres_priere_min, a 0) : si un imam demande ce silence, un appel a
   // /api/mosquee le rallume sans reflasher le boitier sur place.
   if ((demoAvantPriere || demoApresPriere) && rtcPresent && timeUsable()) {
-    DateTime maintenant = rtc.now();
+    DateTime maintenant = localNow();
     DateTime prochaine; int idx = 0;
     if (demoAvantPriere && computeNextPrayer(maintenant, prochaine, idx)) {
       const long avant = (long)(prochaine.unixtime() - maintenant.unixtime());
@@ -4819,7 +5050,7 @@ void v2Tick() {
   lastCheck = millis();
   if (!timeUsable()) return;   // [COUPURES] heure inconnue -> pas d'automatisations
   if (audio.isRunning()) return;
-  DateTime now = rtc.now();
+  DateTime now = localNow();
   int h = now.hour(), m = now.minute(), d = now.day(), dow = now.dayOfTheWeek(); // 0=Dim..6=Sam
   v2Fire(v2cfg.sabah, h, m, dow, d, fSabah, "/azkar/sabah.mp3");
   v2Fire(v2cfg.masaa, h, m, dow, d, fMasaa, "/azkar/masaa.mp3");
@@ -4950,22 +5181,31 @@ void setup() {
         _timeApprox = true;
         Serial.printf("RTC lost power -> heure restauree (approximative): %lu\n", (unsigned long)lastEpoch);
       } else {
-        rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
+        // Heure de compilation = heure LOCALE ; le RTC attend de l'UTC. La
+        // conversion utilise le fuseau par defaut (France) car les preferences
+        // ne sont pas encore lues a ce stade : approximation assumee, l'heure
+        // est de toute facon marquee non fiable et les adhans sont suspendus.
+        rtc.adjust(heureUtc(DateTime(F(__DATE__), F(__TIME__))));
         Serial.println("RTC lost power, AUCUNE sauvegarde -> ADHANS SUSPENDUS jusqu'a NTP.");
       }
     } else {
       _timeTrusted = true;
     }
+    // [HEURE] Boitiers deja en circulation : le RTC porte l'heure LOCALE, on la
+    // ramene en UTC une bonne fois. Placee ICI, apres la restauration eventuelle
+    // depuis last_epoch (qui reproduit l'ancien etat local) et avant tout ce qui
+    // lit l'heure, pour que la suite du demarrage travaille deja en UTC.
+    migrerRtcVersUtc();
     // [TLS] L'horloge SYSTEME de l'ESP part a 1970 a chaque demarrage, et seul
     // NTP la reglait. Or mbedTLS verifie les dates de validite d'un certificat
     // avec CETTE horloge-la, pas avec la puce RTC : en 1970, tout certificat
     // parait « pas encore valide » et la synchro des horaires echouerait entre
     // le demarrage et le premier NTP reussi - voire indefiniment derriere un
     // reseau qui bloque NTP. On la seme donc avec l'heure de la puce, qui est
-    // sauvegardee par la pile. Cette heure est LOCALE, donc decalee de quelques
-    // heures : sans importance pour une validite de certificat qui se compte en
-    // mois, et rien d'autre dans ce firmware ne lit l'horloge systeme - toute la
-    // logique de priere passe par rtc.now(). NTP la remettra en UTC ensuite.
+    // sauvegardee par la pile. Depuis la 3.0.43 cette heure est de l'UTC, ce qui
+    // est exactement ce qu'attend mbedTLS : plus aucun decalage de fuseau ne
+    // s'y glisse. Rien d'autre dans ce firmware ne lit l'horloge systeme -
+    // toute la logique de priere passe par localNow().
     {
       const uint32_t t = rtc.now().unixtime();
       if (t > 1700000000UL) {            // posterieur a novembre 2023 : plausible
@@ -4978,7 +5218,7 @@ void setup() {
       }
     }
     Serial.println("RTC ready.");
-    DateTime now = rtc.now();
+    DateTime now = localNow();
     char buf[64];
     snprintf(buf, sizeof(buf), "%04u-%02u-%02u %02u:%02u:%02u", now.year(), now.month(), now.day(), now.hour(), now.minute(), now.second());
     Serial.print("Current RTC time: ");
@@ -5413,7 +5653,7 @@ static void bancCommande(String c) {
 
   if (verbe == "info") {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.42\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
+             "{\"version\":\"3.0.44\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
              deviceIdHex().c_str());
     bancRep(buf);
 
@@ -5567,7 +5807,7 @@ static void bancCommande(String c) {
 
   } else if (verbe == "rtc") {
     if (rtc.begin()) {
-      DateTime now = rtc.now();
+      DateTime now = localNow();
       snprintf(buf, sizeof(buf), "{\"time\":\"%04u-%02u-%02u %02u:%02u:%02u\"}",
                now.year(), now.month(), now.day(),
                now.hour(), now.minute(), now.second());
@@ -5739,7 +5979,7 @@ void loop() {
       }
     } else if (cmd.equalsIgnoreCase("showtime")) {
       if (rtc.begin()) {
-        DateTime now = rtc.now();
+        DateTime now = localNow();
         char buf[64];
         snprintf(buf, sizeof(buf), "%04u-%02u-%02u %02u:%02u:%02u", now.year(), now.month(), now.day(), now.hour(), now.minute(), now.second());
         Serial.print("RTC: ");
@@ -5751,15 +5991,15 @@ void loop() {
 
       // set RTC to compile time
       if (rtc.begin()) {
-        rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
-        Serial.println("RTC set to compile time.");
+        rtc.adjust(heureUtc(DateTime(F(__DATE__), F(__TIME__))));   // compilation = heure locale
+        Serial.println("RTC regle sur l'heure de compilation, convertie en UTC.");
         scheduleNextPrayerAlarm();
       } else {
         Serial.println("RTC not initialized or not present.");
       }
     } else if (cmd.equalsIgnoreCase("showtimes")) {
       if (rtc.begin()) {
-        DateTime now = rtc.now();
+        DateTime now = localNow();
         computeAndPrintPrayerTimes(now);
       } else {
         // if RTC not available, use compile date as fallback
@@ -5771,12 +6011,12 @@ void loop() {
     } else if (cmd.equalsIgnoreCase("setalarmtest")) {
       // set an alarm for the next minute (test)
       if (rtc.begin()) {
-        DateTime now = rtc.now();
+        DateTime now = localNow();
         int mm = (now.minute() + 1) % 60;
         int hh = now.hour() + (now.minute() == 59 ? 1 : 0);
-        rtcSetAlarmDaily(hh, mm);
         scheduledPrayerIndex = 1;  // test play track 1
         scheduledPrayerTime = DateTime(now.year(), now.month(), now.day(), hh % 24, mm, 0);
+        { DateTime _u = heureUtc(scheduledPrayerTime); rtcSetAlarmDaily(_u.hour(), _u.minute()); }
         Serial.printf("Test alarm set for %02d:%02d\n", hh % 24, mm);
       } else {
         Serial.println("RTC not present; cannot set alarm.");
@@ -6169,7 +6409,7 @@ void loop() {
   static uint32_t lastPrayerTriggeredUnix = 0;
   uint32_t nowUnix = 0;
   if (rtcPresent) {
-    DateTime _ln = rtc.now();
+    DateTime _ln = localNow();   // compare a scheduledPrayerTime, qui est locale
     if (_ln.month() >= 1 && _ln.month() <= 12 && _ln.year() >= 2020 && _ln.year() <= 2100)
       nowUnix = _ln.unixtime();
   }
@@ -6383,6 +6623,38 @@ void loop() {
   }
 
   // Auto-sync Mawaqit times every 20 hours when connected to WiFi
+  // [HEURE] Surveillance de la bascule ete/hiver.
+  // Le dernier dimanche d'octobre a 3 h locales, l'offset passe de +120 a +60.
+  // L'alarme materielle du RTC a ete programmee en UTC avec l'ANCIEN offset :
+  // sans cette replanification, l'adhan suivant partirait avec une heure
+  // d'ecart. Un test par minute suffit largement et ne coute rien.
+  {
+    static unsigned long dernierTestBascule = 0;
+    static int dernierOffset = 0x7fffffff;
+    if (rtcPresent && millis() - dernierTestBascule > 60000UL) {
+      dernierTestBascule = millis();
+      DateTime utc = rtc.now();
+      if (utc.year() >= 2020 && utc.year() <= 2100) {
+        int off = offsetLocalMin(utc);
+        if (dernierOffset != 0x7fffffff && off != dernierOffset) {
+          Serial.printf("[HEURE] Bascule ete/hiver : offset %+d -> %+d min. Replanification de l'alarme.\n",
+                        dernierOffset, off);
+          // Les horaires Mawaqit en memoire sont ceux d'HIER, lus dans l'ancien
+          // cadran : appliques tels quels apres la bascule, chaque priere
+          // partirait avec une heure d'ecart jusqu'a la synchro suivante, qui
+          // peut attendre 20 h. On les perime : computeNextPrayer() retombe des
+          // maintenant sur le calcul (juste, lui), et la synchro automatique
+          // repart dans la minute si le reseau est la.
+          prefs.begin("adhancfg", false);
+          prefs.putULong("mq_sync_ts", 0);
+          prefs.end();
+          scheduleNextPrayerAlarm();
+        }
+        dernierOffset = off;
+      }
+    }
+  }
+
   static unsigned long lastAutoSyncCheck = 0;
   if (millis() - lastAutoSyncCheck > 60000) {  // Check once per minute
     lastAutoSyncCheck = millis();

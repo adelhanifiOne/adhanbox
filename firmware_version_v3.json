@@ -1,6 +1,6 @@
 {
-  "version": "3.0.42",
+  "version": "3.0.44",
   "hardware": "v3",
   "url": "https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/build_temp_v3/adhanbox_v3.ino.bin",
-  "changelog": "Si le bouton tactile de votre boîtier se déclenche tout seul quand le son est fort et interrompt l adhan, vous pouvez maintenant le désactiver depuis la page de dépannage du boîtier (adhanbox.local), et le réactiver quand vous voulez. L application continue de tout commander."
+  "changelog": "Votre boîtier gère maintenant tout seul le passage à l'heure d'hiver et à l'heure d'été. Le 25 octobre au matin, l'appel à la prière restera à la bonne heure sans que vous ayez à ouvrir l'application, et même si le boîtier n'a pas de connexion à ce moment-là."
 }
