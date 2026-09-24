@@ -1,6 +1,6 @@
 {
- "version": 2,
- "note": "Adhans selectionnables pour les prieres. Chaque entree a une piste sur la carte SD (/mp3/NNNN.mp3), telechargee par la synchro de contenu (audio_content.txt, garder les deux listes identiques). fajr=true <=> la formule « as-salatu khayrun mina n-nawm » est presente, verifie par transcription le 24/09/2026 ; le Fajr n'accepte que ceux-la, les autres prieres jamais. Domaine public ou CC0 uniquement, jamais NC. Doha : coupes avant la doua et l'annonce de la radio (heberges dans audio/). Retires car invérifiables (enregistrement confus) : La Mecque Ramadan, Naif Isha.",
+ "version": 3,
+ "note": "Adhans selectionnables pour les prieres. Chaque entree a une piste sur la carte SD (/mp3/NNNN.mp3), telechargee par la synchro de contenu (audio_content.txt, garder les deux listes identiques). UN NUMERO DE PISTE N'EST JAMAIS REUTILISE : 9, 10, 11 (doublons de Doha retires le 24/09/2026) restent reserves. fajr=true <=> formule « as-salatu khayrun mina n-nawm » presente, verifiee par transcription ; aucune formule chiite ; adhan complet. Domaine public ou CC0 selon archive.org, jamais NC. Pistes 13+ : volume egalise (-16 LUFS), mono 96 kbit/s, hebergees dans audio/adhans/. Exclus : collection 'athan_202001' (contenu djihadiste), disques commerciaux (Yusuf Islam, Ziyaad Patel), adhan chiite (Basim al-Karbalai), enregistrements trop degrades.",
  "muezzins": [
   {
    "id": "imadi",
@@ -57,39 +57,12 @@
    "licence": "Domaine public"
   },
   {
-   "id": "doha-dhuhr",
+   "id": "doha",
    "nom": "Doha, Qatar",
-   "lieu": "enregistré au Dhuhr",
+   "lieu": "",
    "fajr": false,
    "piste": 8,
    "url": "https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/audio/adhan_doha_dhuhr.mp3",
-   "licence": "Domaine public"
-  },
-  {
-   "id": "doha-asr",
-   "nom": "Doha, Qatar",
-   "lieu": "enregistré à l'Asr",
-   "fajr": false,
-   "piste": 9,
-   "url": "https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/audio/adhan_doha_asr.mp3",
-   "licence": "Domaine public"
-  },
-  {
-   "id": "doha-maghrib",
-   "nom": "Doha, Qatar",
-   "lieu": "enregistré au Maghrib",
-   "fajr": false,
-   "piste": 10,
-   "url": "https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/audio/adhan_doha_maghrib.mp3",
-   "licence": "Domaine public"
-  },
-  {
-   "id": "doha-isha",
-   "nom": "Doha, Qatar",
-   "lieu": "enregistré à l'Isha",
-   "fajr": false,
-   "piste": 11,
-   "url": "https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/audio/adhan_doha_isha.mp3",
    "licence": "Domaine public"
   },
   {
@@ -100,6 +73,236 @@
    "piste": 12,
    "url": "https://archive.org/download/28MayFajrAdhanMakkah/28MayFajrAdhanMakkah.mp3",
    "licence": "CC0"
+  },
+  {
+   "id": "suraihi",
+   "nom": "Abdulmajeed Al-Suraihi",
+   "lieu": "Mosquée de Quba, Médine",
+   "fajr": false,
+   "piste": 13,
+   "url": "https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/audio/adhans/suraihi.mp3",
+   "licence": "Domaine public",
+   "source": "https://archive.org/details/zied_hadj_hassen1"
+  },
+  {
+   "id": "fouad-adan",
+   "nom": "Fouad Adan",
+   "lieu": "",
+   "fajr": false,
+   "piste": 14,
+   "url": "https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/audio/adhans/fouad-adan.mp3",
+   "licence": "Domaine public",
+   "source": "https://archive.org/details/AdanAlfajrFouadAdan"
+  },
+  {
+   "id": "nisad",
+   "nom": "Nisad Efendija",
+   "lieu": "Bosnie",
+   "fajr": false,
+   "piste": 15,
+   "url": "https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/audio/adhans/nisad.mp3",
+   "licence": "Domaine public",
+   "source": "https://archive.org/details/EzanUzivo-NisadEfendija"
+  },
+  {
+   "id": "al-aqsa",
+   "nom": "Mosquée Al-Aqsa",
+   "lieu": "Jérusalem",
+   "fajr": false,
+   "piste": 16,
+   "url": "https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/audio/adhans/al-aqsa.mp3",
+   "licence": "Domaine public",
+   "source": "https://archive.org/details/azaan-of-world-mosques_202608"
+  },
+  {
+   "id": "haram-makkah",
+   "nom": "Masjid al-Haram",
+   "lieu": "La Mecque",
+   "fajr": false,
+   "piste": 17,
+   "url": "https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/audio/adhans/haram-makkah.mp3",
+   "licence": "Domaine public",
+   "source": "https://archive.org/details/azaan-of-world-mosques_202608"
+  },
+  {
+   "id": "abdulsattar",
+   "nom": "Hassan Abdulsattar",
+   "lieu": "",
+   "fajr": false,
+   "piste": 18,
+   "url": "https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/audio/adhans/abdulsattar.mp3",
+   "licence": "Domaine public",
+   "source": "https://archive.org/details/azaan-of-world-mosques_202608"
+  },
+  {
+   "id": "rajab",
+   "nom": "Hussein Rajab",
+   "lieu": "",
+   "fajr": false,
+   "piste": 19,
+   "url": "https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/audio/adhans/rajab.mp3",
+   "licence": "Domaine public",
+   "source": "https://archive.org/details/azaan-of-world-mosques_202608"
+  },
+  {
+   "id": "dewli",
+   "nom": "Sami Dewli",
+   "lieu": "",
+   "fajr": false,
+   "piste": 20,
+   "url": "https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/audio/adhans/dewli.mp3",
+   "licence": "Domaine public",
+   "source": "https://archive.org/details/azaan-of-world-mosques_202608"
+  },
+  {
+   "id": "khashoggi",
+   "nom": "Abdulrahman Khashoggi",
+   "lieu": "",
+   "fajr": false,
+   "piste": 21,
+   "url": "https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/audio/adhans/khashoggi.mp3",
+   "licence": "Domaine public",
+   "source": "https://archive.org/details/azaan-of-world-mosques_202608"
+  },
+  {
+   "id": "a-bukhari",
+   "nom": "Abdulaziz Bukhari",
+   "lieu": "",
+   "fajr": false,
+   "piste": 22,
+   "url": "https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/audio/adhans/a-bukhari.mp3",
+   "licence": "Domaine public",
+   "source": "https://archive.org/details/azaan-of-world-mosques_202608"
+  },
+  {
+   "id": "m-najdi",
+   "nom": "Abdulmuttalib Najdi",
+   "lieu": "",
+   "fajr": false,
+   "piste": 23,
+   "url": "https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/audio/adhans/m-najdi.mp3",
+   "licence": "Domaine public",
+   "source": "https://archive.org/details/azaan-of-world-mosques_202608"
+  },
+  {
+   "id": "mulla",
+   "nom": "Abdulmalik Al-Mulla",
+   "lieu": "La Mecque",
+   "fajr": false,
+   "piste": 24,
+   "url": "https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/audio/adhans/mulla.mp3",
+   "licence": "Domaine public",
+   "source": "https://archive.org/details/azaan-of-world-mosques_202608"
+  },
+  {
+   "id": "naamani",
+   "nom": "Abdulmalik Al-Naamani",
+   "lieu": "",
+   "fajr": false,
+   "piste": 25,
+   "url": "https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/audio/adhans/naamani.mp3",
+   "licence": "Domaine public",
+   "source": "https://archive.org/details/azaan-of-world-mosques_202608"
+  },
+  {
+   "id": "e-bukhari",
+   "nom": "Essam Bukhari",
+   "lieu": "",
+   "fajr": false,
+   "piste": 26,
+   "url": "https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/audio/adhans/e-bukhari.mp3",
+   "licence": "Domaine public",
+   "source": "https://archive.org/details/azaan-of-world-mosques_202608"
+  },
+  {
+   "id": "kamal",
+   "nom": "Omar Yusuf Kamal",
+   "lieu": "",
+   "fajr": false,
+   "piste": 27,
+   "url": "https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/audio/adhans/kamal.mp3",
+   "licence": "Domaine public",
+   "source": "https://archive.org/details/azaan-of-world-mosques_202608"
+  },
+  {
+   "id": "k-najdi",
+   "nom": "Kamel Najdi",
+   "lieu": "",
+   "fajr": false,
+   "piste": 28,
+   "url": "https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/audio/adhans/k-najdi.mp3",
+   "licence": "Domaine public",
+   "source": "https://archive.org/details/azaan-of-world-mosques_202608"
+  },
+  {
+   "id": "hakim",
+   "nom": "Majed Hakim",
+   "lieu": "",
+   "fajr": false,
+   "piste": 29,
+   "url": "https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/audio/adhans/hakim.mp3",
+   "licence": "Domaine public",
+   "source": "https://archive.org/details/azaan-of-world-mosques_202608"
+  },
+  {
+   "id": "m-hakim",
+   "nom": "Mohammed Majed Hakim",
+   "lieu": "",
+   "fajr": false,
+   "piste": 30,
+   "url": "https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/audio/adhans/m-hakim.mp3",
+   "licence": "Domaine public",
+   "source": "https://archive.org/details/azaan-of-world-mosques_202608"
+  },
+  {
+   "id": "fouad-adan-fajr",
+   "nom": "Fouad Adan",
+   "lieu": "Fajr",
+   "fajr": true,
+   "piste": 31,
+   "url": "https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/audio/adhans/fouad-adan-fajr.mp3",
+   "licence": "Domaine public",
+   "source": "https://archive.org/details/AdanAlfajrFouadAdan"
+  },
+  {
+   "id": "afifi-fajr",
+   "nom": "Hussein Afifi",
+   "lieu": "Fajr",
+   "fajr": true,
+   "piste": 32,
+   "url": "https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/audio/adhans/afifi-fajr.mp3",
+   "licence": "Domaine public",
+   "source": "https://archive.org/details/azaan-of-world-mosques_202608"
+  },
+  {
+   "id": "dewli-fajr",
+   "nom": "Sami Dewli",
+   "lieu": "Fajr",
+   "fajr": true,
+   "piste": 33,
+   "url": "https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/audio/adhans/dewli-fajr.mp3",
+   "licence": "Domaine public",
+   "source": "https://archive.org/details/azaan-of-world-mosques_202608"
+  },
+  {
+   "id": "e-bukhari-fajr",
+   "nom": "Essam Bukhari",
+   "lieu": "Fajr",
+   "fajr": true,
+   "piste": 34,
+   "url": "https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/audio/adhans/e-bukhari-fajr.mp3",
+   "licence": "Domaine public",
+   "source": "https://archive.org/details/azaan-of-world-mosques_202608"
+  },
+  {
+   "id": "f-naamani-fajr",
+   "nom": "Faisal Al-Naamani",
+   "lieu": "Fajr",
+   "fajr": true,
+   "piste": 35,
+   "url": "https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/audio/adhans/f-naamani-fajr.mp3",
+   "licence": "Domaine public",
+   "source": "https://archive.org/details/azaan-of-world-mosques_202608"
   }
  ]
 }

@@ -2,7 +2,7 @@
 // - Starts an AP when a long-press is detected on CONFIG_BUTTON_PIN
 // - Serves a small webpage that requests navigator.geolocation and POSTs lat/lon
 // - Stores lat/lon/accuracy/timestamp in Preferences (NVS)
-//Version: 3.0.46 (AdhanBox V3 / HW v3)
+//Version: 3.0.47 (AdhanBox V3 / HW v3)
 #include <Arduino.h>
 #include <esp_mac.h>   // esp_read_mac() : MAC eFuse, lisible sans Wi-Fi
 #include <Wire.h>
@@ -627,6 +627,9 @@ class AudioFileSourceHTTPS : public AudioFileSource {
 // 256 Ko en PSRAM = ~16 s d'avance a 128 kbit/s, contre ~2 s pour le tampon
 // SD : de quoi traverser un trou de Wi-Fi sans que le decodeur ait faim.
 #define TAMPON_FLUX_OCTETS (256u * 1024u)
+
+// Plus grand numero de piste d'adhan (/mp3/NNNN.mp3) accepte pour une priere.
+#define PISTE_MAX 99
 
 class I2SAudio {
   SPIClass spi{FSPI};
@@ -2209,7 +2212,7 @@ void handleOtaUploadComplete() {
 // GET /api/firmware/version
 void handleFirmwareVersion() {
   server.send(200, "application/json",
-              "{\"version\":\"3.0.46\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
+              "{\"version\":\"3.0.47\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
 }
 
 // Returns true if the request carries the correct API key (or if token not yet set).
@@ -2323,11 +2326,11 @@ void handleDeviceInfo() {
   char buf[512];
   if (pairingWindow || hasValidToken) {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.46\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
+             "{\"version\":\"3.0.47\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
              OTA_HOSTNAME, deviceIdHex().c_str(), _apiToken.c_str(), _otaPass.c_str());
   } else {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.46\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
+             "{\"version\":\"3.0.47\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
              OTA_HOSTNAME, deviceIdHex().c_str());
   }
   server.send(200, "application/json", buf);
@@ -3049,11 +3052,14 @@ void handleAdhanConfig() {
     int isha_track = (int)extractJsonNumber(body, "isha_track", 2);
 
     // Constrain to 1-21
-    fajr_track = constrain(fajr_track, 1, 21);
-    dhuhr_track = constrain(dhuhr_track, 1, 21);
-    asr_track = constrain(asr_track, 1, 21);
-    maghrib_track = constrain(maghrib_track, 1, 21);
-    isha_track = constrain(isha_track, 1, 21);
+    // [CATALOGUE] Jusqu'a 3.0.46 : 21 pistes, 99 depuis 3.0.47. Le catalogue donne a chaque voix
+    // un numero neuf et ne le reutilise jamais (un fichier present n'est pas
+    // retelecharge : reaffecter un numero ferait jouer la mauvaise voix).
+    fajr_track = constrain(fajr_track, 1, PISTE_MAX);
+    dhuhr_track = constrain(dhuhr_track, 1, PISTE_MAX);
+    asr_track = constrain(asr_track, 1, PISTE_MAX);
+    maghrib_track = constrain(maghrib_track, 1, PISTE_MAX);
+    isha_track = constrain(isha_track, 1, PISTE_MAX);
 
     bool fajr_duaa = extractJsonBool(body, "fajr_duaa", true);
     bool dhuhr_duaa = extractJsonBool(body, "dhuhr_duaa", true);
@@ -3903,7 +3909,7 @@ bool getPrayerPlaybackForIndex(int prayerIndex, int &trackToPlay, bool &playDuaa
 
   prefs.end();
 
-  trackToPlay = constrain(trackToPlay, 1, 21);
+  trackToPlay = constrain(trackToPlay, 1, PISTE_MAX);
   return true;
 }
 
@@ -5932,7 +5938,7 @@ static void bancCommande(String c) {
 
   if (verbe == "info") {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.46\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
+             "{\"version\":\"3.0.47\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
              deviceIdHex().c_str());
     bancRep(buf);
 
