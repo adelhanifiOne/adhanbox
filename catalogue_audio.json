@@ -1,19 +1,105 @@
 {
-  "version": 1,
-  "note": "Catalogue d'ecoute en ligne de l'app AdhanBox. Muezzins : uniquement des enregistrements du domaine public ou CC0 (usage commercial permis), verifies sur carte en streaming le 24/09/2026. Pas de licence NC. URL <= 300 caracteres une fois encodee (limite du firmware).",
-  "muezzins": [
-    {"id": "imadi", "nom": "Ahmed al-Imadi", "lieu": "", "fajr": false, "url": "https://archive.org/download/adhan.notifications/Ahmed_al_Imadi_Adhan.mp3", "licence": "Domaine public"},
-    {"id": "afasy-fajr", "nom": "Mishary al-Afasy", "lieu": "Adhan du Fajr", "fajr": true, "url": "https://archive.org/download/adhan.notifications/Mishary_Rashid_al_Afasy_Fajr_Adhan.mp3", "licence": "Domaine public"},
-    {"id": "hadj-slimane", "nom": "Mokhtar Hadj Slimane", "lieu": "", "fajr": false, "url": "https://archive.org/download/adhan.notifications/Mokhtar_Hadj_Slimane_Adhan.mp3", "licence": "Domaine public"},
-    {"id": "qatami", "nom": "Nasser al-Qatami", "lieu": "", "fajr": false, "url": "https://archive.org/download/adhan.notifications/Nasser_al_Qatami_Adhan.mp3", "licence": "Domaine public"},
-    {"id": "hamathani", "nom": "Majed al-Hamathani", "lieu": "", "fajr": false, "url": "https://archive.org/download/adhan.notifications/Majed_al_Hamathani_Adhan.mp3", "licence": "Domaine public"},
-    {"id": "makkah-fajr", "nom": "La Mecque", "lieu": "Adhan du Fajr", "fajr": true, "url": "https://archive.org/download/28MayFajrAdhanMakkah/28MayFajrAdhanMakkah.mp3", "licence": "CC0"},
-    {"id": "makkah-ramadan", "nom": "La Mecque", "lieu": "Ramadan", "fajr": false, "url": "https://archive.org/download/MakkahAzan-ramadan/MakkahAzan-ramadan.mp3", "licence": "CC0"},
-    {"id": "doha-fajr", "nom": "Doha, Qatar", "lieu": "Adhan du Fajr", "fajr": true, "url": "https://archive.org/download/adhan.recordings.from.doha.qatar/Adhan_Doha_Qatar_01_Fajr_Adhan.mp3", "licence": "Domaine public"},
-    {"id": "doha-dhuhr", "nom": "Doha, Qatar", "lieu": "Adhan du Dhuhr", "fajr": false, "url": "https://archive.org/download/adhan.recordings.from.doha.qatar/Adhan_Doha_Qatar_02_Dhuhr_Adhan.mp3", "licence": "Domaine public"},
-    {"id": "doha-asr", "nom": "Doha, Qatar", "lieu": "Adhan de l'Asr", "fajr": false, "url": "https://archive.org/download/adhan.recordings.from.doha.qatar/Adhan_Doha_Qatar_03_Asr_Adhan.mp3", "licence": "Domaine public"},
-    {"id": "doha-maghrib", "nom": "Doha, Qatar", "lieu": "Adhan du Maghrib", "fajr": false, "url": "https://archive.org/download/adhan.recordings.from.doha.qatar/Adhan_Doha_Qatar_04_Maghrib_Adhan.mp3", "licence": "Domaine public"},
-    {"id": "doha-isha", "nom": "Doha, Qatar", "lieu": "Adhan de l'Isha", "fajr": false, "url": "https://archive.org/download/adhan.recordings.from.doha.qatar/Adhan_Doha_Qatar_05_Isha_Adhan.mp3", "licence": "Domaine public"},
-    {"id": "naif-isha", "nom": "Naif", "lieu": "Adhan de l'Isha", "fajr": false, "url": "https://archive.org/download/AzanNaifIshaAzan/AzanNaifIshaAzan28thOct09.mp3", "licence": "Domaine public"}
-  ]
+ "version": 2,
+ "note": "Adhans selectionnables pour les prieres. Chaque entree a une piste sur la carte SD (/mp3/NNNN.mp3), telechargee par la synchro de contenu (audio_content.txt, garder les deux listes identiques). fajr=true <=> la formule « as-salatu khayrun mina n-nawm » est presente, verifie par transcription le 24/09/2026 ; le Fajr n'accepte que ceux-la, les autres prieres jamais. Domaine public ou CC0 uniquement, jamais NC. Doha : coupes avant la doua et l'annonce de la radio (heberges dans audio/). Retires car invérifiables (enregistrement confus) : La Mecque Ramadan, Naif Isha.",
+ "muezzins": [
+  {
+   "id": "imadi",
+   "nom": "Ahmed al-Imadi",
+   "lieu": "",
+   "fajr": false,
+   "piste": 2,
+   "url": "https://archive.org/download/adhan.notifications/Ahmed_al_Imadi_Adhan.mp3",
+   "licence": "Domaine public"
+  },
+  {
+   "id": "afasy-fajr",
+   "nom": "Mishary al-Afasy",
+   "lieu": "Fajr",
+   "fajr": true,
+   "piste": 3,
+   "url": "https://archive.org/download/adhan.notifications/Mishary_Rashid_al_Afasy_Fajr_Adhan.mp3",
+   "licence": "Domaine public"
+  },
+  {
+   "id": "hadj-slimane",
+   "nom": "Mokhtar Hadj Slimane",
+   "lieu": "",
+   "fajr": false,
+   "piste": 4,
+   "url": "https://archive.org/download/adhan.notifications/Mokhtar_Hadj_Slimane_Adhan.mp3",
+   "licence": "Domaine public"
+  },
+  {
+   "id": "qatami",
+   "nom": "Nasser al-Qatami",
+   "lieu": "",
+   "fajr": false,
+   "piste": 5,
+   "url": "https://archive.org/download/adhan.notifications/Nasser_al_Qatami_Adhan.mp3",
+   "licence": "Domaine public"
+  },
+  {
+   "id": "hamathani",
+   "nom": "Majed al-Hamathani",
+   "lieu": "",
+   "fajr": false,
+   "piste": 6,
+   "url": "https://archive.org/download/adhan.notifications/Majed_al_Hamathani_Adhan.mp3",
+   "licence": "Domaine public"
+  },
+  {
+   "id": "doha-fajr",
+   "nom": "Doha, Qatar",
+   "lieu": "Fajr",
+   "fajr": true,
+   "piste": 7,
+   "url": "https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/audio/adhan_doha_fajr.mp3",
+   "licence": "Domaine public"
+  },
+  {
+   "id": "doha-dhuhr",
+   "nom": "Doha, Qatar",
+   "lieu": "enregistré au Dhuhr",
+   "fajr": false,
+   "piste": 8,
+   "url": "https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/audio/adhan_doha_dhuhr.mp3",
+   "licence": "Domaine public"
+  },
+  {
+   "id": "doha-asr",
+   "nom": "Doha, Qatar",
+   "lieu": "enregistré à l'Asr",
+   "fajr": false,
+   "piste": 9,
+   "url": "https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/audio/adhan_doha_asr.mp3",
+   "licence": "Domaine public"
+  },
+  {
+   "id": "doha-maghrib",
+   "nom": "Doha, Qatar",
+   "lieu": "enregistré au Maghrib",
+   "fajr": false,
+   "piste": 10,
+   "url": "https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/audio/adhan_doha_maghrib.mp3",
+   "licence": "Domaine public"
+  },
+  {
+   "id": "doha-isha",
+   "nom": "Doha, Qatar",
+   "lieu": "enregistré à l'Isha",
+   "fajr": false,
+   "piste": 11,
+   "url": "https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/audio/adhan_doha_isha.mp3",
+   "licence": "Domaine public"
+  },
+  {
+   "id": "makkah-fajr",
+   "nom": "La Mecque",
+   "lieu": "Fajr",
+   "fajr": true,
+   "piste": 12,
+   "url": "https://archive.org/download/28MayFajrAdhanMakkah/28MayFajrAdhanMakkah.mp3",
+   "licence": "CC0"
+  }
+ ]
 }
