@@ -2,7 +2,7 @@
 // - Starts an AP when a long-press is detected on CONFIG_BUTTON_PIN
 // - Serves a small webpage that requests navigator.geolocation and POSTs lat/lon
 // - Stores lat/lon/accuracy/timestamp in Preferences (NVS)
-//Version: 3.0.45 (AdhanBox V3 / HW v3)
+//Version: 3.0.46 (AdhanBox V3 / HW v3)
 #include <Arduino.h>
 #include <esp_mac.h>   // esp_read_mac() : MAC eFuse, lisible sans Wi-Fi
 #include <Wire.h>
@@ -2209,7 +2209,7 @@ void handleOtaUploadComplete() {
 // GET /api/firmware/version
 void handleFirmwareVersion() {
   server.send(200, "application/json",
-              "{\"version\":\"3.0.45\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
+              "{\"version\":\"3.0.46\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
 }
 
 // Returns true if the request carries the correct API key (or if token not yet set).
@@ -2323,11 +2323,11 @@ void handleDeviceInfo() {
   char buf[512];
   if (pairingWindow || hasValidToken) {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.45\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
+             "{\"version\":\"3.0.46\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
              OTA_HOSTNAME, deviceIdHex().c_str(), _apiToken.c_str(), _otaPass.c_str());
   } else {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.45\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
+             "{\"version\":\"3.0.46\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
              OTA_HOSTNAME, deviceIdHex().c_str());
   }
   server.send(200, "application/json", buf);
@@ -4477,6 +4477,26 @@ bool playTrack(int track) {
   return true;
 }
 
+// [ADHAN] Joue l'adhan d'une priere sans JAMAIS laisser le silence. La piste
+// choisie peut manquer : muezzin du catalogue pas encore telecharge (boite
+// hors ligne depuis le choix), fichier efface, SD remplacee. Avant 3.0.46,
+// playTrack() echouait et rien ne sonnait. Ordre de repli : l'adhan d'origine
+// de la priere (3 = Fajr, avec « as-salatu khayrun mina n-nawm » ; 2 pour les
+// autres), puis tout adhan d'origine present. Le 3 n'est jamais un repli hors
+// Fajr : sa formule n'appartient qu'a l'aube. Rend la piste jouee, 0 si aucune.
+int jouerAdhan(int track, bool fajr) {
+  if (track >= 2 && playTrack(track)) return track;
+  const int defaut = fajr ? 3 : 2;
+  Serial.printf("[ADHAN] piste %d absente -> repli sur %d\n", track, defaut);
+  if (track != defaut && playTrack(defaut)) return defaut;
+  for (int t = 2; t <= 6; t++) {
+    if (t == track || t == defaut || (t == 3 && !fajr)) continue;
+    if (playTrack(t)) return t;
+  }
+  Serial.println("[ADHAN] aucun adhan sur la carte");
+  return 0;
+}
+
 void stopPlay(const char *cause) {
   audio.noterAvantStop(cause);
   shouldPlayDuaaAfterAdhan = false;
@@ -4634,7 +4654,8 @@ void mqttCallback(char *topic, byte *payload, unsigned int len) {
       ledScenario = SCENE_PRAYER;
       Serial.printf("MQTT adhan: LED switched to PRAYER scene (was %d)\n", prayerPrevLedScenario);
     }
-    if (playTrack(track)) {
+    adhanTrackBeforeDuaa = jouerAdhan(track, false);
+    if (adhanTrackBeforeDuaa) {
       mqtt.publish(topicPour(TOPIC_AUDIO_STATUS).c_str(), "playing");
     } else {
       mqtt.publish(topicPour(TOPIC_AUDIO_STATUS).c_str(), "refus:fichier absent");
@@ -5911,7 +5932,7 @@ static void bancCommande(String c) {
 
   if (verbe == "info") {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.45\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
+             "{\"version\":\"3.0.46\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
              deviceIdHex().c_str());
     bancRep(buf);
 
@@ -6751,14 +6772,13 @@ void loop() {
 
             if (playDuaaAfter) {
               shouldPlayDuaaAfterAdhan = true;
-              adhanTrackBeforeDuaa = trackToPlay;
               Serial.printf("Playing adhan first (track %d), then duaa (track 1)\n", trackToPlay);
-              playTrack(trackToPlay);
+              adhanTrackBeforeDuaa = jouerAdhan(trackToPlay, scheduledPrayerIndex == 1);
             } else {
               shouldPlayDuaaAfterAdhan = false;
               adhanTrackBeforeDuaa = 0;
               Serial.printf("Playing adhan directly (track %d) without duaa\n", trackToPlay);
-              playTrack(trackToPlay);
+              jouerAdhan(trackToPlay, scheduledPrayerIndex == 1);
             }
             demoPriereA = (uint32_t)nowUnix;   // [MOSQUEE] point de depart du silence d'apres
             mqttPublishPrayerFired(scheduledPrayerIndex);

@@ -1,6 +1,6 @@
 {
-  "version": "3.0.45",
+  "version": "3.0.46",
   "hardware": "v3",
   "url": "https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/build_temp_v3/adhanbox_v3.ino.bin",
-  "changelog": "Votre boîtier est prêt pour l'écoute en ligne de récitateurs et de muezzins, qui arrive avec la prochaine mise à jour de l'application. Si Internet coupe pendant l'écoute, il continue tout seul avec l'adhan enregistré dans le boîtier : l'appel à la prière ne dépend jamais de la connexion."
+  "changelog": "Votre boîtier ne reste plus jamais silencieux à l'heure de la prière : si l'adhan choisi n'est pas encore sur sa carte, il joue à la place l'adhan d'origine de cette prière. Il se prépare aussi à recevoir de nouveaux muezzins au choix, qui arrivent avec la prochaine mise à jour de l'application."
 }
