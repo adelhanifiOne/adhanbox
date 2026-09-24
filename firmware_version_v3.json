@@ -1,6 +1,6 @@
 {
-  "version": "3.0.44",
+  "version": "3.0.45",
   "hardware": "v3",
   "url": "https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/build_temp_v3/adhanbox_v3.ino.bin",
-  "changelog": "Votre boîtier gère maintenant tout seul le passage à l'heure d'hiver et à l'heure d'été. Le 25 octobre au matin, l'appel à la prière restera à la bonne heure sans que vous ayez à ouvrir l'application, et même si le boîtier n'a pas de connexion à ce moment-là."
+  "changelog": "Votre boîtier est prêt pour l'écoute en ligne de récitateurs et de muezzins, qui arrive avec la prochaine mise à jour de l'application. Si Internet coupe pendant l'écoute, il continue tout seul avec l'adhan enregistré dans le boîtier : l'appel à la prière ne dépend jamais de la connexion."
 }

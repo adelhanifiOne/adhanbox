@@ -2,7 +2,7 @@
 // - Starts an AP when a long-press is detected on CONFIG_BUTTON_PIN
 // - Serves a small webpage that requests navigator.geolocation and POSTs lat/lon
 // - Stores lat/lon/accuracy/timestamp in Preferences (NVS)
-//Version: 3.0.44 (AdhanBox V3 / HW v3)
+//Version: 3.0.45 (AdhanBox V3 / HW v3)
 #include <Arduino.h>
 #include <esp_mac.h>   // esp_read_mac() : MAC eFuse, lisible sans Wi-Fi
 #include <Wire.h>
@@ -482,18 +482,167 @@ static uint32_t IRAM_ATTR tournerEnRond(uint32_t us) {
   return (uint32_t)(esp_timer_get_time() - t0 - us);
 }
 
+// ── [FLUX] Source audio HTTPS ────────────────────────────────────────────────
+// Lire le Coran d'un recitateur qui n'est pas sur la carte SD, directement
+// depuis Internet. La source HTTP de la bibliotheque ne convient pas : elle
+// n'utilise qu'un client reseau NU (pas de HTTPS, donc aucun serveur moderne),
+// et son calcul de fin de flux est faux (pos - size au lieu de size - pos).
+// Celle-ci passe par le client securise et les certificats racines de
+// securiser(), comme Mawaqit et GitHub.
+// REGLE : un flux ne sert JAMAIS a l'adhan de l'heure. Seulement a l'ecoute a
+// la demande ; l'adhan d'une priere reste lu depuis la SD, qui marche hors
+// ligne. Une priere qui tombe pendant un flux l'arrete (playPath -> stop()).
+class AudioFileSourceHTTPS : public AudioFileSource {
+  // [FLUX] La source porte son propre anneau. AudioFileSourceBuffer ne
+  // convient pas a un flux : sa premiere lecture recopie la source depuis le
+  // debut du tampon (ce qui est deja precharge est ecrase), et un creux reseau
+  // lui fait rendre 0 octet, que le decodeur MP3 prend pour la fin du fichier.
+  // Vu au banc le 24/09/2026 : bascule sur la SD apres 3 s, a 1 %.
+  WiFiClientSecure client;
+  HTTPClient http;
+  uint32_t taille = 0;             // annoncee par le serveur, 0 = inconnue
+  uint32_t recu = 0;               // octets venus du reseau
+  uint32_t lu = 0;                 // octets rendus au decodeur
+  bool ouvert = false;
+  bool fini = false;               // tout recu, ou le serveur a ferme
+  uint8_t *anneau = nullptr;
+  uint32_t cap = 0, tete = 0, queue = 0, niveau = 0;
+  uint32_t rendre(void *data, uint32_t len) {
+    const uint32_t n = len < niveau ? len : niveau;
+    uint32_t fait = 0;
+    while (fait < n) {
+      uint32_t k = n - fait;
+      if (k > cap - queue) k = cap - queue;
+      memcpy((uint8_t *)data + fait, anneau + queue, k);
+      queue = (queue + k) % cap;
+      fait += k;
+    }
+    niveau -= n;
+    lu += n;
+    return n;
+  }
+ public:
+  virtual ~AudioFileSourceHTTPS() override { close(); }
+  void fournirAnneau(uint8_t *b, uint32_t n) { anneau = b; cap = n; tete = queue = niveau = 0; }
+  uint32_t niveauTampon() const { return niveau; }
+  bool termine() const { return fini; }
+  // Tire du reseau ce qui est DEJA arrive, sans attendre. Borne par appel : on
+  // est dans loop(), la file I2S et MQTT passent aussi par la.
+  void remplir(uint32_t maxOctets = 16384) {
+    if (!ouvert || fini || !anneau) return;
+    auto *flux = http.getStreamPtr();
+    if (!flux) { fini = true; return; }
+    uint32_t pris = 0;
+    while (niveau < cap && pris < maxOctets) {
+      const int dispo = flux->available();
+      if (dispo <= 0) { if (!flux->connected()) fini = true; break; }
+      uint32_t n = (uint32_t)dispo;
+      if (n > cap - niveau) n = cap - niveau;
+      if (n > cap - tete) n = cap - tete;
+      if (n > maxOctets - pris) n = maxOctets - pris;
+      const int r = flux->read(anneau + tete, n);
+      if (r <= 0) break;
+      tete = (tete + (uint32_t)r) % cap;
+      niveau += (uint32_t)r;
+      recu += (uint32_t)r;
+      pris += (uint32_t)r;
+      if (taille && recu >= taille) { fini = true; break; }
+    }
+  }
+  // Saute l'etiquette ID3v2 de tete (titre, recitateur, parfois une pochette).
+  // Le decodeur y voit de faux debuts de trame, et apres trois « BUFLEN » de
+  // suite la bibliotheque abandonne : vu au banc sur mp3quran, 6,8 Ko d'ID3,
+  // arret a 3 s. A appeler apres la precharge, avant le decodeur.
+  bool sauterId3() {
+    if (niveau < 10) return true;
+    uint8_t e[10];
+    for (int i = 0; i < 10; i++) e[i] = anneau[(queue + i) % cap];
+    if (e[0] != 'I' || e[1] != 'D' || e[2] != '3') return true;
+    uint32_t n = 10 + ((uint32_t)(e[6] & 0x7f) << 21 | (uint32_t)(e[7] & 0x7f) << 14 |
+                       (uint32_t)(e[8] & 0x7f) << 7 | (e[9] & 0x7f));
+    if (e[5] & 0x10) n += 10;        // pied de page ID3v2.4
+    Serial.printf("[FLUX] etiquette ID3 de %lu octets sautee\n", (unsigned long)n);
+    const uint32_t t0 = millis();
+    while (n) {
+      if (niveau == 0) {
+        if (fini || millis() - t0 > 6000) return false;
+        remplir();
+        delay(2);
+        continue;
+      }
+      const uint32_t k = n < niveau ? n : niveau;
+      queue = (queue + k) % cap;
+      niveau -= k;
+      lu += k;
+      n -= k;
+    }
+    return true;
+  }
+  virtual bool open(const char *url) override {
+    securiser(client);
+    http.setReuse(false);
+    http.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
+    http.setConnectTimeout(6000);
+    http.setTimeout(8000);
+    http.setUserAgent("AdhanBox/3");
+    if (!http.begin(client, url)) return false;
+    const int code = http.GET();
+    if (code != HTTP_CODE_OK) {
+      Serial.printf("[FLUX] refus HTTP %d\n", code);
+      http.end();
+      return false;
+    }
+    const int t = http.getSize();
+    taille = t > 0 ? (uint32_t)t : 0;
+    recu = lu = 0;
+    fini = false;
+    ouvert = true;
+    return true;
+  }
+  // Tampon vide : on attend le reseau, borne. Un blanc d'une seconde vaut mieux
+  // qu'une bascule, puisqu'un 0 ici arrete le decodeur. Au-dela de 2,5 s le flux
+  // est tenu pour perdu et pump() passe a la copie SD.
+  virtual uint32_t read(void *data, uint32_t len) override {
+    if (!ouvert || !data || !len || !anneau) return 0;
+    const uint32_t t0 = millis();
+    while (niveau == 0 && !fini && millis() - t0 < 2500) {
+      remplir();
+      if (niveau == 0) delay(5);
+    }
+    return rendre(data, len);
+  }
+  virtual uint32_t readNonBlock(void *data, uint32_t len) override {
+    if (!ouvert || !data || !len || !anneau) return 0;
+    remplir();
+    return rendre(data, len);
+  }
+  virtual bool loop() override { remplir(); return true; }
+  virtual bool seek(int32_t, int) override { return false; }
+  virtual bool close() override { if (ouvert) http.end(); ouvert = false; return true; }
+  virtual bool isOpen() override { return ouvert; }
+  virtual uint32_t getSize() override { return taille; }
+  virtual uint32_t getPos() override { return lu; }   // position du DECODEUR
+};
+
+// 256 Ko en PSRAM = ~16 s d'avance a 128 kbit/s, contre ~2 s pour le tampon
+// SD : de quoi traverser un trou de Wi-Fi sans que le decodeur ait faim.
+#define TAMPON_FLUX_OCTETS (256u * 1024u)
+
 class I2SAudio {
   SPIClass spi{FSPI};
   AudioOutputI2S        *out = nullptr;
   AudioGeneratorMP3     *mp3 = nullptr;
   AudioGeneratorWAV     *wav = nullptr;
-  AudioFileSourceSD     *src = nullptr;
+  AudioFileSource       *src = nullptr;   // SD ou flux HTTPS
   AudioFileSourceBuffer *buf = nullptr;
   float gain = 0.5f;
   bool  _sdOk = false;
   uint32_t _sdClock = 0;
   bool _paused = false;          // [PLAYER] pause logicielle : pump() suspend le decodage
   char _curPath[64] = {0};       // [PLAYER] fichier en cours (pour /api/audio/status)
+  uint8_t *_tamponFlux = nullptr;  // [FLUX] tampon PSRAM, libere par stop()
+  bool _flux = false;              // [FLUX] la lecture en cours vient d'Internet
+  char _repli[64] = {0};           // [FLUX] copie SD a jouer si le flux lache
  public:
   uint32_t sdClock() const { return _sdClock; }
   // Bench debit SD : lit `bytes` octets d'un fichier existant et renvoie ko/s.
@@ -587,6 +736,11 @@ class I2SAudio {
     if (wav) { wav->stop(); delete wav; wav = nullptr; }
     if (buf) { delete buf; buf = nullptr; }
     if (src) { delete src; src = nullptr; }
+    // [FLUX] Anneau fourni par nous : personne d'autre ne le libere. APRES
+    // la destruction de src, qui l'utilise jusqu'au bout.
+    if (_tamponFlux) { heap_caps_free(_tamponFlux); _tamponFlux = nullptr; }
+    _flux = false;
+    _repli[0] = 0;
     _paused = false;
     _curPath[0] = 0;
     miette("repos");
@@ -696,29 +850,41 @@ class I2SAudio {
     if (!buf) { delete src; src = nullptr;
                 Serial.println("[Audio] plus de memoire pour le tampon"); return false; }
     String p = path; p.toLowerCase();
-    bool ok;
-    // [SYNCHRO] Si un telechargement est en cours, on le fait abandonner et on
-    // attend qu'il ait rendu sa memoire (TLS + pile de 32 Ko) : c'est cette
-    // memoire-la qui decide de la taille du coussin, juste en dessous.
+    abandonnerSynchro();
+    return lancer(p.endsWith(".wav"));
+  }
+
+  // [SYNCHRO] Si un telechargement est en cours, on le fait abandonner et on
+  // attend qu'il ait rendu sa memoire (TLS + pile de 32 Ko) : c'est cette
+  // memoire-la qui decide de la taille du coussin, juste en dessous.
+  void abandonnerSynchro() {
     if (_syncRunning) {
       _syncAbandon = true;
       for (int i = 0; i < 80 && _syncRunning; i++) delay(10);   // au plus 800 ms
       _syncAbandon = false;
     }
+  }
+
+  // Cree le decodeur sur `buf` (SD) ou sur la source de flux, qui porte son
+  // propre anneau, et amorce l'ampli. Commun a la SD et
+  // au flux : c'est la partie delicate (assert de la bibliotheque sur le DMA),
+  // elle ne doit exister qu'a un seul endroit.
+  bool lancer(bool estWav) {
+    bool ok;
     dimensionnerCoussin();           // [CREPITEMENT] juste avant que begin() ne cree le canal
     // [PLANTAGE] C'est ICI que ca casse quand ca casse : begin() appelle
     // i2s_new_channel puis i2s_channel_init_std_mode, tous deux sous assert().
     // La miette porte la RAM DMA libre : si la carte redemarre sur cette
     // etape, le diagnostic dira combien il en restait.
     miette("ouverture canal audio", g_blocage.dmaLibre);
-    if (p.endsWith(".wav")) {
+    if (estWav) {
       wav = new AudioGeneratorWAV();
       if (!wav) { stop(); Serial.println("[Audio] plus de memoire pour le decodeur"); return false; }
-      ok = wav->begin(buf, out);
+      ok = wav->begin(buf ? (AudioFileSource *)buf : src, out);
     } else {
       mp3 = new AudioGeneratorMP3();
       if (!mp3) { stop(); Serial.println("[Audio] plus de memoire pour le decodeur"); return false; }
-      ok = mp3->begin(buf, out);
+      ok = mp3->begin(buf ? (AudioFileSource *)buf : src, out);
     }
     miette(ok ? "lecture" : "lecture refusee");
     // Anti "debut coupe" : recreer le canal I2S redemarre BCLK -> le MAX98357A se
@@ -735,6 +901,59 @@ class I2SAudio {
     }
     return ok;
   }
+  // [FLUX] Lit une URL HTTPS. Rend 1 si le flux joue, 2 si la copie SD `repli`
+  // a pris le relais, 0 si rien ne joue. Le repli sert deux fois : si le flux
+  // ne demarre pas (pas de Wi-Fi, serveur absent, refus), et s'il se coupe en
+  // route (voir pump()).
+  int playUrl(const char *url, const char *repli) {
+    char repliCopie[64] = {0};
+    if (repli && *repli) strncpy(repliCopie, repli, sizeof(repliCopie) - 1);
+    if (mp3 || wav) stop("nouvelle lecture flux"); else stop();
+    g_blocage.raz();
+    auto versRepli = [&](const char *pourquoi) -> int {
+      Serial.printf("[FLUX] %s -> %s\n", pourquoi, repliCopie[0] ? repliCopie : "aucun repli");
+      if (repliCopie[0] && playPath(repliCopie)) return 2;
+      return 0;
+    };
+    if (WiFi.status() != WL_CONNECTED) return versRepli("pas de Wi-Fi");
+    abandonnerSynchro();            // le TLS du flux a besoin de la memoire de la synchro
+    miette("ouverture flux");
+    AudioFileSourceHTTPS *h = new AudioFileSourceHTTPS();
+    if (!h) return versRepli("plus de memoire pour la source");
+    if (!h->open(url)) { delete h; return versRepli("flux injoignable"); }
+    src = h;
+    uint32_t cap = TAMPON_FLUX_OCTETS;
+    _tamponFlux = (uint8_t *)heap_caps_malloc(cap, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!_tamponFlux) {                  // sans PSRAM : comme la SD
+      cap = 32768;
+      _tamponFlux = (uint8_t *)heap_caps_malloc(cap, MALLOC_CAP_8BIT);
+    }
+    if (!_tamponFlux) { stop(); return versRepli("plus de memoire pour le tampon"); }
+    h->fournirAnneau(_tamponFlux, cap);
+    _flux = true;
+    strncpy(_repli, repliCopie, sizeof(_repli) - 1);
+    // /api/audio/status ne garde que 63 caracteres : on marque la source et on
+    // garde la FIN de l'URL, celle qui nomme le recitateur et la sourate.
+    const size_t n = strlen(url);
+    snprintf(_curPath, sizeof(_curPath), "flux:%s", n > 57 ? url + n - 57 : url);
+    // Precharge ~4 s de son (64 Ko a 128 kbit/s) avant de lancer le decodeur :
+    // sans avance, le premier creux du Wi-Fi tombe tout de suite en panne seche.
+    const uint32_t visee = cap / 4, t0 = millis();
+    while (h->niveauTampon() < visee && !h->termine() && millis() - t0 < 6000) {
+      h->remplir();
+      delay(2);
+    }
+    Serial.printf("[FLUX] ouvert, %lu octets annonces, %lu precharges en %lu ms, tampon %lu Ko\n",
+                  (unsigned long)src->getSize(), (unsigned long)h->niveauTampon(),
+                  (unsigned long)(millis() - t0), (unsigned long)(cap / 1024));
+    if (h->niveauTampon() == 0) { stop(); return versRepli("flux muet"); }
+    if (!h->sauterId3()) { stop(); return versRepli("etiquette ID3 illisible"); }
+    String u = url; u.toLowerCase();
+    if (!lancer(u.endsWith(".wav"))) { stop(); return versRepli("decodeur refuse"); }
+    return 1;
+  }
+  bool isStream() const { return _flux; }
+
   // Rend VRAI seulement si le fichier existe et que la lecture a demarre. La
   // version precedente ne rendait rien : un numero de piste inexistant passait
   // pour un succes, et tout le monde en aval annonçait une lecture silencieuse.
@@ -759,7 +978,18 @@ class I2SAudio {
     // lui donne plus rien (trois lectures SD a zero octet de suite). La position
     // fait la difference : a moins de 8 Ko de la fin, c'est la fin.
     if (mp3 && mp3->isRunning()) {
-      if (!mp3->loop()) stop((sizeBytes() && posBytes() + 8192 >= sizeBytes()) ? "fin du fichier" : "decodeur : la carte SD ne repond plus");
+      if (!mp3->loop()) {
+        const bool fin = sizeBytes() && posBytes() + 8192 >= sizeBytes();
+        if (_flux && !fin) {
+          // [FLUX] Coupure en route : on ne laisse pas le silence, on bascule
+          // sur la copie SD si l'appelant en a donne une.
+          char r[64]; strncpy(r, _repli, sizeof(r)); r[sizeof(r) - 1] = 0;
+          stop("flux interrompu");
+          if (r[0]) { Serial.printf("[FLUX] coupure -> repli %s\n", r); playPath(r); }
+        } else {
+          stop(fin ? (_flux ? "fin du flux" : "fin du fichier") : "decodeur : la carte SD ne repond plus");
+        }
+      }
     }
     if (wav && wav->isRunning()) {
       if (!wav->loop()) stop((sizeBytes() && posBytes() + 8192 >= sizeBytes()) ? "fin du fichier" : "decodeur : la carte SD ne repond plus");
@@ -842,6 +1072,7 @@ void handleAudioResume();   // [PLAYER] reprise
 void handleDiag();
 void handleBouton();          // [BOUTON] couper / rallumer le capteur tactile
 void handlePlayFile();
+void handleAudioStream();   // [FLUX] lecture d'une URL HTTPS, repli SD
 void handleStopPlay();
 bool tryReinitSD();
 bool playTrack(int track);
@@ -1978,7 +2209,7 @@ void handleOtaUploadComplete() {
 // GET /api/firmware/version
 void handleFirmwareVersion() {
   server.send(200, "application/json",
-              "{\"version\":\"3.0.44\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
+              "{\"version\":\"3.0.45\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
 }
 
 // Returns true if the request carries the correct API key (or if token not yet set).
@@ -2024,9 +2255,10 @@ void handleAudioStatus() {
   prefs.end();
   char buf[256];
   snprintf(buf, sizeof(buf),
-           "{\"playing\":%s,\"paused\":%s,\"file\":\"%s\",\"pos\":%lu,\"size\":%lu,\"volume\":%d}",
+           "{\"playing\":%s,\"paused\":%s,\"source\":\"%s\",\"file\":\"%s\",\"pos\":%lu,\"size\":%lu,\"volume\":%d}",
            ((isPlaying && audio.isRunning()) || g_enchainement) ? "true" : "false",
            audio.isPaused() ? "true" : "false",
+           audio.isStream() ? "flux" : "sd",
            audio.currentPath(),
            (unsigned long)audio.posBytes(),
            (unsigned long)audio.sizeBytes(),
@@ -2091,11 +2323,11 @@ void handleDeviceInfo() {
   char buf[512];
   if (pairingWindow || hasValidToken) {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.44\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
+             "{\"version\":\"3.0.45\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
              OTA_HOSTNAME, deviceIdHex().c_str(), _apiToken.c_str(), _otaPass.c_str());
   } else {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.44\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
+             "{\"version\":\"3.0.45\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
              OTA_HOSTNAME, deviceIdHex().c_str());
   }
   server.send(200, "application/json", buf);
@@ -3269,6 +3501,7 @@ void setupServerRoutes() {
 #endif
   server.on("/api/audio/delete", HTTP_GET, handleAudioDelete);
   server.on("/api/audio/play", HTTP_GET, handlePlayFile);
+  server.on("/api/audio/stream", HTTP_GET, handleAudioStream);   // [FLUX]
   server.on("/api/led/status", HTTP_GET, handleLedStatus);       // [ETAT REEL] etat LED complet
   server.on("/api/device/info", HTTP_GET, handleDeviceInfo);
   server.on("/api/factory_status", HTTP_GET, handleFactoryStatus);   // [USINE]
@@ -4698,6 +4931,31 @@ void handlePlayFile() {
   server.send(200, "application/json", j);
 }
 
+// [FLUX] GET /api/audio/stream?url=https://...&repli=/quran/afs/001.mp3&volume=12
+// Ecoute A LA DEMANDE d'un recitateur absent de la carte. `repli` (facultatif)
+// est un fichier de la SD joue si le flux ne demarre pas ou se coupe.
+// HTTPS uniquement : un flux en clair se laisse remplacer en route.
+void handleAudioStream() {
+  if (!requireApiKey()) return;
+  String url = server.arg("url");
+  String repli = server.arg("repli");
+  if (!url.startsWith("https://") || url.length() > 300) {
+    server.send(400, "application/json", "{\"error\":\"url https requise (300 caracteres max)\"}");
+    return;
+  }
+  if (repli.length() && !SD.exists(repli)) {
+    server.send(404, "application/json", "{\"error\":\"repli absent de la carte\",\"repli\":\"" + repli + "\"}");
+    return;
+  }
+  String v = server.arg("volume");
+  if (v.length()) audio.volume(constrain(v.toInt(), 0, 30));
+  const int r = audio.playUrl(url.c_str(), repli.c_str());
+  if (r) isPlaying = true;
+  const char *source = r == 1 ? "flux" : r == 2 ? "repli" : "aucune";
+  server.send(200, "application/json",
+              String("{\"started\":") + (r ? "true" : "false") + ",\"source\":\"" + source + "\"}");
+}
+
 void handleAudioList() {
   String out = "[";
   bool first = true;
@@ -5653,7 +5911,7 @@ static void bancCommande(String c) {
 
   if (verbe == "info") {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.44\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
+             "{\"version\":\"3.0.45\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
              deviceIdHex().c_str());
     bancRep(buf);
 
