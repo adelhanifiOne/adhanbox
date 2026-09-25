@@ -76,13 +76,14 @@
             </div>
             <div id="relay-block">
               <div class="field-row">
+                <input type="text" id="relay-street" placeholder="Votre adresse (n° et rue)" autocomplete="address-line1" aria-label="Adresse">
                 <input type="text" id="relay-zip" inputmode="numeric" maxlength="5" placeholder="Code postal" autocomplete="postal-code" aria-label="Code postal">
                 <input type="text" id="relay-city" placeholder="Ville" autocomplete="address-level2" aria-label="Ville">
                 <button type="button" class="pill-btn" id="relay-search">Trouver un point relais</button>
               </div>
               <div id="parcel-point-map" hidden></div>
               <p class="control-note relay-picked" id="relay-picked" hidden></p>
-              <p class="control-note" id="relay-hint">Mondial Relay, remis en 2 à 4 jours ouvrés. Choisissez le commerce le plus pratique pour vous sur la carte.</p>
+              <p class="control-note" id="relay-hint">Mondial Relay, remis en 2 à 4 jours ouvrés. Indiquez votre adresse : le point relais ou la consigne la plus proche de chez vous est choisi automatiquement.</p>
             </div>
             <p class="control-note" id="domicile-note" hidden>Colissimo suivi, remis à votre porte en 2 à 3 jours ouvrés.</p>
           </div>

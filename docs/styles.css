@@ -1732,6 +1732,7 @@
       color: var(--ink, #232323);
     }
     .field-row input:focus { outline: none; border-color: var(--emerald); box-shadow: 0 0 0 3px rgba(12, 91, 69, 0.14); }
+    .field-row #relay-street { flex: 1 1 100%; }
     .field-row #relay-zip { flex: 0 1 120px; }
     .field-row .pill-btn { flex: 0 0 auto; }
     #parcel-point-map {

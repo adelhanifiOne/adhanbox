@@ -441,6 +441,11 @@
     }
 
     function searchRelais() {
+      // L'adresse est facultative mais decisive : sans elle, Boxtal cherche
+      // autour du centre de la commune (en ville, un point quelconque de
+      // l'arrondissement). Avec elle, le point le plus proche du domicile est
+      // preselectionne (autoSelectNearestParcelPoint).
+      const street = ($('relay-street').value || '').trim().slice(0, 120);
       const zip = ($('relay-zip').value || '').trim();
       const city = ($('relay-city').value || '').trim();
       const btn = $('relay-search');
@@ -454,7 +459,9 @@
           const M = (window.BoxtalParcelPointMap && (window.BoxtalParcelPointMap.BoxtalParcelPointMap || window.BoxtalParcelPointMap));
           if (typeof M !== 'function') throw new Error('composant carte non chargé');
           $('parcel-point-map').hidden = false;
-          const run = () => deliv.map.searchParcelPoints({ country: 'FR', zipCode: zip, city: city }, (pt) => showRelais(pt));
+          const adresse = { country: 'FR', zipCode: zip, city: city };
+          if (street) adresse.street = street;
+          const run = () => deliv.map.searchParcelPoints(adresse, (pt) => showRelais(pt));
           if (deliv.map) { run(); return; }
           deliv.map = new M({
             domToLoadMap: '#parcel-point-map',
@@ -467,12 +474,16 @@
             onMapLoaded: run,
           });
         })
-        .then(() => { $('relay-hint').textContent = 'Cliquez sur un commerce pour le choisir. Le plus proche est présélectionné.'; })
+        .then(() => {
+          $('relay-hint').textContent = street
+            ? 'Le point le plus proche de votre adresse est présélectionné. Cliquez sur un autre commerce pour changer.'
+            : 'Ajoutez votre adresse pour trouver le point le plus proche de chez vous. Cliquez sur un commerce pour le choisir.';
+        })
         .catch((err) => disableRelais(err && err.message))
         .finally(() => { btn.disabled = false; btn.textContent = 'Trouver un point relais'; });
     }
     $('relay-search').addEventListener('click', searchRelais);
-    ['relay-zip', 'relay-city'].forEach((id) => $(id).addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); searchRelais(); } }));
+    ['relay-street', 'relay-zip', 'relay-city'].forEach((id) => $(id).addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); searchRelais(); } }));
 
     // Interrupteur : on sonde le backend au chargement. Sans reponse positive,
     // l'option relais n'est meme pas proposee.
