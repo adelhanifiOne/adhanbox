@@ -2,7 +2,7 @@
 // - Starts an AP when a long-press is detected on CONFIG_BUTTON_PIN
 // - Serves a small webpage that requests navigator.geolocation and POSTs lat/lon
 // - Stores lat/lon/accuracy/timestamp in Preferences (NVS)
-//Version: 3.0.47 (AdhanBox V3 / HW v3)
+//Version: 3.0.48 (AdhanBox V3 / HW v3)
 #include <Arduino.h>
 #include <esp_mac.h>   // esp_read_mac() : MAC eFuse, lisible sans Wi-Fi
 #include <Wire.h>
@@ -64,6 +64,7 @@ static inline void securiser(WiFiClientSecure &c) {
 #include <HTTPClient.h>
 #include <PubSubClient.h>
 #include <time.h>
+#include <esp_sntp.h>       // [HEURE] savoir si NTP a VRAIMENT repondu
 #include <math.h>
 #include "esp_task_wdt.h"   // [SECU] watchdog materiel : reboot si le firmware freeze
 #include "esp_ota_ops.h"    // [SECU] rollback OTA : revient a la version precedente si le firmware boot-loop
@@ -2212,7 +2213,7 @@ void handleOtaUploadComplete() {
 // GET /api/firmware/version
 void handleFirmwareVersion() {
   server.send(200, "application/json",
-              "{\"version\":\"3.0.47\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
+              "{\"version\":\"3.0.48\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
 }
 
 // Returns true if the request carries the correct API key (or if token not yet set).
@@ -2326,11 +2327,11 @@ void handleDeviceInfo() {
   char buf[512];
   if (pairingWindow || hasValidToken) {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.47\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
+             "{\"version\":\"3.0.48\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
              OTA_HOSTNAME, deviceIdHex().c_str(), _apiToken.c_str(), _otaPass.c_str());
   } else {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.47\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
+             "{\"version\":\"3.0.48\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
              OTA_HOSTNAME, deviceIdHex().c_str());
   }
   server.send(200, "application/json", buf);
@@ -3134,24 +3135,45 @@ void handleDisconnectWifi() {
 }
 
 // Sync time from NTP server. Returns true on success.
+// [HEURE] Prochaine tentative NTP automatique (millis). Sans elle, l'heure
+// n'etait verifiee qu'au demarrage - et seulement si le Wi-Fi repondait en
+// 15 s - ou quand l'app donnait le Wi-Fi. Apres une coupure de courant, la box
+// Internet redemarre en meme temps que le boitier et met souvent plus longtemps :
+// l'heure de secours n'etait alors plus jamais corrigee. Vu au banc le
+// 26/09/2026 : RTC faussee de 2 h, redemarrage, heure toujours fausse.
+static unsigned long _ntpProchain = 60000UL;
+
 bool syncTimeFromNtp(unsigned long timeoutMs) {
   if (!WiFi.isConnected()) {
     Serial.println("Cannot sync NTP: no WiFi");
     return false;
   }
-  // Use UTC time from NTP, then apply stored timezone offset when setting RTC
+  // [HEURE] On attend une VRAIE reponse NTP. Jusqu'en 3.0.47, on attendait que
+  // getLocalTime() rende une annee plausible ; mais depuis la 3.0.36 l'horloge
+  // systeme est semee au demarrage depuis la RTC (pour le TLS) : getLocalTime()
+  // reussissait donc tout de suite, SANS NTP, et on reecrivait dans la RTC sa
+  // propre heure en la declarant « sure ». La derive n'etait jamais corrigee,
+  // et apres une coupure pile a plat, l'heure de secours (last_epoch, parfois
+  // vieille de plusieurs heures) devenait « sure » et les adhans sonnaient a
+  // une heure fausse. Le statut SNTP, lui, ne passe a COMPLETED que sur une
+  // reponse du serveur. Trouve en portant ce code vers le V2 (2.3.32).
+  sntp_set_sync_status(SNTP_SYNC_STATUS_RESET);
   configTime(0, 0, "pool.ntp.org", "time.nist.gov");
-  struct tm timeinfo;
+  bool repondu = false;
   unsigned long start = millis();
   while (millis() - start < timeoutMs) {
-    if (getLocalTime(&timeinfo)) { break; }
+    if (sntp_get_sync_status() == SNTP_SYNC_STATUS_COMPLETED) { repondu = true; break; }
     delay(200);
   }
-  if (!getLocalTime(&timeinfo)) {
-    Serial.println("NTP getLocalTime failed");
+  if (!repondu) {
+    Serial.println("NTP : aucune reponse du serveur");
+    _ntpProchain = millis() + 5UL * 60UL * 1000UL;     // on reessaiera dans 5 min
     return false;
   }
-  // timeinfo is in localtime according to configTime(0,0) (we set offset 0), so it's UTC
+  _ntpProchain = millis() + 24UL * 3600UL * 1000UL;    // puis une fois par jour
+  struct tm timeinfo;
+  time_t maintenant = time(nullptr);
+  gmtime_r(&maintenant, &timeinfo);   // configTime(0,0) : l'horloge systeme est en UTC
   int year = timeinfo.tm_year + 1900;
   int mon = timeinfo.tm_mon + 1;
   int day = timeinfo.tm_mday;
@@ -3937,7 +3959,10 @@ void handlePrayerTimes() {
   prefs.end();
 
   // Check if Mawaqit times are fresh (synced < 25 hours ago)
-  unsigned long now_epoch = now.unixtime();
+  // [HEURE] mq_sync_ts est en UTC, « now » en heure locale : on compare de
+  // l'UTC a de l'UTC, comme le fait deja le calcul de l'alarme. Sans ca, cette
+  // page jugeait Mawaqit perime une a deux heures trop tot.
+  unsigned long now_epoch = heureUtc(now).unixtime();
   unsigned long timeSinceSyncSec = (mq_sync_ts > 0 && now_epoch >= mq_sync_ts) ? (now_epoch - mq_sync_ts) : 999999UL;
   bool mawaqitValid = (mq_fajr.length() >= 5) && (mq_isha.length() >= 5) && (timeSinceSyncSec < 25UL * 3600UL);
 
@@ -5938,7 +5963,7 @@ static void bancCommande(String c) {
 
   if (verbe == "info") {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.47\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
+             "{\"version\":\"3.0.48\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
              deviceIdHex().c_str());
     bancRep(buf);
 
@@ -6157,6 +6182,14 @@ void loop() {
   _tourPrecedent = _joue ? _t0 : 0;
 
   audio.pump();
+  // [HEURE] NTP automatique : 5 min apres un echec, 24 h apres un succes. Jamais
+  // pendant une lecture (l'attente bloque loop() jusqu'a 8 s), ni pendant la
+  // synchro de contenu, qui tient deja la memoire TLS.
+  if ((long)(millis() - _ntpProchain) >= 0 && WiFi.status() == WL_CONNECTED
+      && !audio.isRunning() && !_syncRunning) {
+    _ntpProchain = millis() + 5UL * 60UL * 1000UL;
+    if (syncTimeFromNtp(8000) && rtcPresent) scheduleNextPrayerAlarm();
+  }
   const uint32_t _t1 = micros();
   if (_joue) _plusHaut(g_blocage.pumpMaxUs, _t1 - _t0);
   v2Tick();          // [V2] azkar/coran + sync contenu

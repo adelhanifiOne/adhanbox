@@ -1,6 +1,6 @@
 {
-  "version": "3.0.47",
+  "version": "3.0.48",
   "hardware": "v3",
   "url": "https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/build_temp_v3/adhanbox_v3.ino.bin",
-  "changelog": "Votre boîtier accepte maintenant de nombreux nouveaux muezzins à choisir pour chaque prière, dont plusieurs voix de La Mecque, de Médine et d'Al-Aqsa. Ils s'enregistrent dans le boîtier et sonnent même sans Internet."
+  "changelog": "Votre boîtier vérifie désormais son heure sur Internet chaque jour, et se remet à l'heure tout seul après une coupure de courant, même si votre box Internet redémarre plus lentement que lui. L'appel à la prière reste ainsi toujours à la bonne heure."
 }
