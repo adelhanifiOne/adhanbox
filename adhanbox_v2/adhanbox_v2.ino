@@ -2,12 +2,28 @@
 // - Starts an AP when a long-press is detected on CONFIG_BUTTON_PIN
 // - Serves a small webpage that requests navigator.geolocation and POSTs lat/lon
 // - Stores lat/lon/accuracy/timestamp in Preferences (NVS)
-//Version: 2.3.31 (AdhanBox V2 / HW v2)
+//Version: 2.3.32 (AdhanBox V2 / HW v2)
 #include <Arduino.h>
 #include <esp_mac.h>   // esp_read_mac() : MAC eFuse, lisible sans Wi-Fi
 #include <Wire.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
+
+// ── [TLS] Verifier a qui on parle (repris de la V3 3.0.36) ──────────────────
+// Jusqu'ici les connexions chiffrees de la carte appelaient setInsecure() :
+// canal chiffre, mais SANS verifier le certificat d'en face. Sur un Wi-Fi
+// hostile ou avec un DNS detourne, n'importe qui pouvait se faire passer pour
+// mawaqit.net (faux horaires de priere) ou pour GitHub (faux fichiers audio).
+// Le magasin de certificats racine vient du noyau ESP32 (x509_crt_bundle),
+// le MEME que celui de la V3 : rien de propre au materiel. On n'epingle PAS un
+// certificat : chaque rotation des autorites deviendrait une panne du parc.
+extern const uint8_t x509_crt_bundle_start[] asm("_binary_x509_crt_bundle_start");
+extern const uint8_t x509_crt_bundle_end[]   asm("_binary_x509_crt_bundle_end");
+
+static inline void securiser(WiFiClientSecure &c) {
+  c.setCACertBundle(x509_crt_bundle_start,
+                    (size_t)(x509_crt_bundle_end - x509_crt_bundle_start));
+}
 #include <WebServer.h>
 #include <Preferences.h>
 #include <RTClib.h>
@@ -42,6 +58,8 @@
 #include "esp_task_wdt.h"   // [SECU] watchdog materiel : reboot si le firmware freeze
 #include "esp_ota_ops.h"    // [SECU] rollback OTA : revient a la version precedente si le firmware boot-loop
 #include "esp_system.h"     // [DIAG] esp_reset_reason : cause du dernier reboot
+#include <esp_heap_caps.h>  // [FLUX] anneau du flux en PSRAM
+#include <esp_sntp.h>       // [HEURE] savoir si NTP a VRAIMENT repondu
 
 // ── [DIAG] Mouchard de reboot ────────────────────────────────────────────────
 // Sert a diagnostiquer les redemarrages a distance, sans ouvrir le boitier.
@@ -269,6 +287,15 @@ const byte DNS_PORT = 53;
 
 RTC_DS3231 rtc;
 bool rtcPresent = false;
+
+// ── [SYNCHRO] Etat partage entre la tache de synchro, loop() et playPath ────
+// Declare AVANT la classe audio : playPath s'en sert pour faire lacher un
+// telechargement en cours (voir v2SyncContent).
+volatile bool _syncRunning  = false;    // la tache de synchro tourne
+volatile bool _syncAbandon  = false;    // playPath lui demande de tout lacher
+bool          _syncAFaire   = true;     // une synchro est due (boot, ou reprise)
+unsigned long _syncPasAvant = 0;        // millis() avant lequel on ne relance pas
+
 // ===== AdhanBox V2 : moteur audio I2S + microSD =====
 #define I2S_DIN_PIN   1
 #define I2S_LRC_PIN   2
@@ -278,18 +305,171 @@ bool rtcPresent = false;
 #define SD_SCK_PIN    12
 #define SD_MISO_PIN   13
 
+// ── [FLUX] Source audio HTTPS (reprise de la V3 3.0.45) ─────────────────────
+// Lire le Coran d'un recitateur qui n'est pas sur la carte SD, directement
+// depuis Internet. La source HTTP de la bibliotheque ne convient pas : elle
+// n'utilise qu'un client reseau NU (pas de HTTPS, donc aucun serveur moderne),
+// et son calcul de fin de flux est faux (pos - size au lieu de size - pos).
+// Celle-ci passe par le client securise et les certificats racines de
+// securiser(), comme Mawaqit et GitHub.
+// REGLE : un flux ne sert JAMAIS a l'adhan de l'heure. Seulement a l'ecoute a
+// la demande ; l'adhan d'une priere reste lu depuis la SD, qui marche hors
+// ligne. Une priere qui tombe pendant un flux l'arrete (playPath -> stop()).
+class AudioFileSourceHTTPS : public AudioFileSource {
+  // [FLUX] La source porte son propre anneau. AudioFileSourceBuffer ne
+  // convient pas a un flux : sa premiere lecture recopie la source depuis le
+  // debut du tampon (ce qui est deja precharge est ecrase), et un creux reseau
+  // lui fait rendre 0 octet, que le decodeur MP3 prend pour la fin du fichier.
+  // Vu au banc V3 le 24/09/2026 : bascule sur la SD apres 3 s, a 1 %.
+  WiFiClientSecure client;
+  HTTPClient http;
+  uint32_t taille = 0;             // annoncee par le serveur, 0 = inconnue
+  uint32_t recu = 0;               // octets venus du reseau
+  uint32_t lu = 0;                 // octets rendus au decodeur
+  bool ouvert = false;
+  bool fini = false;               // tout recu, ou le serveur a ferme
+  uint8_t *anneau = nullptr;
+  uint32_t cap = 0, tete = 0, queue = 0, niveau = 0;
+  uint32_t rendre(void *data, uint32_t len) {
+    const uint32_t n = len < niveau ? len : niveau;
+    uint32_t fait = 0;
+    while (fait < n) {
+      uint32_t k = n - fait;
+      if (k > cap - queue) k = cap - queue;
+      memcpy((uint8_t *)data + fait, anneau + queue, k);
+      queue = (queue + k) % cap;
+      fait += k;
+    }
+    niveau -= n;
+    lu += n;
+    return n;
+  }
+ public:
+  virtual ~AudioFileSourceHTTPS() override { close(); }
+  void fournirAnneau(uint8_t *b, uint32_t n) { anneau = b; cap = n; tete = queue = niveau = 0; }
+  uint32_t niveauTampon() const { return niveau; }
+  bool termine() const { return fini; }
+  // Tire du reseau ce qui est DEJA arrive, sans attendre. Borne par appel : on
+  // est dans loop(), la file I2S et le serveur HTTP passent aussi par la.
+  void remplir(uint32_t maxOctets = 16384) {
+    if (!ouvert || fini || !anneau) return;
+    auto *flux = http.getStreamPtr();
+    if (!flux) { fini = true; return; }
+    uint32_t pris = 0;
+    while (niveau < cap && pris < maxOctets) {
+      const int dispo = flux->available();
+      if (dispo <= 0) { if (!flux->connected()) fini = true; break; }
+      uint32_t n = (uint32_t)dispo;
+      if (n > cap - niveau) n = cap - niveau;
+      if (n > cap - tete) n = cap - tete;
+      if (n > maxOctets - pris) n = maxOctets - pris;
+      const int r = flux->read(anneau + tete, n);
+      if (r <= 0) break;
+      tete = (tete + (uint32_t)r) % cap;
+      niveau += (uint32_t)r;
+      recu += (uint32_t)r;
+      pris += (uint32_t)r;
+      if (taille && recu >= taille) { fini = true; break; }
+    }
+  }
+  // Saute l'etiquette ID3v2 de tete (titre, recitateur, parfois une pochette).
+  // Le decodeur y voit de faux debuts de trame, et apres trois « BUFLEN » de
+  // suite la bibliotheque abandonne : vu au banc V3 sur mp3quran, 6,8 Ko
+  // d'ID3, arret a 3 s. A appeler apres la precharge, avant le decodeur.
+  bool sauterId3() {
+    if (niveau < 10) return true;
+    uint8_t e[10];
+    for (int i = 0; i < 10; i++) e[i] = anneau[(queue + i) % cap];
+    if (e[0] != 'I' || e[1] != 'D' || e[2] != '3') return true;
+    uint32_t n = 10 + ((uint32_t)(e[6] & 0x7f) << 21 | (uint32_t)(e[7] & 0x7f) << 14 |
+                       (uint32_t)(e[8] & 0x7f) << 7 | (e[9] & 0x7f));
+    if (e[5] & 0x10) n += 10;        // pied de page ID3v2.4
+    Serial.printf("[FLUX] etiquette ID3 de %lu octets sautee\n", (unsigned long)n);
+    const uint32_t t0 = millis();
+    while (n) {
+      if (niveau == 0) {
+        if (fini || millis() - t0 > 6000) return false;
+        remplir();
+        delay(2);
+        continue;
+      }
+      const uint32_t k = n < niveau ? n : niveau;
+      queue = (queue + k) % cap;
+      niveau -= k;
+      lu += k;
+      n -= k;
+    }
+    return true;
+  }
+  virtual bool open(const char *url) override {
+    securiser(client);
+    http.setReuse(false);
+    http.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
+    http.setConnectTimeout(6000);
+    http.setTimeout(8000);
+    http.setUserAgent("AdhanBox/2");
+    if (!http.begin(client, url)) return false;
+    const int code = http.GET();
+    if (code != HTTP_CODE_OK) {
+      Serial.printf("[FLUX] refus HTTP %d\n", code);
+      http.end();
+      return false;
+    }
+    const int t = http.getSize();
+    taille = t > 0 ? (uint32_t)t : 0;
+    recu = lu = 0;
+    fini = false;
+    ouvert = true;
+    return true;
+  }
+  // Tampon vide : on attend le reseau, borne. Un blanc d'une seconde vaut mieux
+  // qu'une bascule, puisqu'un 0 ici arrete le decodeur. Au-dela de 2,5 s le flux
+  // est tenu pour perdu et pump() passe a la copie SD.
+  virtual uint32_t read(void *data, uint32_t len) override {
+    if (!ouvert || !data || !len || !anneau) return 0;
+    const uint32_t t0 = millis();
+    while (niveau == 0 && !fini && millis() - t0 < 2500) {
+      remplir();
+      if (niveau == 0) delay(5);
+    }
+    return rendre(data, len);
+  }
+  virtual uint32_t readNonBlock(void *data, uint32_t len) override {
+    if (!ouvert || !data || !len || !anneau) return 0;
+    remplir();
+    return rendre(data, len);
+  }
+  virtual bool loop() override { remplir(); return true; }
+  virtual bool seek(int32_t, int) override { return false; }
+  virtual bool close() override { if (ouvert) http.end(); ouvert = false; return true; }
+  virtual bool isOpen() override { return ouvert; }
+  virtual uint32_t getSize() override { return taille; }
+  virtual uint32_t getPos() override { return lu; }   // position du DECODEUR
+};
+
+// 256 Ko en PSRAM (la V2 a 2 Mo de PSRAM QSPI) = ~16 s d'avance a 128 kbit/s,
+// contre ~2 s pour le tampon SD : de quoi traverser un trou de Wi-Fi.
+#define TAMPON_FLUX_OCTETS (256u * 1024u)
+
+// [CATALOGUE] Plus grand numero de piste d'adhan (/mp3/NNNN.mp3) accepte pour
+// une priere (21 jusqu'a 2.3.31, comme la V3 jusqu'a 3.0.46).
+#define PISTE_MAX 99
+
 class I2SAudio {
   SPIClass spi{FSPI};
   AudioOutputI2S        *out = nullptr;
   AudioGeneratorMP3     *mp3 = nullptr;
   AudioGeneratorWAV     *wav = nullptr;
-  AudioFileSourceSD     *src = nullptr;
-  AudioFileSourceBuffer *buf = nullptr;
+  AudioFileSource       *src = nullptr;   // SD ou flux HTTPS
+  AudioFileSourceBuffer *buf = nullptr;   // SD seulement : le flux porte son anneau
   float gain = 0.5f;
   bool  _sdOk = false;
   uint32_t _sdClock = 0;
   bool _paused = false;          // [PLAYER] pause logicielle : pump() suspend le decodage
   char _curPath[64] = {0};       // [PLAYER] fichier en cours (pour /api/audio/status)
+  uint8_t *_tamponFlux = nullptr;  // [FLUX] anneau PSRAM, libere par stop()
+  bool _flux = false;              // [FLUX] la lecture en cours vient d'Internet
+  char _repli[64] = {0};           // [FLUX] copie SD a jouer si le flux lache
  public:
   uint32_t sdClock() const { return _sdClock; }
   // Bench debit SD : lit `bytes` octets d'un fichier existant et renvoie ko/s.
@@ -349,6 +529,11 @@ class I2SAudio {
     if (wav) { wav->stop(); delete wav; wav = nullptr; }
     if (buf) { delete buf; buf = nullptr; }
     if (src) { delete src; src = nullptr; }
+    // [FLUX] Anneau fourni par nous : personne d'autre ne le libere. APRES
+    // la destruction de src, qui l'utilise jusqu'au bout.
+    if (_tamponFlux) { heap_caps_free(_tamponFlux); _tamponFlux = nullptr; }
+    _flux = false;
+    _repli[0] = 0;
     _paused = false;
     _curPath[0] = 0;
   }
@@ -367,18 +552,37 @@ class I2SAudio {
   uint32_t sizeBytes() { return src ? (uint32_t)src->getSize() : 0; }
   bool playPath(const char *path) {
     stop();
+    abandonnerSynchro();
     if (!_sdOk || !SD.exists(path)) return false;
     strncpy(_curPath, path, sizeof(_curPath) - 1);   // [PLAYER] memorise le fichier
     _curPath[sizeof(_curPath) - 1] = 0;
     src = new AudioFileSourceSD(path);
+    if (!src) { Serial.println("[Audio] plus de memoire pour la source"); return false; }
     // Buffer fichier 32 Ko (~2s). Le vrai levier n'est pas la taille mais le DEBIT
     // SD (voir SD.begin plus haut) : un buffer plus gros ne fait que retarder si le
     // debit brut est sous 16 Ko/s (128 kbps).
     buf = new AudioFileSourceBuffer(src, 32768);
+    if (!buf) { delete src; src = nullptr;
+                Serial.println("[Audio] plus de memoire pour le tampon"); return false; }
     String p = path; p.toLowerCase();
+    return lancer(p.endsWith(".wav"));
+  }
+  // Cree le decodeur sur `buf` (SD) ou sur la source de flux, qui porte son
+  // propre anneau, et amorce l'ampli. Commun a la SD et au flux : c'est la
+  // partie delicate (creation du canal I2S), elle ne doit exister qu'a un
+  // seul endroit.
+  bool lancer(bool estWav) {
     bool ok;
-    if (p.endsWith(".wav")) { wav = new AudioGeneratorWAV(); ok = wav->begin(buf, out); }
-    else { mp3 = new AudioGeneratorMP3(); ok = mp3->begin(buf, out); }
+    AudioFileSource *entree = buf ? (AudioFileSource *)buf : src;
+    if (estWav) {
+      wav = new AudioGeneratorWAV();
+      if (!wav) { stop(); Serial.println("[Audio] plus de memoire pour le decodeur"); return false; }
+      ok = wav->begin(entree, out);
+    } else {
+      mp3 = new AudioGeneratorMP3();
+      if (!mp3) { stop(); Serial.println("[Audio] plus de memoire pour le decodeur"); return false; }
+      ok = mp3->begin(entree, out);
+    }
     // Anti "debut coupe" : recreer le canal I2S redemarre BCLK -> le MAX98357A se
     // resynchronise (~0.8s) en avalant le debut. On lui envoie ~900ms de silence
     // propre AVANT le contenu (rien n'est encore decode) : l'ampli se cale, puis la
@@ -393,10 +597,83 @@ class I2SAudio {
     }
     return ok;
   }
-  void playTrackNum(int track) {
+  // [SYNCHRO] Si un telechargement est en cours, on le fait abandonner et on
+  // attend qu'il ait rendu sa memoire (TLS + pile de 32 Ko) et la SD, AVANT
+  // d'ouvrir le fichier : la SD n'est pas partageable a 1 MHz, et le tampon
+  // de 32 Ko + le canal I2S se servent dans la meme RAM interne. Au plus
+  // 800 ms, couverts par les 900 ms de silence de calage de l'ampli.
+  void abandonnerSynchro() {
+    if (_syncRunning) {
+      _syncAbandon = true;
+      for (int i = 0; i < 80 && _syncRunning; i++) delay(10);   // au plus 800 ms
+      _syncAbandon = false;
+    }
+  }
+  // [FLUX] Lit une URL HTTPS. Rend 1 si le flux joue, 2 si la copie SD `repli`
+  // a pris le relais, 0 si rien ne joue. Le repli sert deux fois : si le flux
+  // ne demarre pas (pas de Wi-Fi, serveur absent, refus), et s'il se coupe en
+  // route (voir pump()).
+  int playUrl(const char *url, const char *repli) {
+    char repliCopie[64] = {0};
+    if (repli && *repli) strncpy(repliCopie, repli, sizeof(repliCopie) - 1);
+    stop();
+    auto versRepli = [&](const char *pourquoi) -> int {
+      Serial.printf("[FLUX] %s -> %s\n", pourquoi, repliCopie[0] ? repliCopie : "aucun repli");
+      if (repliCopie[0] && playPath(repliCopie)) return 2;
+      return 0;
+    };
+    if (WiFi.status() != WL_CONNECTED) return versRepli("pas de Wi-Fi");
+    abandonnerSynchro();            // le TLS du flux a besoin de la memoire de la synchro
+    AudioFileSourceHTTPS *h = new AudioFileSourceHTTPS();
+    if (!h) return versRepli("plus de memoire pour la source");
+    // [FLUX] Connexion (6 s) + reponse (8 s) + precharge (6 s) + ID3 (6 s) :
+    // pres des 30 s du chien de garde dans le pire cas. On le nourrit entre
+    // chaque etape bornee (ecart V2 : la V3 ne le fait pas).
+    if (_wdtArmed) esp_task_wdt_reset();
+    const bool ouvert = h->open(url);
+    if (_wdtArmed) esp_task_wdt_reset();
+    if (!ouvert) { delete h; return versRepli("flux injoignable"); }
+    src = h;
+    uint32_t cap = TAMPON_FLUX_OCTETS;
+    _tamponFlux = (uint8_t *)heap_caps_malloc(cap, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!_tamponFlux) {                  // sans PSRAM : comme la SD
+      cap = 32768;
+      _tamponFlux = (uint8_t *)heap_caps_malloc(cap, MALLOC_CAP_8BIT);
+    }
+    if (!_tamponFlux) { stop(); return versRepli("plus de memoire pour le tampon"); }
+    h->fournirAnneau(_tamponFlux, cap);
+    _flux = true;
+    strncpy(_repli, repliCopie, sizeof(_repli) - 1);
+    // /api/audio/status ne garde que 63 caracteres : on marque la source et on
+    // garde la FIN de l'URL, celle qui nomme le recitateur et la sourate.
+    const size_t n = strlen(url);
+    snprintf(_curPath, sizeof(_curPath), "flux:%s", n > 57 ? url + n - 57 : url);
+    // Precharge ~4 s de son (64 Ko a 128 kbit/s) avant de lancer le decodeur :
+    // sans avance, le premier creux du Wi-Fi tombe tout de suite en panne seche.
+    const uint32_t visee = cap / 4, t0 = millis();
+    while (h->niveauTampon() < visee && !h->termine() && millis() - t0 < 6000) {
+      h->remplir();
+      delay(2);
+    }
+    Serial.printf("[FLUX] ouvert, %lu octets annonces, %lu precharges en %lu ms, tampon %lu Ko\n",
+                  (unsigned long)src->getSize(), (unsigned long)h->niveauTampon(),
+                  (unsigned long)(millis() - t0), (unsigned long)(cap / 1024));
+    if (_wdtArmed) esp_task_wdt_reset();
+    if (h->niveauTampon() == 0) { stop(); return versRepli("flux muet"); }
+    if (!h->sauterId3()) { stop(); return versRepli("etiquette ID3 illisible"); }
+    String u = url; u.toLowerCase();
+    if (!lancer(u.endsWith(".wav"))) { stop(); return versRepli("decodeur refuse"); }
+    return 1;
+  }
+  bool isStream() const { return _flux; }
+  // [ADHAN] Rend VRAI seulement si le fichier existe et que la lecture a
+  // demarre : jouerAdhan() en a besoin pour savoir s'il doit se rabattre.
+  bool playTrackNum(int track) {
     char path[24];
     snprintf(path, sizeof(path), "/mp3/%04d.mp3", track);
-    if (!playPath(path)) { snprintf(path, sizeof(path), "/MP3/%04d.mp3", track); playPath(path); }
+    if (playPath(path)) return true;
+    snprintf(path, sizeof(path), "/MP3/%04d.mp3", track);
+    return playPath(path);
   }
   bool isRunning() { return (mp3 && mp3->isRunning()) || (wav && wav->isRunning()); }
   void pump() {
@@ -408,7 +685,24 @@ class I2SAudio {
       if (out) { int16_t s[2] = {0, 0}; while (out->ConsumeSample(s)) {} }
       return;
     }
-    if (mp3 && mp3->isRunning()) { if (!mp3->loop()) stop(); }
+    if (mp3 && mp3->isRunning()) {
+      if (!mp3->loop()) {
+        // Le decodeur rend faux a la fin du fichier, mais AUSSI quand la source
+        // ne lui donne plus rien. La position fait la difference : a moins de
+        // 8 Ko de la fin, c'est la fin.
+        const bool fin = sizeBytes() && posBytes() + 8192 >= sizeBytes();
+        if (_flux && !fin) {
+          // [FLUX] Coupure en route : on ne laisse pas le silence, on bascule
+          // sur la copie SD si l'appelant en a donne une.
+          char r[64]; strncpy(r, _repli, sizeof(r)); r[sizeof(r) - 1] = 0;
+          stop();
+          if (r[0]) { Serial.printf("[FLUX] coupure -> repli %s\n", r); playPath(r); }
+          else Serial.println("[FLUX] coupure, pas de repli");
+        } else {
+          stop();
+        }
+      }
+    }
     if (wav && wav->isRunning()) { if (!wav->loop()) stop(); }
   }
 };
@@ -498,9 +792,10 @@ void handleAudioDelete();
 void handleAudioList();
 void handleDiag();
 void handlePlayFile();
+void handleAudioStream();   // [FLUX] lecture d'une URL HTTPS, repli SD
 void handleStopPlay();
 bool tryReinitSD();
-void playTrack(int track);
+bool playTrack(int track);
 void handleSetVolume();
 void handleGetVolume();
 void handleSetBrightness();
@@ -593,9 +888,20 @@ static inline void hsv2rgb(uint8_t h, uint8_t s, uint8_t v, uint8_t &r, uint8_t 
 // Forward declarations for functions defined later but used above
 bool ds3231SetAlarm2Daily(uint8_t hour, uint8_t minute);
 void ds3231DisableAlarms();
+
+// ---- Fuseau horaire et heure d'ete (voir la section « HEURE » plus bas) ----
+int  dernierDimancheDuMois(int annee, int mois);
+bool heureEteEurope(const DateTime &utc);
+bool heureEteActive(const DateTime &utc);   // heureEteEurope() ET regle activee
+int  offsetLocalMin(const DateTime &utc);
+DateTime heureLocale(const DateTime &utc);
+DateTime heureUtc(const DateTime &local);
+DateTime localNow();
+void chargerFuseau();
+void migrerRtcVersUtc();
 bool loadStoredLocation(double &outLat, double &outLon, double &outAcc);
 void stopPlay();
-void playTrack(int track);
+bool playTrack(int track);
 
 // LED helper using driver API (some cores don't expose ledcSetup/ledcAttachPin)
 static inline void setLedDuty(uint32_t duty) {
@@ -859,11 +1165,35 @@ void handleSetTZ() {
     server.send(400, "text/plain", "Invalid payload");
     return;
   }
+  // [HEURE] L'application pousse un offset INSTANTANE (+60 en hiver, +120 en
+  // ete pour la France). On le traduit en offset STANDARD plus une regle, sinon
+  // le boitier resterait fige sur la saison du jour de l'appairage - c'est
+  // exactement le defaut corrige en 2.3.32 (V3 3.0.43).
+  int pousse = (int)tz;
+  int std; bool dstEu;
+  DateTime utcMaint;                  // par defaut 2000-01-01 (RTClib), jamais 1970
+  bool dateSure = false;
+  if (rtcPresent) {
+    utcMaint = rtc.now();             // le DS3231 porte l'UTC
+    dateSure = (utcMaint.year() >= 2020 && utcMaint.year() <= 2100);
+  }
+  if (pousse == 60) {
+    std = 60; dstEu = true;                 // CET en hiver
+  } else if (pousse == 120 && dateSure && heureEteEurope(utcMaint)) {
+    std = 60; dstEu = true;                 // CET en ete
+  } else {
+    std = pousse; dstEu = false;            // zone a offset fixe (La Reunion...)
+  }
   prefs.begin("adhancfg", false);
-  prefs.putInt("tz_offset_min", (int)tz);
+  prefs.putInt("tz_offset_min", pousse);    // conservee : l'app la relit encore
+  prefs.putInt("tz_std_min", std);
+  prefs.putBool("tz_dst_eu", dstEu);
   prefs.end();
+  chargerFuseau();
+  if (rtcPresent) scheduleNextPrayerAlarm();
   server.send(200, "text/plain", "Timezone offset saved");
-  Serial.printf("Stored tz_offset_min=%d\n", (int)tz);
+  Serial.printf("Fuseau enregistre : pousse %+d min -> standard %+d min, heure d'ete %s\n",
+                pousse, std, dstEu ? "oui" : "non");
 }
 
 void handlePlayTest() {
@@ -878,9 +1208,10 @@ void handleSetRTC() {
     server.send(200, "text/plain", "RTC not present");
     return;
   }
-  rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
+  // [HEURE] __DATE__ / __TIME__ sont l'heure LOCALE de la machine de compilation.
+  rtc.adjust(heureUtc(DateTime(F(__DATE__), F(__TIME__))));
   scheduleNextPrayerAlarm();
-  server.send(200, "text/plain", "RTC set to compile time");
+  server.send(200, "text/plain", "RTC set to compile time (converti en UTC)");
 }
 
 // Set RTC manually via POST JSON { "date": "YYYY-MM-DD", "time": "HH:MM:SS" }
@@ -936,10 +1267,17 @@ void handleSetRtcManual() {
     server.send(400, "text/plain", "Invalid date/time");
     return;
   }
-  rtc.adjust(dt);
+  // [HEURE] L'APPLICATION ENVOIE DE L'HEURE LOCALE - celle que l'usager voit sur
+  // son telephone. Jusqu'a la 2.3.31 le DS3231 etait local et on l'ecrivait
+  // telle quelle ; depuis la 2.3.32 il porte de l'UTC, donc il FAUT convertir.
+  // Sans cette conversion la carte avance du fuseau entier a chaque appel de
+  // l'appli (constate sur une carte V3 le 22/09/2026 : deux heures d'avance).
+  DateTime utc = heureUtc(dt);
+  rtc.adjust(utc);
   scheduleNextPrayerAlarm();
-  char buf[64];
-  snprintf(buf, sizeof(buf), "RTC set to %04d-%02d-%02d %02d:%02d:%02d", y, m, d, hh, mm, ss);
+  char buf[96];
+  snprintf(buf, sizeof(buf), "RTC regle : %04d-%02d-%02d %02d:%02d:%02d locale -> %02u:%02u:%02u UTC",
+           y, m, d, hh, mm, ss, utc.hour(), utc.minute(), utc.second());
   server.send(200, "text/plain", String(buf));
   Serial.println(buf);
 }
@@ -950,12 +1288,13 @@ void handleSetAlarmTest() {
     server.send(200, "text/plain", "RTC not present");
     return;
   }
-  DateTime now = rtc.now();
+  DateTime now = localNow();
   int mm = (now.minute() + 1) % 60;
   int hh = now.hour() + (now.minute() == 59 ? 1 : 0);
-  ds3231SetAlarm2Daily(hh % 24, mm);
   scheduledPrayerIndex = 1;
   scheduledPrayerTime = DateTime(now.year(), now.month(), now.day(), hh % 24, mm, 0);
+  // [HEURE] Le DS3231 compte en UTC : son alarme se programme en UTC.
+  { DateTime _u = heureUtc(scheduledPrayerTime); ds3231SetAlarm2Daily(_u.hour(), _u.minute()); }
 
   // Clear last trigger NVS to ensure the test alarm fires
   prefs.begin("adhancfg", false);
@@ -1002,7 +1341,7 @@ void handleShowTime() {
     server.send(200, "text/plain", "RTC not present");
     return;
   }
-  DateTime now = rtc.now();
+  DateTime now = localNow();
   char buf[64];
   snprintf(buf, sizeof(buf), "%04u-%02u-%02u %02u:%02u:%02u", now.year(), now.month(), now.day(), now.hour(), now.minute(), now.second());
   server.send(200, "text/plain", buf);
@@ -1070,9 +1409,10 @@ void handleAudioStatus() {
   prefs.end();
   char buf[256];
   snprintf(buf, sizeof(buf),
-           "{\"playing\":%s,\"paused\":%s,\"file\":\"%s\",\"pos\":%lu,\"size\":%lu,\"volume\":%d}",
+           "{\"playing\":%s,\"paused\":%s,\"source\":\"%s\",\"file\":\"%s\",\"pos\":%lu,\"size\":%lu,\"volume\":%d}",
            (isPlaying && audio.isRunning()) ? "true" : "false",
            audio.isPaused() ? "true" : "false",
+           audio.isStream() ? "flux" : "sd",   // [FLUX]
            audio.currentPath(),
            (unsigned long)audio.posBytes(),
            (unsigned long)audio.sizeBytes(),
@@ -1273,19 +1613,19 @@ void handleGetRTC() {
     server.send(200, "text/plain", "RTC not present");
     return;
   }
-  DateTime now = rtc.now();
-  char buf[64];
-  snprintf(buf, sizeof(buf), "%04u-%02u-%02u %02u:%02u:%02u", now.year(), now.month(), now.day(), now.hour(), now.minute(), now.second());
-  // append tz info if stored
-  prefs.begin("adhancfg", true);
-  int tz = prefs.getInt("tz_offset_min", 0x7fffffff);
-  prefs.end();
+  // [HEURE] Heure locale d'abord (l'app lit le debut), puis le fuseau en
+  // vigueur et l'UTC brut du DS3231, pour le diagnostic.
+  DateTime utc = rtc.now();
+  DateTime now = heureLocale(utc);
+  int off = offsetLocalMin(utc);
+  char buf[160];
+  snprintf(buf, sizeof(buf),
+           "%04u-%02u-%02u %02u:%02u:%02u (UTC%+d:%02d, %s) | UTC %04u-%02u-%02u %02u:%02u:%02u",
+           now.year(), now.month(), now.day(), now.hour(), now.minute(), now.second(),
+           off / 60, abs(off) % 60,
+           heureEteActive(utc) ? "heure d'ete" : "heure d'hiver",
+           utc.year(), utc.month(), utc.day(), utc.hour(), utc.minute(), utc.second());
   String out = String(buf);
-  if (tz != 0x7fffffff) {
-    char tzb[32];
-    snprintf(tzb, sizeof(tzb), " (UTC%+d)", tz / 60);
-    out += String(tzb);
-  }
   Serial.printf("handleGetRTC: returning '%s'\n", out.c_str());
   server.send(200, "text/plain", out);
 }
@@ -1522,7 +1862,7 @@ void handleOtaUploadComplete() {
 // GET /api/firmware/version
 void handleFirmwareVersion() {
   server.send(200, "application/json",
-              "{\"version\":\"2.3.31\",\"hardware\":\"v2\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
+              "{\"version\":\"2.3.32\",\"hardware\":\"v2\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
 }
 
 // Returns true if the request carries the correct API key (or if token not yet set).
@@ -1564,11 +1904,11 @@ void handleDeviceInfo() {
   char buf[512];
   if (pairingWindow || hasValidToken) {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"2.3.31\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
+             "{\"version\":\"2.3.32\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
              OTA_HOSTNAME, deviceIdHex().c_str(), _apiToken.c_str(), _otaPass.c_str());
   } else {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"2.3.31\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
+             "{\"version\":\"2.3.32\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
              OTA_HOSTNAME, deviceIdHex().c_str());
   }
   server.send(200, "application/json", buf);
@@ -1899,7 +2239,7 @@ bool performMawaqitSync(String &errorMsg) {
   for (int attempt = 0; attempt < attempts && !anyValid; attempt++) {
     HTTPClient http;
     WiFiClientSecure client;
-    client.setInsecure();
+    securiser(client);   // [TLS] on verifie que c est bien mawaqit.net
 
     String url = "https://" + host + urls[attempt];
     Serial.printf("Mawaqit request [%d/%d]: %s\n", attempt + 1, attempts, url.c_str());
@@ -2291,11 +2631,14 @@ void handleAdhanConfig() {
     int isha_track = (int)extractJsonNumber(body, "isha_track", 2);
 
     // Constrain to 1-21
-    fajr_track = constrain(fajr_track, 1, 21);
-    dhuhr_track = constrain(dhuhr_track, 1, 21);
-    asr_track = constrain(asr_track, 1, 21);
-    maghrib_track = constrain(maghrib_track, 1, 21);
-    isha_track = constrain(isha_track, 1, 21);
+    // [CATALOGUE] Jusqu'a 2.3.31 : 21 pistes, 99 depuis 2.3.32. Le catalogue donne
+    // a chaque voix un numero neuf et ne le reutilise jamais (un fichier present
+    // n'est pas retelecharge : reaffecter un numero ferait jouer la mauvaise voix).
+    fajr_track = constrain(fajr_track, 1, PISTE_MAX);
+    dhuhr_track = constrain(dhuhr_track, 1, PISTE_MAX);
+    asr_track = constrain(asr_track, 1, PISTE_MAX);
+    maghrib_track = constrain(maghrib_track, 1, PISTE_MAX);
+    isha_track = constrain(isha_track, 1, PISTE_MAX);
 
     bool fajr_duaa = extractJsonBool(body, "fajr_duaa", true);
     bool dhuhr_duaa = extractJsonBool(body, "dhuhr_duaa", true);
@@ -2375,19 +2718,29 @@ bool syncTimeFromNtp(unsigned long timeoutMs) {
     Serial.println("Cannot sync NTP: no WiFi");
     return false;
   }
-  // Use UTC time from NTP, then apply stored timezone offset when setting RTC
+  // [HEURE] On attend une VRAIE reponse NTP. Avant, on attendait que
+  // getLocalTime() rende une annee plausible ; mais l'horloge systeme est
+  // desormais semee au demarrage depuis le DS3231 (pour le TLS) : getLocalTime()
+  // reussissait donc tout de suite, SANS NTP, et on reecrivait dans le DS3231
+  // sa propre heure en la declarant « sure ». Apres une coupure sans pile, c'est
+  // l'heure de compilation qui serait devenue « sure » et aurait debloque les
+  // adhans a une heure fausse. Le statut de synchro SNTP, lui, ne passe a
+  // COMPLETED que sur une reponse du serveur.
+  sntp_set_sync_status(SNTP_SYNC_STATUS_RESET);
   configTime(0, 0, "pool.ntp.org", "time.nist.gov");
-  struct tm timeinfo;
+  bool repondu = false;
   unsigned long start = millis();
   while (millis() - start < timeoutMs) {
-    if (getLocalTime(&timeinfo)) { break; }
+    if (sntp_get_sync_status() == SNTP_SYNC_STATUS_COMPLETED) { repondu = true; break; }
     delay(200);
   }
-  if (!getLocalTime(&timeinfo)) {
-    Serial.println("NTP getLocalTime failed");
+  if (!repondu) {
+    Serial.println("NTP : aucune reponse du serveur");
     return false;
   }
-  // timeinfo is in localtime according to configTime(0,0) (we set offset 0), so it's UTC
+  struct tm timeinfo;
+  time_t maintenant = time(nullptr);
+  gmtime_r(&maintenant, &timeinfo);   // configTime(0,0) : l'horloge systeme est en UTC
   int year = timeinfo.tm_year + 1900;
   int mon = timeinfo.tm_mon + 1;
   int day = timeinfo.tm_mday;
@@ -2395,26 +2748,26 @@ bool syncTimeFromNtp(unsigned long timeoutMs) {
   int min = timeinfo.tm_min;
   int sec = timeinfo.tm_sec;
   Serial.printf("NTP UTC time: %04d-%02d-%02d %02d:%02d:%02d\n", year, mon, day, hour, min, sec);
-  // Apply timezone offset stored in prefs (minutes)
-  prefs.begin("adhancfg", true);
-  int tzMin = prefs.getInt("tz_offset_min", 0x7fffffff);
-  prefs.end();
-  int tzOffset = 0;
-  if (tzMin != 0x7fffffff) tzOffset = tzMin;  // minutes
-  // Construct DateTime adjusted to local time
-  time_t utc = mktime(&timeinfo);
-  time_t localt = utc + tzOffset * 60;
-  struct tm *lt = gmtime(&localt);
-  if (!lt) {
-    Serial.println("Failed to convert local time");
-    return false;
-  }
   if (!rtcPresent) {
     Serial.println("RTC not present; cannot set time");
     return false;
   }
-  rtc.adjust(DateTime(lt->tm_year + 1900, lt->tm_mon + 1, lt->tm_mday, lt->tm_hour, lt->tm_min, lt->tm_sec));
-  Serial.printf("RTC set to local time (tz offset %d min): %04d-%02d-%02d %02d:%02d:%02d\n", tzOffset, lt->tm_year + 1900, lt->tm_mon + 1, lt->tm_mday, lt->tm_hour, lt->tm_min, lt->tm_sec);
+  // [HEURE] Le DS3231 recoit de l'UTC, sans aucun offset : c'est
+  // offsetLocalMin() qui fabrique l'heure locale a la lecture, et lui seul
+  // connait l'heure d'ete.
+  rtc.adjust(DateTime(year, mon, day, hour, min, sec));
+  // La NVS peut porter un RTC encore en heure locale si le boitier n'avait
+  // jamais demarre avec cette version : NTP vient de le remettre en UTC, donc
+  // la conversion n'a plus lieu d'etre (la deduction du fuseau, elle, reste
+  // gardee par sa propre trace, voir migrerRtcVersUtc).
+  prefs.begin("adhancfg", false);
+  prefs.putBool("rtc_en_utc", true);
+  prefs.end();
+  chargerFuseau();
+  DateTime _loc = localNow();
+  Serial.printf("RTC regle en UTC %04d-%02d-%02d %02d:%02d:%02d (local %02u:%02u, offset %+d min)\n",
+                year, mon, day, hour, min, sec, _loc.hour(), _loc.minute(),
+                offsetLocalMin(DateTime(year, mon, day, hour, min, sec)));
   // [COUPURES] L'heure vient d'une source sure -> adhans autorises, et on
   // sauvegarde tout de suite pour la prochaine coupure.
   _timeTrusted = true; _timeApprox = false;
@@ -2740,6 +3093,7 @@ void setupServerRoutes() {
 #endif
   server.on("/api/audio/delete", HTTP_GET, handleAudioDelete);
   server.on("/api/audio/play", HTTP_GET, handlePlayFile);
+  server.on("/api/audio/stream", HTTP_GET, handleAudioStream);   // [FLUX]
   server.on("/api/audio/status", HTTP_GET, handleAudioStatus);   // [PLAYER] etat de lecture
   server.on("/api/audio/pause", HTTP_GET, handleAudioPause);     // [PLAYER] pause
   server.on("/api/audio/resume", HTTP_GET, handleAudioResume);   // [PLAYER] reprise
@@ -2910,13 +3264,14 @@ void computeAndPrintPrayerTimes(const DateTime &date) {
   solarDeclinationAndEqtime(doy, decl, eqt);
   // timezone offset: prefer stored tz_offset_min, otherwise estimate from longitude
   prefs.begin("adhancfg", true);
-  int tzOffsetMin = prefs.getInt("tz_offset_min", 0x7fffffff);
+  bool fuseauRegle = (prefs.getInt("tz_offset_min", 0x7fffffff) != 0x7fffffff);
   prefs.end();
   int tzMin;
   int tz;
-  if (tzOffsetMin != 0x7fffffff) {
-    tzMin = tzOffsetMin;
-    tz = tzOffsetMin / 60;
+  if (fuseauRegle) {
+    DateTime midi(date.year(), date.month(), date.day(), 12, 0, 0);
+    tzMin = offsetLocalMin(heureUtc(midi));   // offset en vigueur ce jour-la, cf. computePrayerTimesForDate
+    tz = tzMin / 60;
   } else {
     tz = (int)round(lon / 15.0);
     tzMin = tz * 60;
@@ -2970,12 +3325,21 @@ bool computePrayerTimesForDate(const DateTime &date, double outTimes[6], int &tz
   int doy = dayOfYear(date);
   double decl, eqt;
   solarDeclinationAndEqtime(doy, decl, eqt);
+  // [HEURE] L'offset est celui EN VIGUEUR LE JOUR DEMANDE, pas celui
+  // d'aujourd'hui : la veille d'une bascule, les horaires de demain se
+  // calculent deja avec le nouvel offset. On l'evalue a midi local de ce jour,
+  // donc toujours du bon cote des 03:00 ou l'heure change.
+  // Jusqu'a la 2.3.31 on lisait ici tz_offset_min, fige : RTC et calcul
+  // partageaient le meme offset perime, et seul l'affichage etait faux. Avec
+  // un RTC en UTC, garder l'offset fige ferait sonner une heure trop tard
+  // apres le 25 octobre tout boitier retombant sur ce calcul.
   prefs.begin("adhancfg", true);
-  int tzOffsetMin = prefs.getInt("tz_offset_min", 0x7fffffff);
+  bool fuseauRegle = (prefs.getInt("tz_offset_min", 0x7fffffff) != 0x7fffffff);
   prefs.end();
   int tzMin;
-  if (tzOffsetMin != 0x7fffffff) {
-    tzMin = tzOffsetMin;
+  if (fuseauRegle) {
+    DateTime midi(date.year(), date.month(), date.day(), 12, 0, 0);
+    tzMin = offsetLocalMin(heureUtc(midi));
     tzUsedMin = tzMin;
     tzSource = "preference";
   } else {
@@ -3075,7 +3439,7 @@ bool getPrayerPlaybackForIndex(int prayerIndex, int &trackToPlay, bool &playDuaa
 
   prefs.end();
 
-  trackToPlay = constrain(trackToPlay, 1, 21);
+  trackToPlay = constrain(trackToPlay, 1, PISTE_MAX);
   return true;
 }
 
@@ -3085,7 +3449,7 @@ void handlePrayerTimes() {
     server.send(200, "application/json", "{\"error\":\"RTC missing\"}");
     return;
   }
-  DateTime now = rtc.now();
+  DateTime now = localNow();
   if (now.month() < 1 || now.month() > 12 || now.year() < 2020 || now.year() > 2100) {
     server.send(200, "application/json", "{\"error\":\"invalid RTC date\"}");
     return;
@@ -3103,7 +3467,10 @@ void handlePrayerTimes() {
   prefs.end();
 
   // Check if Mawaqit times are fresh (synced < 25 hours ago)
-  unsigned long now_epoch = now.unixtime();
+  // [HEURE] mq_sync_ts est un epoch UTC (ecrit depuis rtc.now()) : on compare
+  // a de l'UTC, pas a l'epoch de l'heure locale (ecart V2 : la V3 compare
+  // encore ici a l'heure locale, ce qui vieillit les horaires d'1 a 2 h).
+  unsigned long now_epoch = heureUtc(now).unixtime();
   unsigned long timeSinceSyncSec = (mq_sync_ts > 0 && now_epoch >= mq_sync_ts) ? (now_epoch - mq_sync_ts) : 999999UL;
   bool mawaqitValid = (mq_fajr.length() >= 5) && (mq_isha.length() >= 5) && (timeSinceSyncSec < 25UL * 3600UL);
 
@@ -3187,7 +3554,7 @@ void handleDumpStatus() {
   bool rtc_ok = rtcPresent;
   String rtc_time = "";
   if (rtc_ok) {
-    DateTime now = rtc.now();
+    DateTime now = localNow();
     char b[64];
     snprintf(b, sizeof(b), "%04u-%02u-%02u %02u:%02u:%02u", now.year(), now.month(), now.day(), now.hour(), now.minute(), now.second());
     rtc_time = String(b);
@@ -3201,6 +3568,192 @@ void handleDumpStatus() {
            wifi_state.c_str(), ip.c_str(), rtc_ok ? 1 : 0, rtc_time.c_str(), lat.c_str(), lon.c_str(), acc.c_str(), (tz == 0x7fffffff ? -9999 : tz), (int)key.length());
   server.send(200, "application/json", String(out));
 }
+
+// ================================ HEURE ======================================
+// [HEURE] Le DS3231 stocke l'heure UTC (depuis la 2.3.32, repris de la V3
+// 3.0.43/3.0.44). Jusqu'a la 2.3.31 il stockait l'heure LOCALE, avec un offset
+// fixe pousse par l'application : un boitier hors ligne se decalait donc d'une
+// heure au changement d'octobre, et l'adhan partait a la mauvaise minute
+// jusqu'a ce que quelqu'un rouvre l'application.
+//
+// Desormais : RTC en UTC, et l'offset est RECALCULE a chaque lecture a partir
+// de la date. Un boitier qui n'a jamais de reseau reste juste.
+//
+// Deux preferences remplacent l'ancienne :
+//   tz_std_min  offset NORMAL du lieu, en minutes (France metropolitaine : 60)
+//   tz_dst_eu   appliquer la regle europeenne d'heure d'ete (France : oui)
+// tz_offset_min reste ecrite pour que l'application actuelle continue de lire
+// quelque chose de sense, mais plus rien ne s'en sert pour calculer l'heure.
+//
+// La Reunion (UTC+4, sans heure d'ete) tombe naturellement sur tz_dst_eu=false :
+// son offset ne bouge jamais. Voir migrerRtcVersUtc() pour la deduction.
+//
+// NE PAS REVENIR EN ARRIERE : un boitier migre puis reflashe en 2.3.31 ou avant
+// lirait son DS3231 UTC comme de l'heure locale (une a deux heures d'ecart).
+//
+// Les fonctions pures ci-dessous sont IDENTIQUES a celles de la V3 : les bancs
+// d'essai test_heure_ete.cpp et test_conversions_heure.cpp valent pour les deux.
+
+// Cache RAM : offsetLocalMin() est appele dans loop(), on ne va pas ouvrir la
+// NVS a chaque tour. chargerFuseau() le rafraichit apres toute ecriture.
+static int  g_tzStdMin = 60;
+static bool g_tzDstEu  = true;
+
+static int joursDansMois(int annee, int mois) {
+  static const int d[12] = {31,28,31,30,31,30,31,31,30,31,30,31};
+  if (mois < 1 || mois > 12) return 30;
+  if (mois == 2 && ((annee % 4 == 0 && annee % 100 != 0) || annee % 400 == 0)) return 29;
+  return d[mois - 1];
+}
+
+// Jour de la semaine par la methode de Sakamoto. 0 = dimanche.
+static int jourSemaine(int annee, int mois, int jour) {
+  static const int t[12] = {0,3,2,5,0,3,5,1,4,6,2,4};
+  if (mois < 3) annee -= 1;
+  return (annee + annee/4 - annee/100 + annee/400 + t[mois - 1] + jour) % 7;
+}
+
+// Quantieme du dernier dimanche du mois : on part du dernier jour et on remonte.
+int dernierDimancheDuMois(int annee, int mois) {
+  int j = joursDansMois(annee, mois);
+  while (j > 1 && jourSemaine(annee, mois, j) != 0) j--;
+  return j;
+}
+
+// Regle europeenne (directive 2000/84/CE) : l'heure d'ete court du dernier
+// dimanche de mars a 01:00 UTC au dernier dimanche d'octobre a 01:00 UTC.
+// L'heure passee ici DOIT etre de l'UTC : c'est ce qui rend la bascule
+// simultanee dans toute l'Union, et ce qui evite l'heure ambigue de 2 h a 3 h.
+bool heureEteEurope(const DateTime &utc) {
+  int a = utc.year(), m = utc.month(), j = utc.day();
+  if (a < 2020 || a > 2100) return false;      // date aberrante : pas d'heure d'ete
+  if (m < 3 || m > 10) return false;           // novembre a fevrier : hiver
+  if (m > 3 && m < 10) return true;            // avril a septembre : ete
+  int bascule = dernierDimancheDuMois(a, m);
+  if (m == 3) {
+    if (j > bascule) return true;
+    if (j < bascule) return false;
+    return utc.hour() >= 1;
+  }
+  // octobre
+  if (j < bascule) return true;
+  if (j > bascule) return false;
+  return utc.hour() < 1;
+}
+
+// Minutes a AJOUTER a l'UTC pour obtenir l'heure locale.
+// France : +60 en hiver, +120 en ete.
+int offsetLocalMin(const DateTime &utc) {
+  if (g_tzDstEu && heureEteEurope(utc)) return g_tzStdMin + 60;
+  return g_tzStdMin;
+}
+
+// L'heure d'ete s'applique-t-elle vraiment ici ? Un boitier a La Reunion
+// traverse mars et octobre sans que rien ne bouge.
+bool heureEteActive(const DateTime &utc) {
+  return g_tzDstEu && heureEteEurope(utc);
+}
+
+DateTime heureLocale(const DateTime &utc) {
+  return utc + TimeSpan((int32_t)offsetLocalMin(utc) * 60);
+}
+
+// Local -> UTC. L'offset a retrancher est celui en vigueur A CET INSTANT-LA,
+// pas maintenant : une passe d'approximation suffit, les deux ne different que
+// dans la fenetre d'une heure autour d'une bascule.
+DateTime heureUtc(const DateTime &local) {
+  DateTime approx = local - TimeSpan((int32_t)offsetLocalMin(local) * 60);
+  return local - TimeSpan((int32_t)offsetLocalMin(approx) * 60);
+}
+
+// Heure locale courante. C'est ELLE que doit lire tout ce qui parle a l'usager
+// ou compare des horaires de priere ; rtc.now() ne rend plus que de l'UTC.
+DateTime localNow() {
+  DateTime utc = rtc.now();
+  return heureLocale(utc);
+}
+
+void chargerFuseau() {
+  prefs.begin("adhancfg", true);
+  int  std = prefs.getInt("tz_std_min", 0x7fffffff);
+  bool dst = prefs.getBool("tz_dst_eu", true);
+  if (std == 0x7fffffff) {            // avant migration : on retombe sur l'ancien
+    std = prefs.getInt("tz_offset_min", 60);
+    dst = false;                      // offset fige, comportement d'avant
+  }
+  prefs.end();
+  g_tzStdMin = std;
+  g_tzDstEu  = dst;
+  Serial.printf("[HEURE] fuseau : standard %+d min, heure d'ete europeenne %s\n",
+                g_tzStdMin, g_tzDstEu ? "oui" : "non");
+}
+
+// Migration des boitiers deja en circulation, dont le DS3231 porte l'heure
+// LOCALE. Executee une seule fois. Elle fonctionne HORS LIGNE : l'ancien offset
+// stocke est exactement celui qui avait ete ajoute a l'UTC au moment ou le RTC
+// a ete regle, donc le retrancher redonne l'UTC.
+void migrerRtcVersUtc() {
+  if (!rtcPresent) return;
+  prefs.begin("adhancfg", true);
+  bool dejaUtc      = prefs.getBool("rtc_en_utc", false);
+  bool fuseauDeduit = (prefs.getInt("tz_std_min", 0x7fffffff) != 0x7fffffff);
+  int  ancien       = prefs.getInt("tz_offset_min", 0x7fffffff);
+  prefs.end();
+  // Deux choses independantes : deduire le reglage de fuseau, et convertir le
+  // RTC. Chacune ne se fait qu'une fois, mais SEPAREMENT : si NTP passait un
+  // jour avant nous (il pose rtc_en_utc lui-meme), le fuseau serait quand meme
+  // deduit, au lieu de rester fige sur l'ancien offset avec l'heure d'ete
+  // desactivee - silencieusement, pour toujours.
+  if (dejaUtc && fuseauDeduit) { chargerFuseau(); return; }
+
+  DateTime avant = rtc.now();
+  bool datePlausible = (avant.year() >= 2020 && avant.year() <= 2100);
+  int applique = (ancien == 0x7fffffff) ? 0 : ancien;
+
+  // Deduire le nouveau reglage de l'ancien offset fixe.
+  //   +60  -> France en hiver (ou zone CET) : heure d'ete europeenne
+  //   +120 -> France en ete SI on est bien dans la periode d'ete ; sinon c'est
+  //           une vraie zone UTC+2 fixe, on n'y touche pas
+  //   autre-> offset fixe, pas d'heure d'ete (La Reunion, etc.)
+  // L'UTC de reference : si le RTC est deja en UTC, le lire tel quel ; sinon
+  // retrancher l'ancien offset, celui-la meme qui avait ete ajoute.
+  DateTime utcApprox = !datePlausible ? avant
+                     : (dejaUtc ? avant : (avant - TimeSpan((int32_t)applique * 60)));
+
+  prefs.begin("adhancfg", false);
+  if (!fuseauDeduit) {
+    int  std; bool dstEu;
+    if (applique == 60) {
+      std = 60; dstEu = true;
+    } else if (applique == 120 && datePlausible && heureEteEurope(utcApprox)) {
+      std = 60; dstEu = true;
+    } else {
+      std = applique; dstEu = false;
+    }
+    prefs.putInt("tz_std_min", std);
+    prefs.putBool("tz_dst_eu", dstEu);
+  }
+  if (!dejaUtc) {
+    if (datePlausible && applique != 0) {
+      rtc.adjust(avant - TimeSpan((int32_t)applique * 60));
+      // [HEURE] Ecart V2 : la sauvegarde anti-coupure last_epoch a ete ecrite
+      // par la 2.3.31, donc en heure LOCALE. On la remet tout de suite en UTC,
+      // sinon une coupure sans pile dans le quart d'heure suivant restaurerait
+      // un DS3231 decale du fuseau.
+      prefs.putULong("last_epoch", rtc.now().unixtime());
+    }
+    prefs.putBool("rtc_en_utc", true);
+  }
+  prefs.end();
+
+  DateTime apres = rtc.now();
+  Serial.printf("[HEURE] Migration RTC local -> UTC : %04u-%02u-%02u %02u:%02u -> %04u-%02u-%02u %02u:%02u "
+                "(ancien offset %+d min)\n",
+                avant.year(), avant.month(), avant.day(), avant.hour(), avant.minute(),
+                apres.year(), apres.month(), apres.day(), apres.hour(), apres.minute(), applique);
+  chargerFuseau();
+}
+// ============================== fin HEURE ====================================
 
 // ---------------- DS3231 alarm helpers (I2C register access + Alarm2 daily) ----------------
 static inline uint8_t decToBcd(uint8_t val) {
@@ -3328,7 +3881,11 @@ bool computeNextPrayer(const DateTime &now, DateTime &nextDt, int &idx) {
   unsigned long mq_sync_ts = prefs.getULong("mq_sync_ts", 0);
   prefs.end();
 
-  unsigned long now_epoch = now.unixtime();
+  // [HEURE] « now » est une heure LOCALE : son unixtime() est decale du fuseau.
+  // Or mq_sync_ts a ete ecrit depuis rtc.now(), donc en UTC. Sans cette
+  // conversion, la fraicheur des horaires Mawaqit serait surestimee d'une a
+  // deux heures - assez pour garder une journee de retard en usage reel.
+  unsigned long now_epoch = heureUtc(now).unixtime();
   unsigned long age_sec = (mq_sync_ts > 0 && now_epoch >= mq_sync_ts) ? (now_epoch - mq_sync_ts) : 999999UL;
   bool mqValid = (mq[0].length() >= 5) && (mq[5].length() >= 5) && (age_sec < 25UL * 3600UL);
 
@@ -3406,7 +3963,7 @@ bool computeNextPrayer(const DateTime &now, DateTime &nextDt, int &idx) {
 // Schedule next prayer alarm: computes next prayer, programs Alarm2 daily at that hh:mm
 void scheduleNextPrayerAlarm() {
   if (!rtcPresent) return;
-  DateTime now = rtc.now();
+  DateTime now = localNow();
   // Guard against corrupt RTC data (I2C bus issue) to avoid out-of-bounds crash in dayOfYear()
   if (now.month() < 1 || now.month() > 12 || now.day() < 1 || now.day() > 31 || now.year() < 2020 || now.year() > 2100) {
     Serial.printf("scheduleNextPrayerAlarm: invalid RTC date %04u-%02u-%02u, skipping\n", now.year(), now.month(), now.day());
@@ -3416,8 +3973,14 @@ void scheduleNextPrayerAlarm() {
   int idx;
   if (computeNextPrayer(now, nextDt, idx)) {
     scheduledPrayerIndex = idx;
-    scheduledPrayerTime = nextDt;
-    ds3231SetAlarm2Daily(nextDt.hour(), nextDt.minute());
+    scheduledPrayerTime = nextDt;            // horaire de priere : heure LOCALE
+    // [HEURE] Mais le DS3231 compte en UTC : son Alarm2 (heure:minute) doit etre
+    // programmee a l'heure UTC correspondante, sinon elle sonne avec l'ecart du
+    // fuseau. heureUtc() prend l'offset en vigueur A L'HEURE DE LA PRIERE, pas
+    // maintenant. Le secours logiciel (millis) et le secours par comparaison
+    // dans loop() restent en heure locale, comme scheduledPrayerTime.
+    DateTime nextUtc = heureUtc(nextDt);
+    ds3231SetAlarm2Daily(nextUtc.hour(), nextUtc.minute());
     // Also schedule a software fallback alarm based on millis() to ensure
     // the prayer triggers even if the DS3231 interrupt/flag is missed.
     unsigned long deltaSec = 0;
@@ -3428,10 +3991,10 @@ void scheduleNextPrayerAlarm() {
       // convert to ms, guard overflow
       unsigned long deltaMs = (unsigned long)deltaSec * 1000UL;
       softwareAlarmAt = millis() + deltaMs;
-      Serial.printf("Scheduled alarm for prayer %d at %04u-%02u-%02u %02d:%02d (in %lu s, software fallback set)\n", idx, nextDt.year(), nextDt.month(), nextDt.day(), nextDt.hour(), nextDt.minute(), deltaSec);
+      Serial.printf("Alarme priere %d le %04u-%02u-%02u a %02d:%02d locale (%02u:%02u UTC, dans %lu s, secours logiciel arme)\n", idx, nextDt.year(), nextDt.month(), nextDt.day(), nextDt.hour(), nextDt.minute(), nextUtc.hour(), nextUtc.minute(), deltaSec);
     } else {
       softwareAlarmAt = 0;
-      Serial.printf("Scheduled alarm for prayer %d at %04u-%02u-%02u %02d:%02d (software fallback not set)\n", idx, nextDt.year(), nextDt.month(), nextDt.day(), nextDt.hour(), nextDt.minute());
+      Serial.printf("Alarme priere %d le %04u-%02u-%02u a %02d:%02d locale (%02u:%02u UTC, sans secours logiciel)\n", idx, nextDt.year(), nextDt.month(), nextDt.day(), nextDt.hour(), nextDt.minute(), nextUtc.hour(), nextUtc.minute());
     }
   } else {
     scheduledPrayerIndex = 0;
@@ -3457,17 +4020,22 @@ bool tryReinitSD(int retries = 2) {
   return false;
 }
 
-// Lance la lecture d'un track (1-based, /mp3/NNNN.mp3)
-void playTrack(int track) {
+// Lance la lecture d'un track (1-based, /mp3/NNNN.mp3).
+// [ADHAN] Rend FAUX si la piste manque : avant, une piste absente passait
+// pour jouee, et personne en aval ne pouvait se rabattre sur une autre.
+bool playTrack(int track) {
   if (!audio.sdOk()) {
     Serial.println("[Audio] SD non disponible, tentative reinit...");
     if (!tryReinitSD(2)) {
       Serial.println("[Audio] Lecture impossible : SD indisponible");
-      return;
+      return false;
     }
   }
   Serial.printf("[Audio] Lecture track %d\n", track);
-  audio.playTrackNum(track);
+  if (!audio.playTrackNum(track)) {
+    Serial.printf("[Audio] piste %d introuvable sur la carte\n", track);
+    return false;
+  }
   isPlaying = true;
 
   // Pompe audio 800ms pour eviter de couper le debut de l'adhan
@@ -3476,6 +4044,27 @@ void playTrack(int track) {
     audio.pump();
     delay(2);
   }
+  return true;
+}
+
+// [ADHAN] Joue l'adhan d'une priere sans JAMAIS laisser le silence (V3 3.0.46).
+// La piste choisie peut manquer : muezzin du catalogue pas encore telecharge
+// (boite hors ligne depuis le choix), fichier efface, SD remplacee. Avant,
+// playTrack() echouait et rien ne sonnait. Ordre de repli : l'adhan d'origine
+// de la priere (3 = Fajr, avec « as-salatu khayrun mina n-nawm » ; 2 pour les
+// autres), puis tout adhan d'origine present. Le 3 n'est jamais un repli hors
+// Fajr : sa formule n'appartient qu'a l'aube. Rend la piste jouee, 0 si aucune.
+int jouerAdhan(int track, bool fajr) {
+  if (track >= 2 && playTrack(track)) return track;
+  const int defaut = fajr ? 3 : 2;
+  Serial.printf("[ADHAN] piste %d absente -> repli sur %d\n", track, defaut);
+  if (track != defaut && playTrack(defaut)) return defaut;
+  for (int t = 2; t <= 6; t++) {
+    if (t == track || t == defaut || (t == 3 && !fajr)) continue;
+    if (playTrack(t)) return t;
+  }
+  Serial.println("[ADHAN] aucun adhan sur la carte");
+  return 0;
 }
 
 void stopPlay() {
@@ -3530,15 +4119,21 @@ void mqttCallback(char *topic, byte *payload, unsigned int len) {
     int track = (len > 0) ? atoi(msg) : 2;
     if (track < 2) track = 2;  // jamais track 1 (duaa) comme adhan
     shouldPlayDuaaAfterAdhan = true;
-    adhanTrackBeforeDuaa = track;
     // Activate prayer LED scene
     if (prayerPrevLedScenario < 0) {
       prayerPrevLedScenario = ledScenario;
       ledScenario = SCENE_PRAYER;
       Serial.printf("MQTT adhan: LED switched to PRAYER scene (was %d)\n", prayerPrevLedScenario);
     }
-    playTrack(track);
-    mqtt.publish(TOPIC_AUDIO_STATUS, "playing");
+    // [ADHAN] La piste reellement jouee (repli compris) : c'est elle que
+    // onPlaybackFinished attend pour enchainer la duaa. 0 = rien ne sonne.
+    adhanTrackBeforeDuaa = jouerAdhan(track, false);
+    if (adhanTrackBeforeDuaa) {
+      mqtt.publish(TOPIC_AUDIO_STATUS, "playing");
+    } else {
+      shouldPlayDuaaAfterAdhan = false;
+      mqtt.publish(TOPIC_AUDIO_STATUS, "refus:fichier absent");
+    }
 
   } else if (strcmp(topic, TOPIC_AUDIO_PLAY) == 0) {
     int track = atoi(msg);
@@ -3771,6 +4366,31 @@ void handlePlayFile() {
   server.send(200, "application/json", j);
 }
 
+// [FLUX] GET /api/audio/stream?url=https://...&repli=/quran/afs/001.mp3&volume=12
+// Ecoute A LA DEMANDE d'un recitateur absent de la carte. `repli` (facultatif)
+// est un fichier de la SD joue si le flux ne demarre pas ou se coupe.
+// HTTPS uniquement : un flux en clair se laisse remplacer en route.
+void handleAudioStream() {
+  if (!requireApiKey()) return;
+  String url = server.arg("url");
+  String repli = server.arg("repli");
+  if (!url.startsWith("https://") || url.length() > 300) {
+    server.send(400, "application/json", "{\"error\":\"url https requise (300 caracteres max)\"}");
+    return;
+  }
+  if (repli.length() && !SD.exists(repli)) {
+    server.send(404, "application/json", "{\"error\":\"repli absent de la carte\",\"repli\":\"" + repli + "\"}");
+    return;
+  }
+  String v = server.arg("volume");
+  if (v.length()) audio.volume(constrain(v.toInt(), 0, 30));
+  const int r = audio.playUrl(url.c_str(), repli.c_str());
+  if (r) isPlaying = true;
+  const char *source = r == 1 ? "flux" : r == 2 ? "repli" : "aucune";
+  server.send(200, "application/json",
+              String("{\"started\":") + (r ? "true" : "false") + ",\"source\":\"" + source + "\"}");
+}
+
 void handleAudioList() {
   String out = "[";
   bool first = true;
@@ -3801,6 +4421,10 @@ void handleDiag() {
 // Sync de contenu : telecharge les fichiers MANQUANTS listes dans un manifeste
 // texte (1 ligne = "chemin|url"). Permet d'ajouter des duaas/sons a distance.
 String _syncMsg = "(idle)";   // diagnostic visible via /api/content/status
+// [SYNCHRO] L'audio a la priorite absolue sur la synchro. Quand une lecture
+// demarre, playPath leve _syncAbandon ; la tache de synchro s'arrete en quelques
+// dizaines de ms, ferme le TLS et rend sa RAM et la SD. Elle reprendra 2 min
+// apres, et ne refera que le manque.
 static const char *V2_CONTENT_URL =
   "https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/audio_content.txt";
 
@@ -3809,7 +4433,7 @@ int v2SyncContent() {
 #if ENABLE_BLE
   if (_bleActive) stopBLEProvisioning();   // libere la RAM BLE (~60KB) avant le TLS
 #endif
-  WiFiClientSecure cli; cli.setInsecure();
+  WiFiClientSecure cli; securiser(cli);   // [TLS] on verifie que c est bien GitHub
   HTTPClient http;
   if (!http.begin(cli, V2_CONTENT_URL)) return -1;
   http.setConnectTimeout(5000);
@@ -3820,7 +4444,29 @@ int v2SyncContent() {
   if (mc != 200) { http.end(); return -1; }
   String man = http.getString();
   http.end();
+  if (_syncAbandon || audio.isRunning()) { _syncAFaire = true; _syncPasAvant = millis() + 120000UL; return 0; }
 
+  // ── [SYNCHRO] Ce que cette boucle NE FAIT PLUS, et pourquoi (V3 3.0.20) ──
+  // Jusqu'en 2.3.31 elle ouvrait une connexion TLS pour CHAQUE fichier, lisait
+  // le Content-Length, et si la taille sur la SD differait, EFFACAIT le fichier
+  // puis le retelechargeait. Or cinq des six adhans precharges (0002 a 0006)
+  // n'ont plus la taille des fichiers du serveur : archive.org y a ajoute
+  // ~99 Ko de balise ID3, le son est le meme. Consequence, mesuree sur une V3
+  // cliente le 08/09/2026 (meme code de synchro) : a CHAQUE demarrage connecte,
+  // 12 Mo retelecharges sur une SD a 1 MHz, plusieurs minutes de RAM interne a
+  // 30 Ko et de SD saturee. Un adhan dans cette fenetre crepitait, et un
+  // telechargement rate laissait l'adhan ABSENT : le Fajr manquait.
+  //
+  // Regles :
+  //  1. Un fichier PRESENT est laisse tel quel, sans aucune connexion. Seuls les
+  //     fichiers ABSENTS sont telecharges.
+  //  2. On telecharge dans <chemin>.part, et on ne renomme qu'une fois la taille
+  //     verifiee. Un echec ne laisse ni fichier tronque, ni trou.
+  //  3. On ecrit par morceaux de 4 Ko (plus de writeToStream, bloquant et
+  //     sourd a l'audio), et on LACHE TOUT des qu'une lecture demarre : la SD
+  //     n'est pas partageable, et l'adhan a besoin de la RAM du TLS. On
+  //     reviendra 2 min plus tard, et on ne refera que le manque (regle 1).
+  static uint8_t morceau[4096];            // statique : pas sur la pile de la tache
   int added = 0, start = 0;
   while (start < (int)man.length()) {
     int nl = man.indexOf('\n', start);
@@ -3832,29 +4478,11 @@ int v2SyncContent() {
     if (bar < 0) continue;
     String path = line.substring(0, bar); path.trim();
     String url  = line.substring(bar + 1); url.trim();
-    // On ne skippe plus betement si le fichier existe : on lit le Content-Length
-    // et on ne (re)telecharge que si la taille sur SD ne correspond pas. Repare
-    // automatiquement les fichiers tronques par une sync precedente ratee.
-    WiFiClientSecure c2; c2.setInsecure();
-    HTTPClient h2;
-    if (!h2.begin(c2, url)) { _syncMsg += " " + path + "=beginFail"; continue; }
-    h2.setConnectTimeout(5000);
-    h2.setTimeout(60000);                    // 60s pour les gros fichiers archive.org (26Mo+)
-    h2.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
-    int gc = h2.GET();
-    int expected = h2.getSize();             // Content-Length (-1 si inconnu)
-    if (gc != 200) { _syncMsg += " " + path + "=" + String(gc); h2.end(); continue; }
 
-    // Deja present ET complet -> on saute
-    if (SD.exists(path)) {
-      File ex = SD.open(path, FILE_READ);
-      size_t have = ex ? ex.size() : 0;
-      if (ex) ex.close();
-      if (expected > 0 && have == (size_t)expected) {
-        _syncMsg += " " + path + "=present(" + String(have) + ")"; h2.end(); continue;
-      }
-      SD.remove(path);                       // version tronquee/incomplete -> on jette
-    }
+    if (SD.exists(path)) { _syncMsg += " " + path + "=present"; continue; }   // regle 1
+
+    const String part = path + ".part";
+    if (SD.exists(part)) SD.remove(part);    // reste d'une tentative precedente
     // creer les dossiers parents un par un (/a puis /a/b etc.)
     for (int i = 1; i < (int)path.length(); i++) {
       if (path[i] == '/') {
@@ -3864,26 +4492,62 @@ int v2SyncContent() {
         }
       }
     }
-    File f = SD.open(path, FILE_WRITE);
+
+    WiFiClientSecure c2; securiser(c2);   // [TLS] idem pour chaque fichier
+    HTTPClient h2;
+    if (!h2.begin(c2, url)) { _syncMsg += " " + path + "=beginFail"; continue; }
+    h2.setConnectTimeout(15000);
+    h2.setTimeout(60000);                    // 60s pour les gros fichiers archive.org (26Mo+)
+    h2.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
+    int gc = h2.GET();
+    int expected = h2.getSize();             // Content-Length (-1 si inconnu)
+    if (gc != 200) { _syncMsg += " " + path + "=" + String(gc); h2.end(); continue; }
+
+    File f = SD.open(part, FILE_WRITE);
     if (!f) { _syncMsg += " " + path + "=openFail"; h2.end(); continue; }
-    int written = h2.writeToStream(&f);      // streaming -> pas de gros buffer RAM
-    f.close();
-    if (expected > 0 && written != expected) {
-      SD.remove(path);                       // download incomplet -> on ne garde PAS de fichier tronque
-      _syncMsg += " " + path + "=TRUNC(" + String(written) + "/" + String(expected) + ")";
-      Serial.printf("[sync] TRONQUE %s (%d/%d octets) -> supprime\n", path.c_str(), written, expected);
-    } else {
-      added++; _syncMsg += " " + path + "=ok(" + String(written) + ")";
-      Serial.printf("[sync] + %s (%d octets)\n", path.c_str(), written);
+    WiFiClient *flux = h2.getStreamPtr();
+    int written = 0; bool ok = true;
+    unsigned long dernierOctet = millis();
+    while (expected < 0 || written < expected) {
+      if (_syncAbandon || audio.isRunning()) {   // regle 3 : l'adhan d'abord, on rend TOUT
+        ok = false; _syncMsg += " " + path + "=abandon(adhan)"; break;
+      }
+      if (!h2.connected() && !flux->available()) break;
+      size_t dispo = flux->available();
+      if (!dispo) {
+        if (millis() - dernierOctet > 60000UL) { ok = false; break; }   // 60 s sans un octet
+        vTaskDelay(pdMS_TO_TICKS(20));
+        continue;
+      }
+      int n = flux->read(morceau, dispo > sizeof(morceau) ? sizeof(morceau) : dispo);
+      if (n <= 0) { vTaskDelay(pdMS_TO_TICKS(20)); continue; }
+      if ((int)f.write(morceau, n) != n) { ok = false; break; }   // la SD a refuse
+      written += n; dernierOctet = millis();
+      vTaskDelay(1);                          // laisse respirer loop() et l'audio
     }
-    h2.end();
+    f.close(); h2.end();
+
+    if (!ok || (expected > 0 && written != expected)) {          // regle 2
+      SD.remove(part);
+      if (_syncAbandon || audio.isRunning()) {
+        _syncAFaire = true; _syncPasAvant = millis() + 120000UL;   // on reviendra
+        Serial.printf("[sync] %s abandonne pour laisser jouer l'audio, reprise dans 2 min\n", path.c_str());
+        return added;
+      }
+      _syncMsg += " " + path + "=TRUNC(" + String(written) + "/" + String(expected) + ")";
+      Serial.printf("[sync] TRONQUE %s (%d/%d octets) -> .part supprime, rien touche\n", path.c_str(), written, expected);
+      continue;
+    }
+    if (!SD.rename(part, path)) { SD.remove(part); _syncMsg += " " + path + "=renameFail"; continue; }
+    added++; _syncMsg += " " + path + "=ok(" + String(written) + ")";
+    Serial.printf("[sync] + %s (%d octets)\n", path.c_str(), written);
   }
   Serial.printf("[sync] %d fichier(s) ajoute(s)\n", added);
   return added;
 }
 // Synchro lancee en TACHE DE FOND (sinon le download bloque le serveur HTTP
 // + watchdog sur les gros fichiers). L'app interroge /api/content/status.
-static volatile bool _syncRunning = false;
+// _syncRunning : declare en tete de fichier, avec les autres variables de synchro
 static volatile int  _syncAdded   = 0;
 void _v2SyncTask(void*) {
   _syncRunning = true;
@@ -3922,19 +4586,25 @@ void v2Fire(V2Item &it, int h, int m, int dow, int d, int &fired, const char *pa
 
 // Scheduler appele depuis loop() : joue azkar + coran selon les automatisations
 void v2Tick() {
-  static bool inited = false, synced = false;
+  static bool inited = false;
   static unsigned long lastCheck = 0;
   static int fSabah = -1, fMasaa = -1, fKahf = -1, fMulk = -1;
   if (!inited) { v2LoadSettings(); inited = true; }
-  if (!synced && WiFi.status() == WL_CONNECTED) {  // sync auto au boot, en tache de fond
-    synced = true;
-    if (!_syncRunning) xTaskCreate(_v2SyncTask, "v2sync", 32768, nullptr, 1, nullptr);
+  // [SYNCHRO] Sync auto au boot, en tache de fond, mais pas dans la premiere
+  // minute : le TLS et la pile de 32 Ko de la tache pesent lourd, on laisse
+  // d'abord passer l'appairage, une eventuelle mise a jour, et un adhan qui
+  // tomberait pile. Jamais pendant une lecture ; apres un abandon, _syncPasAvant
+  // repousse la reprise de 2 min.
+  if (_syncAFaire && WiFi.status() == WL_CONNECTED && millis() > 60000UL
+      && (long)(millis() - _syncPasAvant) >= 0 && !audio.isRunning() && !_syncRunning) {
+    _syncAFaire = false;
+    xTaskCreate(_v2SyncTask, "v2sync", 32768, nullptr, 1, nullptr);
   }
   if (millis() - lastCheck < 1000) return;              // 1x / s
   lastCheck = millis();
   if (!timeUsable()) return;   // [COUPURES] heure inconnue -> pas d'automatisations
   if (audio.isRunning()) return;
-  DateTime now = rtc.now();
+  DateTime now = localNow();   // [HEURE] les automatisations sont en heure locale
   int h = now.hour(), m = now.minute(), d = now.day(), dow = now.dayOfTheWeek(); // 0=Dim..6=Sam
   v2Fire(v2cfg.sabah, h, m, dow, d, fSabah, "/azkar/sabah.mp3");
   v2Fire(v2cfg.masaa, h, m, dow, d, fMasaa, "/azkar/masaa.mp3");
@@ -3951,7 +4621,7 @@ void setup() {
   _bootCount++;
   Serial.printf("[DIAG] Boot #%lu, cause du reboot precedent : %s\n",
                 (unsigned long)_bootCount, resetReasonStr(_lastResetReason));
-  Serial.println("AdhanBox V2 firmware v2.3.21 starting...");
+  Serial.println("AdhanBox V2 firmware v2.3.32 starting...");
 
   // [SECU] Watchdog materiel : on REGLE juste le timeout ici (30s, reboot sur
   // panic) et on DESABONNE les taches idle. L'abonnement de la tache loop() se
@@ -4055,14 +4725,45 @@ void setup() {
         _timeApprox = true;
         Serial.printf("RTC lost power -> heure restauree (approximative) depuis la sauvegarde: %lu\n", (unsigned long)lastEpoch);
       } else {
-        rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
+        // [HEURE] Heure de compilation = heure LOCALE ; le DS3231 attend de
+        // l'UTC. La conversion utilise le fuseau par defaut (France) car les
+        // preferences ne sont pas encore lues a ce stade : approximation
+        // assumee, l'heure est de toute facon non fiable et les adhans suspendus.
+        rtc.adjust(heureUtc(DateTime(F(__DATE__), F(__TIME__))));
         Serial.println("RTC lost power, AUCUNE sauvegarde -> heure de compilation, ADHANS SUSPENDUS jusqu'a NTP.");
       }
     } else {
       _timeTrusted = true;   // le RTC a garde l'heure (pile OK)
     }
+    // [HEURE] Boitiers deja en circulation : le DS3231 porte l'heure LOCALE, on
+    // la ramene en UTC une bonne fois. Placee ICI, apres la restauration
+    // eventuelle depuis last_epoch (qui reproduit l'ancien etat local) et avant
+    // tout ce qui lit l'heure - semis de l'horloge systeme compris - pour que la
+    // suite du demarrage travaille deja en UTC.
+    migrerRtcVersUtc();
+    // [TLS] L'horloge SYSTEME de l'ESP part a 1970 a chaque demarrage, et seul
+    // NTP la reglait. Or mbedTLS verifie les dates de validite d'un certificat
+    // avec CETTE horloge-la, pas avec le DS3231 : en 1970, tout certificat
+    // parait « pas encore valide », et depuis que securiser() verifie les
+    // certificats, la synchro Mawaqit et celle du contenu echoueraient entre le
+    // demarrage et le premier NTP reussi - voire indefiniment derriere un
+    // reseau qui bloque NTP. On la seme donc avec l'heure du DS3231, gardee par
+    // la pile (repris de la V3 3.0.36). Depuis la 2.3.32 cette heure est de
+    // l'UTC, exactement ce qu'attend mbedTLS. Rien d'autre ne lit l'horloge
+    // systeme : toute la logique de priere passe par localNow().
+    {
+      const uint32_t t = rtc.now().unixtime();
+      if (t > 1700000000UL) {            // posterieur a novembre 2023 : plausible
+        struct timeval tv = { .tv_sec = (time_t)t, .tv_usec = 0 };
+        settimeofday(&tv, nullptr);
+        Serial.printf("Horloge systeme semee depuis le DS3231 (%lu) pour le TLS\n",
+                      (unsigned long)t);
+      } else {
+        Serial.println("DS3231 sans heure plausible : TLS impossible jusqu'au premier NTP.");
+      }
+    }
     Serial.println("RTC ready.");
-    DateTime now = rtc.now();
+    DateTime now = localNow();
     char buf[64];
     snprintf(buf, sizeof(buf), "%04u-%02u-%02u %02u:%02u:%02u", now.year(), now.month(), now.day(), now.hour(), now.minute(), now.second());
     Serial.print("Current RTC time: ");
@@ -4461,7 +5162,7 @@ void loop() {
       }
     } else if (cmd.equalsIgnoreCase("showtime")) {
       if (rtc.begin()) {
-        DateTime now = rtc.now();
+        DateTime now = localNow();
         char buf[64];
         snprintf(buf, sizeof(buf), "%04u-%02u-%02u %02u:%02u:%02u", now.year(), now.month(), now.day(), now.hour(), now.minute(), now.second());
         Serial.print("RTC: ");
@@ -4473,15 +5174,15 @@ void loop() {
 
       // set RTC to compile time
       if (rtc.begin()) {
-        rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
-        Serial.println("RTC set to compile time.");
+        rtc.adjust(heureUtc(DateTime(F(__DATE__), F(__TIME__))));   // compilation = heure locale
+        Serial.println("RTC regle sur l'heure de compilation, convertie en UTC.");
         scheduleNextPrayerAlarm();
       } else {
         Serial.println("RTC not initialized or not present.");
       }
     } else if (cmd.equalsIgnoreCase("showtimes")) {
       if (rtc.begin()) {
-        DateTime now = rtc.now();
+        DateTime now = localNow();
         computeAndPrintPrayerTimes(now);
       } else {
         // if RTC not available, use compile date as fallback
@@ -4493,12 +5194,12 @@ void loop() {
     } else if (cmd.equalsIgnoreCase("setalarmtest")) {
       // set an alarm for the next minute (test)
       if (rtc.begin()) {
-        DateTime now = rtc.now();
+        DateTime now = localNow();
         int mm = (now.minute() + 1) % 60;
         int hh = now.hour() + (now.minute() == 59 ? 1 : 0);
-        ds3231SetAlarm2Daily(hh, mm);
         scheduledPrayerIndex = 1;  // test play track 1
         scheduledPrayerTime = DateTime(now.year(), now.month(), now.day(), hh % 24, mm, 0);
+        { DateTime _u = heureUtc(scheduledPrayerTime); ds3231SetAlarm2Daily(_u.hour(), _u.minute()); }
         Serial.printf("Test alarm set for %02d:%02d\n", hh % 24, mm);
       } else {
         Serial.println("RTC not present; cannot set alarm.");
@@ -4891,7 +5592,7 @@ void loop() {
   static uint32_t lastPrayerTriggeredUnix = 0;
   uint32_t nowUnix = 0;
   if (rtcPresent) {
-    DateTime _ln = rtc.now();
+    DateTime _ln = localNow();   // [HEURE] compare a scheduledPrayerTime, qui est locale
     if (_ln.month() >= 1 && _ln.month() <= 12 && _ln.year() >= 2020 && _ln.year() <= 2100)
       nowUnix = _ln.unixtime();
   }
@@ -4976,14 +5677,14 @@ void loop() {
 
             if (playDuaaAfter) {
               shouldPlayDuaaAfterAdhan = true;
-              adhanTrackBeforeDuaa = trackToPlay;
               Serial.printf("Playing adhan first (track %d), then duaa (track 1)\n", trackToPlay);
-              playTrack(trackToPlay);
+              // [ADHAN] piste reellement jouee, repli compris (0 = rien)
+              adhanTrackBeforeDuaa = jouerAdhan(trackToPlay, scheduledPrayerIndex == 1);
             } else {
               shouldPlayDuaaAfterAdhan = false;
               adhanTrackBeforeDuaa = 0;
               Serial.printf("Playing adhan directly (track %d) without duaa\n", trackToPlay);
-              playTrack(trackToPlay);
+              jouerAdhan(trackToPlay, scheduledPrayerIndex == 1);
             }
             mqttPublishPrayerFired(scheduledPrayerIndex);
           } else {
@@ -5086,6 +5787,39 @@ void loop() {
     prefs.begin("adhancfg", false);
     prefs.putULong("last_epoch", rtc.now().unixtime());
     prefs.end();
+  }
+
+  // [HEURE] Surveillance de la bascule ete/hiver.
+  // Le dernier dimanche d'octobre a 3 h locales, l'offset passe de +120 a +60.
+  // L'Alarm2 du DS3231 a ete programmee en UTC avec l'offset en vigueur a
+  // l'heure de la priere, mais le secours logiciel (millis) et les horaires
+  // Mawaqit en memoire, eux, datent d'avant : on replanifie des que l'offset
+  // change. Un test par minute suffit largement et ne coute rien.
+  {
+    static unsigned long dernierTestBascule = 0;
+    static int dernierOffset = 0x7fffffff;
+    if (rtcPresent && millis() - dernierTestBascule > 60000UL) {
+      dernierTestBascule = millis();
+      DateTime utc = rtc.now();
+      if (utc.year() >= 2020 && utc.year() <= 2100) {
+        int off = offsetLocalMin(utc);
+        if (dernierOffset != 0x7fffffff && off != dernierOffset) {
+          Serial.printf("[HEURE] Bascule ete/hiver : offset %+d -> %+d min. Replanification de l'alarme.\n",
+                        dernierOffset, off);
+          // Les horaires Mawaqit en memoire sont ceux d'HIER, lus dans l'ancien
+          // cadran : appliques tels quels apres la bascule, chaque priere
+          // partirait avec une heure d'ecart jusqu'a la synchro suivante, qui
+          // peut attendre 20 h. On les perime : computeNextPrayer() retombe des
+          // maintenant sur le calcul (juste, lui), et la synchro automatique
+          // repart dans la minute si le reseau est la.
+          prefs.begin("adhancfg", false);
+          prefs.putULong("mq_sync_ts", 0);
+          prefs.end();
+          scheduleNextPrayerAlarm();
+        }
+        dernierOffset = off;
+      }
+    }
   }
 
   // Auto-sync Mawaqit times every 20 hours when connected to WiFi

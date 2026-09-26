@@ -1,6 +1,6 @@
 {
-  "version": "2.3.31",
+  "version": "2.3.32",
   "hardware": "v2",
   "url": "https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/build_temp_v2/adhanbox_v2.ino.bin",
-  "changelog": "Nom Bluetooth unique par boitier : deux AdhanBox cote a cote ne se confondent plus a l appairage."
+  "changelog": "Grande mise à jour : passage automatique à l'heure d'été et d'hiver, heure vérifiée chaque jour sur Internet, 27 voix de muezzin au choix, écoute en ligne de plus de 170 récitateurs, et un appel à la prière qui ne reste jamais silencieux. Les adhans enregistrés ne sont plus retéléchargés à chaque démarrage."
 }
