@@ -2,7 +2,7 @@
 // - Starts an AP when a long-press is detected on CONFIG_BUTTON_PIN
 // - Serves a small webpage that requests navigator.geolocation and POSTs lat/lon
 // - Stores lat/lon/accuracy/timestamp in Preferences (NVS)
-//Version: 3.0.48 (AdhanBox V3 / HW v3)
+//Version: 3.0.49 (AdhanBox V3 / HW v3)
 #include <Arduino.h>
 #include <esp_mac.h>   // esp_read_mac() : MAC eFuse, lisible sans Wi-Fi
 #include <Wire.h>
@@ -646,7 +646,8 @@ class I2SAudio {
   char _curPath[64] = {0};       // [PLAYER] fichier en cours (pour /api/audio/status)
   uint8_t *_tamponFlux = nullptr;  // [FLUX] tampon PSRAM, libere par stop()
   bool _flux = false;              // [FLUX] la lecture en cours vient d'Internet
-  char _repli[64] = {0};           // [FLUX] copie SD a jouer si le flux lache
+  char _repli[65] = {0};           // [FLUX] copie SD a jouer si le flux lache
+                                   // [RITUELS] 64 octets + fin : un repli de rituel en fait jusqu'a 64
  public:
   uint32_t sdClock() const { return _sdClock; }
   // Bench debit SD : lit `bytes` octets d'un fichier existant et renvoie ko/s.
@@ -910,7 +911,7 @@ class I2SAudio {
   // ne demarre pas (pas de Wi-Fi, serveur absent, refus), et s'il se coupe en
   // route (voir pump()).
   int playUrl(const char *url, const char *repli) {
-    char repliCopie[64] = {0};
+    char repliCopie[sizeof(_repli)] = {0};
     if (repli && *repli) strncpy(repliCopie, repli, sizeof(repliCopie) - 1);
     if (mp3 || wav) stop("nouvelle lecture flux"); else stop();
     g_blocage.raz();
@@ -987,7 +988,7 @@ class I2SAudio {
         if (_flux && !fin) {
           // [FLUX] Coupure en route : on ne laisse pas le silence, on bascule
           // sur la copie SD si l'appelant en a donne une.
-          char r[64]; strncpy(r, _repli, sizeof(r)); r[sizeof(r) - 1] = 0;
+          char r[sizeof(_repli)]; strncpy(r, _repli, sizeof(r)); r[sizeof(r) - 1] = 0;
           stop("flux interrompu");
           if (r[0]) { Serial.printf("[FLUX] coupure -> repli %s\n", r); playPath(r); }
         } else {
@@ -1050,6 +1051,11 @@ uint8_t ledCustomR = 255, ledCustomG = 200, ledCustomB = 0;
 volatile bool _ledDirty = false;
 unsigned long _ledDirtyAt = 0;
 bool isPlaying = false;
+// [RITUELS] La lecture en cours vient d'un rituel. Avec ses fichiers SD
+// (contenu, repli), tronques comme g_coupure.fichier : a leur fin,
+// onPlaybackFinished() n'enchaine pas la sourate suivante.
+bool g_lectureRituel = false;
+char g_rituelFichiers[2][sizeof(Coupure::fichier)] = {};
 // ledc PWM channel for LED brightness
 const int LEDC_CHANNEL = 0;
 const int LEDC_FREQ = 5000;
@@ -1065,6 +1071,8 @@ void handleShowTime();
 void handlePlayTrack();
 void handleGetAzkarCoran();
 void handleSetAzkarCoran();
+void handleGetRituels();      // [RITUELS] liste + horaires du jour
+void handleSetRituels();      // [RITUELS] remplace toute la liste
 void handleContentSync();
 void handleContentStatus();
 void handleAudioDelete();
@@ -2213,7 +2221,7 @@ void handleOtaUploadComplete() {
 // GET /api/firmware/version
 void handleFirmwareVersion() {
   server.send(200, "application/json",
-              "{\"version\":\"3.0.48\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
+              "{\"version\":\"3.0.49\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
 }
 
 // Returns true if the request carries the correct API key (or if token not yet set).
@@ -2327,11 +2335,11 @@ void handleDeviceInfo() {
   char buf[512];
   if (pairingWindow || hasValidToken) {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.48\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
+             "{\"version\":\"3.0.49\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
              OTA_HOSTNAME, deviceIdHex().c_str(), _apiToken.c_str(), _otaPass.c_str());
   } else {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.48\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
+             "{\"version\":\"3.0.49\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
              OTA_HOSTNAME, deviceIdHex().c_str());
   }
   server.send(200, "application/json", buf);
@@ -3503,8 +3511,10 @@ void setupServerRoutes() {
   server.on("/api/mqtt/config", HTTP_POST, handleMqttConfig);
   server.on("/api/wifi/status", HTTP_GET, handleWifiStatus);
   server.on("/api/firmware/version", HTTP_GET, handleFirmwareVersion);
-  server.on("/api/azkarcoran", HTTP_GET, handleGetAzkarCoran);
+  server.on("/api/azkarcoran", HTTP_GET, handleGetAzkarCoran);    // anciennes applications
   server.on("/api/azkarcoran", HTTP_POST, handleSetAzkarCoran);
+  server.on("/api/rituels", HTTP_GET, handleGetRituels);          // [RITUELS]
+  server.on("/api/rituels", HTTP_POST, handleSetRituels);         // [RITUELS]
   server.on("/api/content/sync", HTTP_POST, handleContentSync);
   server.on("/api/content/status", HTTP_GET, handleContentStatus);
   server.on("/api/audio/list", HTTP_GET, handleAudioList);
@@ -4532,6 +4542,7 @@ void stopPlay(const char *cause) {
   audio.noterAvantStop(cause);
   shouldPlayDuaaAfterAdhan = false;
   adhanTrackBeforeDuaa = 0;
+  g_lectureRituel = false;          // [RITUELS]
   if (prayerPrevLedScenario >= 0) {
     ledScenario = prayerPrevLedScenario;
     prayerPrevLedScenario = -1;
@@ -4574,8 +4585,16 @@ void onPlaybackFinished() {
   // SD ne repond plus » ne doit pas faire sauter a la suivante en masquant le
   // probleme. Un arret par le bouton ou l'application ne passe pas ici du tout,
   // stopPlay() ayant deja mis isPlaying a false.
+  // [RITUELS] Sauf a la fin d'un rituel : il joue son contenu, rien de plus. Un
+  // rituel du vendredi sur /quran/<recitateur>/018.mp3 ne doit pas derouler
+  // tout le reste du Coran. On le reconnait au fichier qui vient de finir, pour
+  // qu'une sourate lancee a la main par-dessus garde son enchainement.
+  const bool finRituel = g_lectureRituel
+      && (strcmp(g_coupure.fichier, g_rituelFichiers[0]) == 0
+          || strcmp(g_coupure.fichier, g_rituelFichiers[1]) == 0);
+  g_lectureRituel = false;
   char suivante[40];
-  if (!shouldPlayDuaaAfterAdhan
+  if (!finRituel && !shouldPlayDuaaAfterAdhan
       && strcmp(g_coupure.cause, "fin du fichier") == 0
       && coranSuivante(g_coupure.fichier, suivante, sizeof(suivante))) {
     Serial.printf("[Coran] %s termine, enchaine sur %s\n", g_coupure.fichier, suivante);
@@ -4870,71 +4889,640 @@ void handleMqttConfig() {
 // Pile de la tache loop() agrandie (decodage MP3 = gourmand en pile)
 SET_LOOP_TASK_STACK_SIZE(16384);
 
-// Une automatisation : actif, heure, volume (0-30), jours (bitmask bit0=Dim..bit6=Sam)
-struct V2Item { bool en; int h, m, vol, days; };
-struct { V2Item sabah, masaa, kahf, mulk; } v2cfg;
+// ── [RITUELS] Automatisations generalisees ──────────────────────────────────
+// Jusqu'a la 3.0.48, quatre automatisations figees (azkar du matin et du soir,
+// Al-Kahf, Al-Mulk), a heure fixe. Un rituel generalise l'idee : jusqu'a 12,
+// un titre libre, un contenu SD ou HTTPS, une heure fixe OU relative a une
+// priere (« 15 min apres Fajr »), qui suit alors les horaires toute l'annee.
+// Stockage : espace NVS « rituels », cle « liste », un rituel par ligne, dans
+// le format meme du POST /api/rituels :
+//   id|en|titre|mode|h|m|priere|decalage|jours|vol|contenu|repli
+#define RITUELS_MAX            12
+#define RITUEL_ID_MAX          12
+#define RITUEL_TITRE_MAX       40    // octets UTF-8, pas caracteres
+#define RITUEL_CHEMIN_MAX      64    // chemin SD : contenu ou repli
+#define RITUEL_URL_MAX         300   // comme /api/audio/stream
 
-void v2LoadOne(const char *p, V2Item &it, int defH, int defM, int defDays) {
-  char k[16];
-  snprintf(k, sizeof(k), "%sEn", p); it.en   = prefs.getBool(k, false);
-  snprintf(k, sizeof(k), "%sH",  p); it.h    = prefs.getInt(k, defH);
-  snprintf(k, sizeof(k), "%sM",  p); it.m    = prefs.getInt(k, defM);
-  snprintf(k, sizeof(k), "%sV",  p); it.vol  = prefs.getInt(k, 20);
-  snprintf(k, sizeof(k), "%sD",  p); it.days = prefs.getInt(k, defDays);
+struct Rituel {
+  char    id[RITUEL_ID_MAX + 1];
+  char    titre[RITUEL_TITRE_MAX + 1];
+  char    contenu[RITUEL_URL_MAX + 1];    // « /... » sur la SD, ou « https://... »
+  char    repli[RITUEL_CHEMIN_MAX + 1];   // copie SD si le flux ne vient pas
+  uint8_t en, mode, h, m, priere, jours, vol;   // priere : 0 Fajr, 1 lever, 2 Dhuhr..5 Isha
+  int16_t decalage;                       // minutes apres (ou avant) la priere
+  int32_t faitJour;                       // AAAAMMJJ du dernier declenchement, en RAM
+};
+
+// 12 x ~440 octets : en PSRAM quand elle existe. La RAM interne decide de la
+// taille du coussin DMA de l'audio (voir dimensionnerCoussin) ; des reglages
+// n'ont rien a y faire.
+static Rituel *g_rituels = nullptr;
+static int     g_nbRituels = 0;
+
+// « Deja joue aujourd'hui » double en memoire RTC_NOINIT, comme la miette de
+// [PLANTAGE] : elle survit a un redemarrage logiciel (mise a jour, plantage,
+// chien de garde), pas a une coupure de courant. Sans elle, une mise a jour
+// faite a 7 h 10 rejouerait les azkar de 7 h (fenetre de rattrapage), et un
+// flux qui ferait tomber la carte la referait tomber en boucle pendant 30 min.
+// Magique + somme : au premier allumage, cette memoire contient n'importe quoi.
+#define FAITS_MAGIC 0x52495455u      // « RITU »
+struct FaitsRtc {
+  uint32_t magic, somme;
+  char     id[RITUELS_MAX][RITUEL_ID_MAX + 1];
+  int32_t  jour[RITUELS_MAX];
+};
+RTC_NOINIT_ATTR FaitsRtc g_faitsRtc;
+
+static uint32_t faitsSomme() {                  // FNV-1a sur ids et jours
+  uint32_t h = 2166136261u;
+  const uint8_t *p = (const uint8_t *)g_faitsRtc.id;
+  for (size_t i = 0; i < sizeof(g_faitsRtc.id); i++) { h ^= p[i]; h *= 16777619u; }
+  p = (const uint8_t *)g_faitsRtc.jour;
+  for (size_t i = 0; i < sizeof(g_faitsRtc.jour); i++) { h ^= p[i]; h *= 16777619u; }
+  return h;
 }
-void v2SaveOne(const char *p, const V2Item &it) {
-  char k[16];
-  snprintf(k, sizeof(k), "%sEn", p); prefs.putBool(k, it.en);
-  snprintf(k, sizeof(k), "%sH",  p); prefs.putInt(k, it.h);
-  snprintf(k, sizeof(k), "%sM",  p); prefs.putInt(k, it.m);
-  snprintf(k, sizeof(k), "%sV",  p); prefs.putInt(k, it.vol);
-  snprintf(k, sizeof(k), "%sD",  p); prefs.putInt(k, it.days);
+// Recopie les drapeaux de la liste en memoire RTC, apres chaque changement.
+static void faitsSauver() {
+  memset(g_faitsRtc.id, 0, sizeof(g_faitsRtc.id));
+  memset(g_faitsRtc.jour, 0, sizeof(g_faitsRtc.jour));
+  for (int i = 0; i < g_nbRituels; i++) {
+    strcpy(g_faitsRtc.id[i], g_rituels[i].id);
+    g_faitsRtc.jour[i] = g_rituels[i].faitJour;
+  }
+  g_faitsRtc.somme = faitsSomme();
+  g_faitsRtc.magic = FAITS_MAGIC;
 }
-void v2LoadSettings() {
-  prefs.begin("v2cfg", true);
-  v2LoadOne("sa", v2cfg.sabah, 7,  0, 0x7F);   // tous les jours
-  v2LoadOne("ma", v2cfg.masaa, 18, 0, 0x7F);
-  v2LoadOne("ka", v2cfg.kahf,  9,  0, 0x20);   // 0x20 = vendredi (bit5)
-  v2LoadOne("mu", v2cfg.mulk,  22, 0, 0x7F);
-  prefs.end();
-}
-void v2SaveSettings() {
-  prefs.begin("v2cfg", false);
-  v2SaveOne("sa", v2cfg.sabah); v2SaveOne("ma", v2cfg.masaa);
-  v2SaveOne("ka", v2cfg.kahf);  v2SaveOne("mu", v2cfg.mulk);
-  prefs.end();
+// Au demarrage : reprend les drapeaux d'avant le redemarrage, s'ils sont sains.
+static void faitsRelire() {
+  if (g_faitsRtc.magic != FAITS_MAGIC || g_faitsRtc.somme != faitsSomme()) return;
+  for (int i = 0; i < g_nbRituels; i++)
+    for (int k = 0; k < RITUELS_MAX; k++)
+      if (strcmp(g_faitsRtc.id[k], g_rituels[i].id) == 0) { g_rituels[i].faitJour = g_faitsRtc.jour[k]; break; }
 }
 
-String v2ItemJson(const char *name, const V2Item &it) {
-  char b[160];
-  snprintf(b, sizeof(b), "\"%s\":{\"en\":%d,\"h\":%d,\"m\":%d,\"vol\":%d,\"days\":%d}",
-           name, it.en, it.h, it.m, it.vol, it.days);
-  return String(b);
+static Rituel *rituelsAllouer() {
+  const size_t n = RITUELS_MAX * sizeof(Rituel);
+  Rituel *t = (Rituel *)heap_caps_calloc(1, n, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+  if (!t) t = (Rituel *)calloc(1, n);            // sans PSRAM : RAM interne
+  return t;
 }
-void handleGetAzkarCoran() {
-  String j = "{" + v2ItemJson("sabah", v2cfg.sabah) + "," + v2ItemJson("masaa", v2cfg.masaa)
-           + "," + v2ItemJson("kahf", v2cfg.kahf) + "," + v2ItemJson("mulk", v2cfg.mulk) + "}";
+
+static Rituel *rituelParId(Rituel *t, int n, const char *id) {
+  for (int i = 0; t && i < n; i++) if (strcmp(t[i].id, id) == 0) return &t[i];
+  return nullptr;
+}
+
+static bool dateValide(const DateTime &d) {
+  return d.year() >= 2020 && d.year() <= 2100 && d.month() >= 1 && d.month() <= 12
+      && d.day() >= 1 && d.day() <= 31;
+}
+static int32_t cleJour(const DateTime &d) {
+  return (int32_t)d.year() * 10000L + d.month() * 100 + d.day();
+}
+
+// Entier strict : signe facultatif puis 1 a 4 chiffres, rien d'autre. atoi()
+// seul prendrait « 7h » pour 7 et une chaine vide pour 0 : un rituel partirait
+// a minuit sans que personne ne comprenne pourquoi.
+static bool rituelEntier(const char *s, int mini, int maxi, int &out) {
+  const char *p = (*s == '-' || *s == '+') ? s + 1 : s;
+  const size_t n = strlen(p);
+  if (n < 1 || n > 4) return false;
+  for (size_t i = 0; i < n; i++) if (p[i] < '0' || p[i] > '9') return false;
+  const int v = (*s == '-') ? -atoi(p) : atoi(p);
+  if (v < mini || v > maxi) return false;
+  out = v;
+  return true;
+}
+
+// UTF-8 strict (RFC 3629). L'application decode la reponse JSON avec un
+// decodeur qui refuse l'UTF-8 mal forme : un seul titre abime rendrait TOUTE
+// la liste illisible, pas seulement ce rituel.
+static bool utf8Valide(const char *s) {
+  const uint8_t *p = (const uint8_t *)s;
+  while (*p) {
+    const uint8_t c = *p++;
+    if (c < 0x80) continue;
+    int suite;
+    uint8_t bas = 0x80, haut = 0xBF;              // bornes du 2e octet
+    if (c >= 0xC2 && c <= 0xDF) suite = 1;
+    else if (c >= 0xE0 && c <= 0xEF) { suite = 2; if (c == 0xE0) bas = 0xA0; if (c == 0xED) haut = 0x9F; }
+    else if (c >= 0xF0 && c <= 0xF4) { suite = 3; if (c == 0xF0) bas = 0x90; if (c == 0xF4) haut = 0x8F; }
+    else return false;
+    for (int k = 0; k < suite; k++, p++) {
+      if (*p < bas || *p > haut) return false;    // la fin de chaine (0) aussi
+      bas = 0x80; haut = 0xBF;
+    }
+  }
+  return true;
+}
+
+// Chemin sur la SD : « / » en tete, 64 octets au plus, UTF-8 valide, aucun
+// caractere de controle. `audio` : .mp3 ou .wav, comme playPath() qui choisit
+// son decodeur sur l'extension.
+static bool rituelCheminSD(const char *s, bool audio) {
+  const size_t n = strlen(s);
+  if (n < 2 || n > RITUEL_CHEMIN_MAX || s[0] != '/') return false;
+  for (const char *p = s; *p; p++) if ((uint8_t)*p < 0x20 || *p == 0x7F) return false;
+  if (!utf8Valide(s)) return false;
+  if (audio && (n < 5 || (strcasecmp(s + n - 4, ".mp3") != 0 && strcasecmp(s + n - 4, ".wav") != 0)))
+    return false;
+  return true;
+}
+
+// URL HTTPS, 300 octets au plus comme /api/audio/stream. ASCII imprimable sans
+// espace : une URL voyage encodee, et un retour a la ligne glisse dedans
+// finirait dans la requete HTTP. Jamais de http:// : un flux en clair se
+// laisse remplacer en route.
+static bool rituelUrl(const char *s) {
+  const size_t n = strlen(s);
+  if (n <= 8 || n > RITUEL_URL_MAX || strncmp(s, "https://", 8) != 0) return false;
+  for (const char *p = s; *p; p++) if ((uint8_t)*p <= 0x20 || (uint8_t)*p >= 0x7F) return false;
+  return true;
+}
+
+// Valide les 12 champs d'une ligne et remplit r. Rend nullptr si tout va bien,
+// sinon la raison, telle que l'application l'affichera.
+static const char *rituelChamps(char *const f[12], Rituel &r) {
+  memset(&r, 0, sizeof(r));
+  static const char ID_INVALIDE[] = "id invalide (1 a 12 caracteres parmi a-z 0-9 _ -)";
+  const size_t li = strlen(f[0]);
+  if (li < 1 || li > RITUEL_ID_MAX) return ID_INVALIDE;
+  for (const char *q = f[0]; *q; q++)
+    if (!((*q >= 'a' && *q <= 'z') || (*q >= '0' && *q <= '9') || *q == '_' || *q == '-')) return ID_INVALIDE;
+  memcpy(r.id, f[0], li + 1);
+  int v;
+  if (!rituelEntier(f[1], 0, 1, v)) return "en invalide (0 ou 1)";
+  r.en = v;
+  const size_t lt = strlen(f[2]);
+  if (lt > RITUEL_TITRE_MAX) return "titre trop long (40 octets max)";
+  if (!utf8Valide(f[2])) return "titre invalide (UTF-8 mal forme)";
+  memcpy(r.titre, f[2], lt + 1);
+  if (!rituelEntier(f[3], 0, 1, v)) return "mode invalide (0 heure fixe, 1 priere)";
+  r.mode = v;
+  if (!rituelEntier(f[4], 0, 23, v)) return "h invalide (0 a 23)";
+  r.h = v;
+  if (!rituelEntier(f[5], 0, 59, v)) return "m invalide (0 a 59)";
+  r.m = v;
+  if (!rituelEntier(f[6], 0, 5, v)) return "priere invalide (0 a 5)";
+  r.priere = v;
+  if (!rituelEntier(f[7], -180, 240, v)) return "decalage invalide (-180 a 240)";
+  r.decalage = v;
+  if (!rituelEntier(f[8], 0, 127, v)) return "jours invalide (0 a 127)";
+  r.jours = v;
+  if (!rituelEntier(f[9], 0, 30, v)) return "vol invalide (0 a 30)";
+  r.vol = v;
+  if (!rituelCheminSD(f[10], true) && !rituelUrl(f[10]))
+    return "contenu invalide (chemin SD .mp3 ou .wav de 64 octets max, ou URL https de 300 octets max)";
+  strcpy(r.contenu, f[10]);
+  if (f[11][0] && !rituelCheminSD(f[11], false)) return "repli invalide (vide ou chemin SD de 64 octets max)";
+  strcpy(r.repli, f[11]);
+  return nullptr;
+}
+
+// Une ligne, decoupee EN PLACE (les « | » deviennent des fins de chaine).
+// strict (POST) : exactement 12 champs. Sinon (NVS) les champs en trop sont
+// ignores : une liste ecrite par une version plus recente, qui en aurait
+// ajoute en fin de ligne, se relit encore apres un retour en arriere.
+static bool rituelLire(char *ligne, Rituel &r, bool strict, String &raison) {
+  int nb = 1;
+  for (const char *q = ligne; *q; q++) if (*q == '|') nb++;
+  if (nb < 12 || (strict && nb > 12)) {
+    raison = "12 champs separes par | attendus, " + String(nb) + " recus";
+    return false;
+  }
+  char *f[12];
+  char *p = ligne;
+  for (int i = 0; i < 12; i++) {
+    f[i] = p;
+    char *barre = strchr(p, '|');
+    if (!barre) break;                            // dernier champ
+    *barre = 0;
+    p = barre + 1;
+  }
+  const char *err = rituelChamps(f, r);
+  if (err) { raison = err; return false; }
+  return true;
+}
+
+// Analyse un texte complet (corps du POST ou blob NVS), modifie en place. Les
+// lignes vides ne comptent pas (corps termine par un saut de ligne, liste vide
+// enregistree « \n ») mais sont numerotees, pour que « ligne N » designe la
+// bonne. strict (POST) : s'arrete a la premiere erreur et la rend, sous la
+// forme « ligne N : raison ». Sinon (NVS) : saute la ligne fautive et continue,
+// une ligne abimee ne doit pas faire perdre les autres.
+static String rituelsAnalyser(char *texte, Rituel *dest, int &n, bool strict) {
+  n = 0;
+  int numero = 0;
+  char *p = texte;
+  while (*p) {
+    numero++;
+    char *fin = strchr(p, '\n');
+    if (fin) *fin = 0;
+    size_t l = strlen(p);
+    if (l && p[l - 1] == '\r') p[--l] = 0;        // fins de ligne CRLF
+    if (l) {
+      String raison;
+      bool ok;
+      if (n >= RITUELS_MAX) { ok = false; raison = "trop de rituels (12 max)"; }
+      else ok = rituelLire(p, dest[n], strict, raison);
+      if (ok && rituelParId(dest, n, dest[n].id)) { ok = false; raison = "id en double"; }
+      if (ok) n++;
+      else {
+        String e = "ligne " + String(numero) + " : " + raison;
+        if (strict) return e;
+        Serial.printf("[RITUELS] NVS, %s -> ignoree\n", e.c_str());
+      }
+    }
+    if (!fin) break;
+    p = fin + 1;
+  }
+  return "";
+}
+
+static void rituelLigne(String &s, const Rituel &r) {
+  char nums[40];
+  snprintf(nums, sizeof(nums), "|%d|%d|%d|%d|%d|%d|%d|",
+           r.mode, r.h, r.m, r.priere, r.decalage, r.jours, r.vol);
+  s += r.id; s += '|'; s += (r.en ? '1' : '0'); s += '|'; s += r.titre;
+  s += nums; s += r.contenu; s += '|'; s += r.repli; s += '\n';
+}
+
+// Un blob et non une chaine : nvs_set_str plafonne a 4000 octets, et 12
+// rituels avec URL en font jusqu'a 5,3 Ko. Rend faux si la NVS refuse (pleine) :
+// l'appelant garde alors l'ancienne liste, en RAM comme en NVS.
+static bool rituelsEnregistrer(const Rituel *t, int n) {
+  String s;
+  s.reserve(n * 160 + 2);
+  for (int i = 0; i < n; i++) rituelLigne(s, t[i]);
+  // Preferences refuse un blob vide : une liste vide s'ecrit « \n ». Il faut
+  // qu'elle EXISTE quand meme, sinon le demarrage suivant croirait a une
+  // premiere fois et ressusciterait les quatre anciennes automatisations.
+  if (!n) s = "\n";
+  prefs.begin("rituels", false);
+  const size_t ecrit = prefs.putBytes("liste", s.c_str(), s.length());
+  const size_t libres = prefs.freeEntries();
+  prefs.end();
+  if (ecrit != s.length()) {
+    Serial.printf("[RITUELS] NVS : enregistrement refuse (%u octets, %u entrees libres)\n",
+                  (unsigned)s.length(), (unsigned)libres);
+    return false;
+  }
+  return true;
+}
+
+// Les quatre automatisations de la 3.0.48 : identifiant (qui devient celui du
+// rituel), prefixe de leurs cles dans v2cfg, titre et contenu d'origine,
+// reglages par defaut, et priere + decalage proposes si l'usager passe en
+// mode « priere ». Sert a la migration et a /api/azkarcoran.
+struct RituelAncien { const char *id, *pfx, *titre, *contenu; uint8_t h, jours, priere; int16_t decalage; };
+static const RituelAncien RITUELS_ANCIENS[4] = {
+  { "sabah", "sa", "Azkar du matin",  "/azkar/sabah.mp3",    7, 0x7F, 0, 15 },
+  { "masaa", "ma", "Azkar du soir",   "/azkar/masaa.mp3",   18, 0x7F, 3, 15 },
+  { "kahf",  "ka", "Sourate Al-Kahf", "/quran/al-kahf.mp3",  9, 0x20, 2, 30 },  // 0x20 = vendredi
+  { "mulk",  "mu", "Sourate Al-Mulk", "/quran/al-mulk.mp3", 22, 0x7F, 5, 30 },
+};
+
+// Premier demarrage en 3.0.49 : les quatre automatisations de la 3.0.48
+// (espace « v2cfg ») deviennent quatre rituels, avec LEURS reglages et a heure
+// fixe comme avant. L'espace v2cfg n'est pas efface : un retour en 3.0.48
+// retrouve ses reglages.
+static int rituelsMigrer(Rituel *t) {
+  prefs.begin("v2cfg", true);     // absent (carte neuve) : les get* rendent les defauts
+  for (int i = 0; i < 4; i++) {
+    const RituelAncien &a = RITUELS_ANCIENS[i];
+    Rituel &r = t[i];
+    memset(&r, 0, sizeof(r));
+    strcpy(r.id, a.id);
+    strcpy(r.titre, a.titre);
+    strcpy(r.contenu, a.contenu);
+    char k[8];
+    // La 3.0.48 ne validait rien : on ramene dans les bornes. Les jours sont
+    // masques et non bornes, elle ne lisait deja que les bits 0 a 6.
+    snprintf(k, sizeof(k), "%sEn", a.pfx); r.en    = prefs.getBool(k, false) ? 1 : 0;
+    snprintf(k, sizeof(k), "%sH",  a.pfx); r.h     = constrain(prefs.getInt(k, a.h), 0, 23);
+    snprintf(k, sizeof(k), "%sM",  a.pfx); r.m     = constrain(prefs.getInt(k, 0), 0, 59);
+    snprintf(k, sizeof(k), "%sV",  a.pfx); r.vol   = constrain(prefs.getInt(k, 20), 0, 30);
+    snprintf(k, sizeof(k), "%sD",  a.pfx); r.jours = prefs.getInt(k, a.jours) & 0x7F;
+    r.mode = 0;
+    r.priere = a.priere;
+    r.decalage = a.decalage;
+  }
+  prefs.end();
+  return 4;
+}
+
+// Charge la liste au premier appel (loop(), ou une requete HTTP si elle passe
+// avant). Pas de liste en NVS = premier demarrage en 3.0.49 : on migre.
+static void rituelsCharger() {
+  if (g_rituels) return;
+  g_rituels = rituelsAllouer();
+  if (!g_rituels) { Serial.println("[RITUELS] plus de memoire pour la liste"); return; }
+  g_nbRituels = 0;
+  prefs.begin("rituels", true);
+  const bool presente = prefs.isKey("liste");
+  const size_t len = presente ? prefs.getBytesLength("liste") : 0;
+  char *texte = len ? (char *)malloc(len + 1) : nullptr;
+  if (texte) texte[prefs.getBytes("liste", texte, len)] = 0;
+  prefs.end();
+  if (!presente) {
+    g_nbRituels = rituelsMigrer(g_rituels);
+    const bool ok = rituelsEnregistrer(g_rituels, g_nbRituels);
+    Serial.printf("[RITUELS] premier demarrage : %d automatisations reprises de v2cfg%s\n",
+                  g_nbRituels, ok ? "" : " (NVS pleine : migration refaite au prochain demarrage)");
+  } else if (texte) {
+    rituelsAnalyser(texte, g_rituels, g_nbRituels, false);
+    Serial.printf("[RITUELS] %d rituel(s) charge(s)\n", g_nbRituels);
+  } else {
+    // Surtout PAS de migration : la liste existe, on n'a pas pu la lire.
+    Serial.println("[RITUELS] liste NVS illisible (memoire) : aucun rituel jusqu'au prochain demarrage");
+  }
+  free(texte);
+  faitsRelire();                  // redemarrage logiciel : ce qui a deja joue aujourd'hui
+  faitsSauver();
+}
+
+// Horaires de priere du jour, en minutes locales depuis minuit, -1 si inconnus.
+// MEME priorite que computeNextPrayer() : Mawaqit s'il a moins de 25 h, sinon
+// le calcul (reglages fins compris). « 15 min apres Fajr » doit tomber 15 min
+// apres l'adhan que la boite joue vraiment. computeNextPrayer() reste telle
+// quelle : l'adhan ne depend en rien des rituels.
+// Seule difference : un horaire Mawaqit illisible (lever du soleil absent de
+// la reponse, par exemple) est complete par le calcul au lieu de manquer.
+bool horairesDuJour(const DateTime &jourLocal, int minutes[6]) {
+  for (int i = 0; i < 6; i++) minutes[i] = -1;
+  if (!dateValide(jourLocal)) return false;
+  static const char *const cles[6] = { "mq_fajr", "mq_sunrise", "mq_dhuhr", "mq_asr", "mq_maghrib", "mq_isha" };
+  String mq[6];
+  prefs.begin("adhancfg", true);
+  for (int i = 0; i < 6; i++) mq[i] = prefs.getString(cles[i], "");
+  const unsigned long sync = prefs.getULong("mq_sync_ts", 0);
+  prefs.end();
+  // mq_sync_ts est en UTC (ecrit depuis rtc.now()) : on compare de l'UTC a de
+  // l'UTC, comme computeNextPrayer().
+  const unsigned long maintenantUtc = heureUtc(jourLocal).unixtime();
+  const unsigned long age = (sync > 0 && maintenantUtc >= sync) ? (maintenantUtc - sync) : 999999UL;
+  const bool mqValide = mq[0].length() >= 5 && mq[5].length() >= 5 && age < 25UL * 3600UL;
+  bool manque = !mqValide;
+  if (mqValide) {
+    for (int i = 0; i < 6; i++) {
+      const char *t = mq[i].c_str();
+      if (mq[i].length() >= 5 && isdigit((unsigned char)t[0]) && isdigit((unsigned char)t[1]) && t[2] == ':'
+          && isdigit((unsigned char)t[3]) && isdigit((unsigned char)t[4])) {
+        const int h = (t[0] - '0') * 10 + (t[1] - '0'), m = (t[3] - '0') * 10 + (t[4] - '0');
+        if (h < 24 && m < 60) { minutes[i] = h * 60 + m; continue; }
+      }
+      manque = true;
+    }
+  }
+  if (manque) {
+    double t[6];
+    int tz = 0;
+    String src;
+    if (computePrayerTimesForDate(jourLocal, t, tz, src)) {
+      for (int i = 0; i < 6; i++) {
+        if (minutes[i] >= 0 || isnan(t[i])) continue;
+        const int v = (int)round(t[i]);             // arrondi a la minute, comme computeNextPrayer
+        minutes[i] = ((v % 1440) + 1440) % 1440;
+      }
+    }
+  }
+  for (int i = 0; i < 6; i++) if (minutes[i] >= 0) return true;
+  return false;
+}
+
+// Cache des horaires : relus au plus toutes les 10 min et au changement de
+// jour (NVS + calcul flottant, inutile une fois par seconde).
+static int           g_horaires[6] = { -1, -1, -1, -1, -1, -1 };
+static int32_t       g_horairesJour = 0;
+static unsigned long g_horairesMs = 0;
+static void rituelsHoraires(const DateTime &maintenant, bool forcer) {
+  const int32_t jour = cleJour(maintenant);
+  if (!forcer && jour == g_horairesJour && millis() - g_horairesMs < 10UL * 60UL * 1000UL) return;
+  horairesDuJour(maintenant, g_horaires);
+  g_horairesJour = jour;
+  g_horairesMs = millis();
+}
+
+// Minute de declenchement, SANS regarder les jours : -1 si l'horaire de la
+// priere est inconnu ou si le decalage fait sortir de la journee.
+static int rituelMinute(const Rituel &r, const int horaires[6]) {
+  if (r.mode == 0) return r.h * 60 + r.m;
+  const int p = horaires[r.priere];
+  if (p < 0) return -1;
+  const int t = p + r.decalage;
+  return (t >= 0 && t < 1440) ? t : -1;
+}
+// Minute de declenchement AUJOURD'HUI (dow : 0 = dimanche, comme RTClib) :
+// -1 aussi si aujourd'hui n'est pas coche.
+static int rituelAujourdhui(const Rituel &r, int dow, const int horaires[6]) {
+  if (!((r.jours >> dow) & 1)) return -1;
+  return rituelMinute(r, horaires);
+}
+
+// ── [RITUELS] API ───────────────────────────────────────────────────────────
+// Chaine JSON entre guillemets : guillemets, barres obliques inverses et
+// caracteres de controle echappes ; l'UTF-8 (deja valide) passe tel quel.
+static void jsonTexte(String &j, const char *s) {
+  j += '"';
+  for (const char *p = s; *p; p++) {
+    const uint8_t c = (uint8_t)*p;
+    if (c == '"' || c == '\\') { j += '\\'; j += (char)c; }
+    else if (c == '\n') j += "\\n";
+    else if (c == '\r') j += "\\r";
+    else if (c == '\t') j += "\\t";
+    else if (c < 0x20) { char e[8]; snprintf(e, sizeof(e), "\\u%04x", c); j += e; }
+    else j += (char)c;
+  }
+  j += '"';
+}
+
+// Remplace toute la liste par `neuf` (n rituels), qui en devient le stockage ;
+// l'ancienne est liberee. Le drapeau « deja joue aujourd'hui » suit
+// l'identifiant tant que la minute de declenchement ne bouge pas (comparee
+// sans les jours) : renommer, changer le volume, decocher puis recocher le jour
+// ou desactiver puis reactiver un rituel deja joue ne le fait pas rejouer.
+// Deplace, il repart de zero : il jouera a sa nouvelle heure, tout de suite si
+// elle est passee depuis moins de 30 min (fenetre de rattrapage).
+// Rend faux sans rien changer si la NVS refuse ; `neuf` reste a l'appelant.
+static bool rituelsRemplacer(Rituel *neuf, int n) {
+  const DateTime maintenant = localNow();
+  if (dateValide(maintenant)) rituelsHoraires(maintenant, true);
+  for (int i = 0; i < n; i++) {
+    neuf[i].faitJour = 0;
+    const Rituel *a = rituelParId(g_rituels, g_nbRituels, neuf[i].id);
+    if (a && rituelMinute(*a, g_horaires) == rituelMinute(neuf[i], g_horaires)) neuf[i].faitJour = a->faitJour;
+  }
+  if (!rituelsEnregistrer(neuf, n)) return false;
+  free(g_rituels);
+  g_rituels = neuf;
+  g_nbRituels = n;
+  faitsSauver();
+  return true;
+}
+
+// GET /api/rituels, sans jeton comme /api/azkarcoran : la liste, les horaires
+// du jour et, pour chaque rituel, sa minute de declenchement aujourd'hui et
+// s'il a deja joue. Tant que l'heure n'est pas fiable, tout ce qui depend de
+// la date vaut -1 (« fait » vaut 0) : mieux vaut « inconnu » qu'une heure fausse.
+void handleGetRituels() {
+  rituelsCharger();
+  const DateTime maintenant = localNow();
+  const bool heureOk = timeUsable() && dateValide(maintenant);
+  static const int inconnus[6] = { -1, -1, -1, -1, -1, -1 };
+  int nowMin = -1, dow = 0;
+  int32_t jour = 0;
+  if (heureOk) {
+    rituelsHoraires(maintenant, true);   // frais : Mawaqit ou ses reglages ont pu changer
+    nowMin = maintenant.hour() * 60 + maintenant.minute();
+    dow = maintenant.dayOfTheWeek();
+    jour = cleJour(maintenant);
+  }
+  const int *hor = heureOk ? g_horaires : inconnus;
+  size_t taille = 160;
+  for (int i = 0; i < g_nbRituels; i++)
+    taille += 240 + 2 * strlen(g_rituels[i].titre) + strlen(g_rituels[i].contenu) + strlen(g_rituels[i].repli);
+  String j;
+  j.reserve(taille);
+  char b[200];
+  snprintf(b, sizeof(b), "{\"version\":1,\"max\":%d,\"maintenant\":%d,\"horaires\":[%d,%d,%d,%d,%d,%d],\"rituels\":[",
+           RITUELS_MAX, nowMin, hor[0], hor[1], hor[2], hor[3], hor[4], hor[5]);
+  j += b;
+  for (int i = 0; i < g_nbRituels; i++) {
+    const Rituel &r = g_rituels[i];
+    j += i ? ",{\"id\":" : "{\"id\":";
+    jsonTexte(j, r.id);
+    snprintf(b, sizeof(b), ",\"en\":%d,\"titre\":", r.en);
+    j += b;
+    jsonTexte(j, r.titre);
+    snprintf(b, sizeof(b), ",\"mode\":%d,\"h\":%d,\"m\":%d,\"priere\":%d,\"decalage\":%d,\"jours\":%d,\"vol\":%d,\"contenu\":",
+             r.mode, r.h, r.m, r.priere, r.decalage, r.jours, r.vol);
+    j += b;
+    jsonTexte(j, r.contenu);
+    j += ",\"repli\":";
+    jsonTexte(j, r.repli);
+    snprintf(b, sizeof(b), ",\"aujourdhui\":%d,\"fait\":%d}",
+             heureOk ? rituelAujourdhui(r, dow, g_horaires) : -1, (heureOk && r.faitJour == jour) ? 1 : 0);
+    j += b;
+  }
+  j += "]}";
   server.send(200, "application/json", j);
 }
 
-static int v2arg(const String &b, const char *k, int def) {
-  double v = parseJsonValue(b, k);
-  return isnan(v) ? def : (int)v;            // app envoie en/jours en entiers
+// POST /api/rituels, jeton requis, corps text/plain, une ligne par rituel :
+//   id|en|titre|mode|h|m|priere|decalage|jours|vol|contenu|repli
+// Remplace TOUTE la liste (0 a 12 lignes ; corps vide = plus aucun rituel).
+// Tout est valide avant de toucher a quoi que ce soit : a la premiere ligne
+// fautive, 400 {"erreur":"ligne N : raison"} et rien ne change.
+void handleSetRituels() {
+  if (!requireApiKey()) return;
+  rituelsCharger();
+  // Envoye en formulaire (curl -d sans en-tete), le corps serait decoupe en
+  // arguments par le serveur : on le lirait vide et on effacerait toute la
+  // liste. On refuse plutot.
+  if (!server.hasArg("plain") && server.clientContentLength() > 0) {
+    server.send(400, "application/json", "{\"erreur\":\"corps attendu en text/plain\"}");
+    return;
+  }
+  String corps = server.hasArg("plain") ? server.arg("plain") : String();
+  Rituel *neuf = rituelsAllouer();
+  if (!neuf || !g_rituels) {
+    free(neuf);
+    server.send(500, "application/json", "{\"erreur\":\"plus de memoire\"}");
+    return;
+  }
+  // Un String vide n'a pas de tampon du tout (c_str() nul) : passe tel quel,
+  // le corps vide ferait planter au lieu de vider la liste.
+  char vide[1] = { 0 };
+  int n = 0;
+  const String erreur = rituelsAnalyser(corps.length() ? corps.begin() : vide, neuf, n, true);
+  if (erreur.length()) {
+    free(neuf);
+    String j = "{\"erreur\":";
+    jsonTexte(j, erreur.c_str());
+    j += "}";
+    server.send(400, "application/json", j);
+    return;
+  }
+  if (!rituelsRemplacer(neuf, n)) {
+    free(neuf);
+    server.send(500, "application/json", "{\"erreur\":\"enregistrement impossible (memoire NVS pleine)\"}");
+    return;
+  }
+  Serial.printf("[RITUELS] liste remplacee : %d rituel(s)\n", n);
+  char b[32];
+  snprintf(b, sizeof(b), "{\"ok\":true,\"n\":%d}", n);
+  server.send(200, "application/json", b);
 }
-void v2SetOne(const String &b, const char *pfx, V2Item &it) {
-  char k[24];
-  snprintf(k, sizeof(k), "%s_en",   pfx); it.en   = v2arg(b, k, it.en);
-  snprintf(k, sizeof(k), "%s_h",    pfx); it.h    = v2arg(b, k, it.h);
-  snprintf(k, sizeof(k), "%s_m",    pfx); it.m    = v2arg(b, k, it.m);
-  snprintf(k, sizeof(k), "%s_vol",  pfx); it.vol  = v2arg(b, k, it.vol);
-  snprintf(k, sizeof(k), "%s_days", pfx); it.days = v2arg(b, k, it.days);
+
+// Anciennes applications : /api/azkarcoran repond toujours, branche sur les
+// rituels sabah, masaa, kahf et mulk.
+// GET : exactement l'ancienne forme. Un rituel en mode priere donne sa minute
+// du jour en h/m ; un rituel supprime depuis la nouvelle application apparait
+// desactive, avec les anciens reglages par defaut.
+void handleGetAzkarCoran() {
+  rituelsCharger();
+  const DateTime maintenant = localNow();
+  if (timeUsable() && dateValide(maintenant)) rituelsHoraires(maintenant, true);
+  String j = "{";
+  for (int i = 0; i < 4; i++) {
+    const RituelAncien &a = RITUELS_ANCIENS[i];
+    const Rituel *r = rituelParId(g_rituels, g_nbRituels, a.id);
+    int en = 0, mn = a.h * 60, vol = 20, jours = a.jours;
+    if (r) {
+      en = r->en; vol = r->vol; jours = r->jours;
+      mn = r->h * 60 + r->m;
+      if (r->mode == 1) { const int t = rituelMinute(*r, g_horaires); if (t >= 0) mn = t; }
+    }
+    char b[96];
+    snprintf(b, sizeof(b), "%s\"%s\":{\"en\":%d,\"h\":%d,\"m\":%d,\"vol\":%d,\"days\":%d}",
+             i ? "," : "", a.id, en, mn / 60, mn % 60, vol, jours);
+    j += b;
+  }
+  j += "}";
+  server.send(200, "application/json", j);
 }
+
+// POST : met a jour en, h, m, vol et days (cles sabah_en, sabah_h... comme
+// avant ; une cle absente ne change rien) et repasse ces rituels en heure
+// fixe, la seule que l'ancienne application connaisse. Un identifiant
+// supprime depuis la nouvelle application est ignore.
 void handleSetAzkarCoran() {
   if (!requireApiKey()) return;  // [SECU] auth requise
-  String b = getRequestBody();
-  v2SetOne(b, "sabah", v2cfg.sabah); v2SetOne(b, "masaa", v2cfg.masaa);
-  v2SetOne(b, "kahf",  v2cfg.kahf);  v2SetOne(b, "mulk",  v2cfg.mulk);
-  v2SaveSettings();
+  rituelsCharger();
+  Rituel *neuf = rituelsAllouer();
+  if (!neuf || !g_rituels) {
+    free(neuf);
+    server.send(500, "text/plain", "plus de memoire");
+    return;
+  }
+  memcpy(neuf, g_rituels, g_nbRituels * sizeof(Rituel));
+  const String b = getRequestBody();
+  for (int i = 0; i < 4; i++) {
+    Rituel *r = rituelParId(neuf, g_nbRituels, RITUELS_ANCIENS[i].id);
+    if (!r) continue;
+    auto champ = [&](const char *suffixe, int &v) -> bool {
+      char k[24];
+      snprintf(k, sizeof(k), "%s_%s", r->id, suffixe);
+      const double d = parseJsonValue(b, k);
+      if (isnan(d)) return false;
+      v = (int)d;                                 // l'app envoie en/jours en entiers
+      return true;
+    };
+    int v;
+    bool touche = false;
+    // La 3.0.48 ne bornait rien : ici on borne, un rituel doit rester valide.
+    if (champ("en", v))   { r->en = v ? 1 : 0;              touche = true; }
+    if (champ("h", v))    { r->h = constrain(v, 0, 23);     touche = true; }
+    if (champ("m", v))    { r->m = constrain(v, 0, 59);     touche = true; }
+    if (champ("vol", v))  { r->vol = constrain(v, 0, 30);   touche = true; }
+    if (champ("days", v)) { r->jours = v & 0x7F;            touche = true; }
+    if (touche) r->mode = 0;
+  }
+  if (!rituelsRemplacer(neuf, g_nbRituels)) {
+    free(neuf);
+    server.send(500, "text/plain", "enregistrement impossible (memoire NVS pleine)");
+    return;
+  }
   server.send(200, "text/plain", "OK");
 }
 
@@ -5330,24 +5918,79 @@ void handleContentStatus() {
   server.send(200, "application/json", j);
 }
 
-// Joue une automatisation si : active, bonne heure, bon jour, pas deja jouee aujourd'hui.
-void v2Fire(V2Item &it, int h, int m, int dow, int d, int &fired, const char *path) {
-  if (audio.isRunning()) return;
-  if (!it.en || h != it.h || m != it.m) return;
-  if (!((it.days >> dow) & 1)) return;
-  if (fired == d) return;
-  fired = d;
-  audio.volume(it.vol);
-  audio.playPath(path);
-  isPlaying = true;
+// ── [RITUELS] Planificateur ─────────────────────────────────────────────────
+// Appele une fois par seconde par v2Tick(), heure fiable et son libre. Lance au
+// plus UN rituel par appel : si deux sont dus, le second part a la fin du
+// premier, la fenetre de rattrapage le couvre.
+// Fenetre de rattrapage : un rituel dont l'heure tombe pendant un adhan (ou
+// n'importe quelle lecture) part des que le son se libere, jusqu'a 30 min
+// apres. En 3.0.48 il fallait etre libre a la minute exacte : un adhan a cette
+// minute-la faisait sauter les azkar de la journee.
+#define RITUEL_RATTRAPAGE_MIN 30
+static void rituelsTick() {
+  if (!g_rituels || !g_nbRituels) return;
+  // Fin de lecture pas encore traitee par loop() : la duaa doit s'enchainer
+  // derriere l'adhan avant qu'un rituel ne prenne la place.
+  if (isPlaying) return;
+  const DateTime maintenant = localNow();
+  if (!dateValide(maintenant)) return;
+  // Adhan attendu dans la minute : on le laisse passer plutot que de lancer un
+  // rituel qu'il couperait net (« 0 min apres Maghrib » tombe pile dessus).
+  // Le rattrapage jouera le rituel apres l'adhan et sa duaa.
+  if (scheduledPrayerIndex > 0) {
+    const int32_t avant = (int32_t)(scheduledPrayerTime.unixtime() - maintenant.unixtime());
+    if (avant > -120 && avant <= 60) return;
+  }
+  rituelsHoraires(maintenant, false);
+  const int32_t jour = cleJour(maintenant);
+  const int nowMin = maintenant.hour() * 60 + maintenant.minute();
+  const int dow = maintenant.dayOfTheWeek();
+  int choisi = -1, tChoisi = 0;
+  for (int i = 0; i < g_nbRituels; i++) {
+    const Rituel &r = g_rituels[i];
+    if (!r.en || r.faitJour == jour) continue;
+    const int t = rituelAujourdhui(r, dow, g_horaires);
+    if (t < 0 || nowMin < t || nowMin >= t + RITUEL_RATTRAPAGE_MIN) continue;
+    if (choisi < 0 || t < tChoisi) { choisi = i; tChoisi = t; }   // le plus en retard d'abord
+  }
+  if (choisi < 0) return;
+  Rituel &r = g_rituels[choisi];
+  r.faitJour = jour;               // AVANT de jouer : un echec ne doit jamais boucler,
+  faitsSauver();                   // meme s'il fait redemarrer la carte
+  // Un flux peut bloquer loop() une vingtaine de secondes (connexion, reponse,
+  // precharge, etiquette ID3), et la synchro NTP a pu en prendre 8 juste avant
+  // dans ce meme tour : on repart avec les 30 s entieres du chien de garde.
+  if (_wdtArmed) esp_task_wdt_reset();
+  audio.volume(r.vol);
+  const bool flux = strncmp(r.contenu, "https://", 8) == 0;
+  const int res = flux ? audio.playUrl(r.contenu, r.repli[0] ? r.repli : nullptr)
+                       : (audio.playPath(r.contenu) ? 1 : 0);
+  Serial.printf("[RITUELS] %s declenche a %02d:%02d (%s)\n", r.id, maintenant.hour(), maintenant.minute(),
+                !res ? "aucune" : !flux ? "sd" : res == 1 ? "flux" : "repli");
+  if (res) {
+    shouldPlayDuaaAfterAdhan = false;   // un rituel n'appelle pas de duaa
+    adhanTrackBeforeDuaa = 0;
+    g_lectureRituel = true;
+    const size_t n = sizeof(g_rituelFichiers[0]) - 1;
+    strncpy(g_rituelFichiers[0], flux ? "" : r.contenu, n); g_rituelFichiers[0][n] = 0;
+    strncpy(g_rituelFichiers[1], r.repli, n);               g_rituelFichiers[1][n] = 0;
+    isPlaying = true;
+  } else {
+    // Rien ne joue (fichier absent, SD muette, flux sans repli) : on rend tout
+    // de suite son volume a la boite, la prochaine lecture partirait sinon a
+    // celui du rituel.
+    prefs.begin("adhancfg", true);
+    const int vol = constrain(prefs.getInt("volume", 20), 0, 30);
+    prefs.end();
+    audio.volume(vol);
+  }
 }
 
-// Scheduler appele depuis loop() : joue azkar + coran selon les automatisations
+// Scheduler appele depuis loop() : rituels + sync de contenu
 void v2Tick() {
   static bool inited = false, synced = false;
   static unsigned long lastCheck = 0;
-  static int fSabah = -1, fMasaa = -1, fKahf = -1, fMulk = -1;
-  if (!inited) { v2LoadSettings(); inited = true; }
+  if (!inited) { rituelsCharger(); inited = true; }
   // Sync auto au boot, en tache de fond, mais pas dans la premiere minute : le
   // TLS et la pile de 32 Ko de la tache pesent lourd, on laisse d'abord passer
   // l'appairage, une eventuelle mise a jour, et un adhan qui tomberait pile.
@@ -5360,12 +6003,7 @@ void v2Tick() {
   lastCheck = millis();
   if (!timeUsable()) return;   // [COUPURES] heure inconnue -> pas d'automatisations
   if (audio.isRunning()) return;
-  DateTime now = localNow();
-  int h = now.hour(), m = now.minute(), d = now.day(), dow = now.dayOfTheWeek(); // 0=Dim..6=Sam
-  v2Fire(v2cfg.sabah, h, m, dow, d, fSabah, "/azkar/sabah.mp3");
-  v2Fire(v2cfg.masaa, h, m, dow, d, fMasaa, "/azkar/masaa.mp3");
-  v2Fire(v2cfg.kahf,  h, m, dow, d, fKahf,  "/quran/al-kahf.mp3");
-  v2Fire(v2cfg.mulk,  h, m, dow, d, fMulk,  "/quran/al-mulk.mp3");
+  rituelsTick();               // [RITUELS]
 }
 // ======================= fin module V2 =======================
 
@@ -5878,9 +6516,10 @@ static void usineEffacer(char *buf, size_t n) {
   WiFi.disconnect(true, true);      // wifioff + eraseap
   delay(100);
   WiFi.mode(WIFI_OFF);              // le pilote ne les reecrira pas en s'arretant
-  // 2. Nos deux espaces de noms, explicitement.
+  // 2. Nos espaces de noms, explicitement.
   prefs.begin("adhancfg", false); prefs.clear(); prefs.end();
   prefs.begin("v2cfg", false);    prefs.clear(); prefs.end();
+  prefs.begin("rituels", false);  prefs.clear(); prefs.end();   // [RITUELS] depuis 3.0.49
   // 3. Coup de balai sur toute la NVS : ce que le pilote Wi-Fi, le BLE ou une
   //    future version y auraient laisse. Le jeton d'API et le mot de passe OTA
   //    sont regeneres au prochain demarrage (voir setup()).
@@ -5963,7 +6602,7 @@ static void bancCommande(String c) {
 
   if (verbe == "info") {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.48\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
+             "{\"version\":\"3.0.49\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
              deviceIdHex().c_str());
     bancRep(buf);
 

@@ -1,6 +1,6 @@
 {
-  "version": "3.0.48",
+  "version": "3.0.49",
   "hardware": "v3",
   "url": "https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/build_temp_v3/adhanbox_v3.ino.bin",
-  "changelog": "Votre boîtier vérifie désormais son heure sur Internet chaque jour, et se remet à l'heure tout seul après une coupure de courant, même si votre box Internet redémarre plus lentement que lui. L'appel à la prière reste ainsi toujours à la bonne heure."
+  "changelog": "Nouveau : les rituels. Votre AdhanBox lit toute seule les azkar du matin et du soir, Al-Kahf le vendredi ou la sourate de votre choix, à heure fixe ou juste après une prière. Vos automatismes actuels sont conservés. Réglez-les dans l'onglet Rituels de l'application (version 1.1 et suivantes)."
 }
