@@ -2,7 +2,7 @@
 // - Starts an AP when a long-press is detected on CONFIG_BUTTON_PIN
 // - Serves a small webpage that requests navigator.geolocation and POSTs lat/lon
 // - Stores lat/lon/accuracy/timestamp in Preferences (NVS)
-//Version: 3.0.49 (AdhanBox V3 / HW v3)
+//Version: 3.0.50 (AdhanBox V3 / HW v3)
 #include <Arduino.h>
 #include <esp_mac.h>   // esp_read_mac() : MAC eFuse, lisible sans Wi-Fi
 #include <Wire.h>
@@ -1102,6 +1102,7 @@ void handleConnectWifi();
 void handleScanWifi();
 void handleDisconnectWifi();
 void handleMawaqitConfig();
+void handleMawaqitClear();
 void handleMawaqitSync();
 bool performMawaqitSync(String &errorMsg);
 void handleCalculationConfig();
@@ -2221,7 +2222,7 @@ void handleOtaUploadComplete() {
 // GET /api/firmware/version
 void handleFirmwareVersion() {
   server.send(200, "application/json",
-              "{\"version\":\"3.0.49\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
+              "{\"version\":\"3.0.50\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
 }
 
 // Returns true if the request carries the correct API key (or if token not yet set).
@@ -2335,11 +2336,11 @@ void handleDeviceInfo() {
   char buf[512];
   if (pairingWindow || hasValidToken) {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.49\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
+             "{\"version\":\"3.0.50\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
              OTA_HOSTNAME, deviceIdHex().c_str(), _apiToken.c_str(), _otaPass.c_str());
   } else {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.49\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
+             "{\"version\":\"3.0.50\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
              OTA_HOSTNAME, deviceIdHex().c_str());
   }
   server.send(200, "application/json", buf);
@@ -2536,6 +2537,28 @@ void handleMawaqitConfig() {
 
   Serial.printf("Mawaqit mosque saved uuid=%s slug=%s name=%s city=%s\n", uuid.c_str(), slug.c_str(), name.c_str(), city.c_str());
   server.send(200, "application/json", "{\"ok\":true,\"message\":\"mosque saved\"}");
+}
+
+// [MOSQUEE] POST /api/mawaqit/clear — ne plus suivre de mosquee : la box revient
+// des maintenant aux horaires calcules (methode de /api/calculation/config).
+// On efface la mosquee, donc plus de synchro automatique, ET ses horaires en
+// memoire : sans ca, ils resteraient la reference jusqu'a 25 h. Les decalages
+// mq_off_* restent : ils resserviront si on rechoisit une mosquee.
+void handleMawaqitClear() {
+  if (server.method() != HTTP_POST) {
+    server.send(405, "application/json", "{\"error\":\"Method not allowed\"}");
+    return;
+  }
+  if (!requireApiKey()) return;
+  static const char *cles[] = { "mq_uuid", "mq_slug", "mq_name", "mq_city", "mq_ts",
+                                "mq_fajr", "mq_sunrise", "mq_dhuhr", "mq_asr", "mq_maghrib", "mq_isha" };
+  prefs.begin("adhancfg", false);
+  for (const char *c : cles) prefs.remove(c);
+  prefs.putULong("mq_sync_ts", 0);
+  prefs.end();
+  if (rtcPresent) scheduleNextPrayerAlarm();
+  Serial.println("[MOSQUEE] Mosquee retiree : retour aux horaires calcules");
+  server.send(200, "application/json", "{\"ok\":true,\"source\":\"calculated\"}");
 }
 
 // Helper function to encode URL parameters
@@ -3493,6 +3516,7 @@ void setupServerRoutes() {
     } else server.send(500, "text/plain", "Time sync failed");
   });
   server.on("/api/mawaqit/config", HTTP_POST, handleMawaqitConfig);
+  server.on("/api/mawaqit/clear", HTTP_POST, handleMawaqitClear);    // [MOSQUEE] 3.0.50
   server.on("/api/mawaqit/sync", HTTP_POST, handleMawaqitSync);
   server.on("/api/mawaqit/debug", HTTP_GET, handleMawaqitDebug);
   server.on("/api/mawaqit/offsets", HTTP_GET, handleMawaqitGetOffsets);
@@ -6602,7 +6626,7 @@ static void bancCommande(String c) {
 
   if (verbe == "info") {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.49\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
+             "{\"version\":\"3.0.50\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
              deviceIdHex().c_str());
     bancRep(buf);
 
