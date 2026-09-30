@@ -350,6 +350,7 @@
       state.finish = key;
       document.getElementById('finish-note').textContent = FINISHES[key].label + ' — finition mate.';
       applyFinish();
+      montrerColoris(key);
     }, FINISHES);
 
     buildSwatches('mcolor-swatches', state.mandalaColor, (key) => {
@@ -369,6 +370,67 @@
         if (state.mandala !== 0) focusMotifFace();
       });
     });
+
+    // ─── Coloris en photo ───
+    // La bande de photos au-dessus du configurateur (liste ecrite par
+    // outils_production/maj_coloris.py) suit la pastille du chassis : la photo
+    // du coloris choisi est entouree et ramenee dans la bande. Les couleurs du
+    // site sans photo sont nommees dessous plutot que passees sous silence ;
+    // elles se deduisent de FINISHES, il n'y a rien a tenir a jour ici.
+    const coloris = document.querySelector('[data-coloris]');
+    const colorisPiste = coloris ? coloris.querySelector('.coloris-piste') : null;
+    const colorisVues = colorisPiste ? Array.from(colorisPiste.querySelectorAll('figure[data-finish]')) : [];
+    const colorisDoux = !(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+
+    function montrerColoris(key) {
+      if (!colorisPiste) return;
+      coloris.querySelectorAll('[data-finish]').forEach((el) => el.classList.toggle('choisi', el.dataset.finish === key));
+      const vue = colorisVues.find((f) => f.dataset.finish === key);
+      if (!vue) return;
+      // Deja entierement a l'ecran : on ne fait rien bouger.
+      const g = vue.offsetLeft, d = g + vue.offsetWidth;
+      if (g >= colorisPiste.scrollLeft && d <= colorisPiste.scrollLeft + colorisPiste.clientWidth) return;
+      colorisPiste.scrollTo({ left: g - (colorisPiste.clientWidth - vue.offsetWidth) / 2, behavior: colorisDoux ? 'smooth' : 'auto' });
+    }
+
+    if (colorisPiste) {
+      const prec = coloris.querySelector('.coloris-prec');
+      const suiv = coloris.querySelector('.coloris-suiv');
+      const pas = (sens) => colorisPiste.scrollBy({ left: sens * colorisPiste.clientWidth * 0.75, behavior: colorisDoux ? 'smooth' : 'auto' });
+      prec.addEventListener('click', () => pas(-1));
+      suiv.addEventListener('click', () => pas(1));
+      let attente = 0;
+      const peindre = () => {
+        attente = 0;
+        const max = colorisPiste.scrollWidth - colorisPiste.clientWidth;
+        prec.hidden = suiv.hidden = max <= 2;   // tout tient a l'ecran : pas de fleches
+        prec.disabled = colorisPiste.scrollLeft <= 2;
+        suiv.disabled = colorisPiste.scrollLeft >= max - 2;
+      };
+      const plusTard = () => { if (!attente) attente = requestAnimationFrame(peindre); };
+      colorisPiste.addEventListener('scroll', plusTard, { passive: true });
+      window.addEventListener('resize', plusTard);
+      peindre();
+
+      const photographies = new Set(colorisVues.map((f) => f.dataset.finish));
+      const sansPhoto = Object.keys(FINISHES).filter((k) => !photographies.has(k));
+      const ligne = document.getElementById('coloris-sans-photo');
+      if (ligne && sansPhoto.length) {
+        ligne.append(' Aussi en ');
+        sansPhoto.forEach((k, i) => {
+          if (i) ligne.append(i === sansPhoto.length - 1 ? ' et ' : ', ');
+          const nom = document.createElement('span');
+          nom.dataset.finish = k;
+          const pastille = document.createElement('span');
+          pastille.className = 'pastille';
+          pastille.setAttribute('aria-hidden', 'true');
+          pastille.style.background = FINISHES[k].hex;
+          nom.append(pastille, FINISHES[k].label);
+          ligne.append(nom);
+        });
+        ligne.append(' — pas encore en photo, l’aperçu 3D ci-dessous vous en montre la teinte.');
+      }
+    }
 
     // ─── Commande : le bouton crée la commande via le backend
     //     (config transmise UNE fois, visible dans Stripe + email de

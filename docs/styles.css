@@ -892,6 +892,126 @@
       .config-viewport { min-height: 320px; }
     }
 
+    /* ═══ COLORIS EN PHOTO (page Personnaliser) ═══
+       Une bande de photos réelles, une par couleur de châssis. Le défilement
+       est du scroll-snap : le doigt marche seul, configurator.js n'ajoute que
+       les flèches et le lien avec les pastilles. Le nom est écrit dans le fond
+       clair de la photo, au-dessus du boîtier : il ne cache rien. */
+    .coloris { margin: -1rem 0 3rem; }
+    .coloris-cadre { position: relative; }
+    .coloris-piste {
+      position: relative;
+      display: flex;
+      gap: 16px;
+      overflow-x: auto;
+      scroll-snap-type: x mandatory;
+      scroll-behavior: smooth;
+      scroll-padding-inline: 4px;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+      padding: 4px 4px 14px;   /* place pour l'ombre et l'anneau du coloris choisi */
+    }
+    .coloris-piste::-webkit-scrollbar { display: none; }
+    .coloris-piste:focus-visible { outline: 2px solid var(--emerald); outline-offset: 2px; border-radius: var(--radius); }
+    .coloris-piste figure {
+      flex: 0 0 calc((100% - 3 * 16px) / 4);
+      scroll-snap-align: start;
+      position: relative;
+      margin: 0;
+      border-radius: var(--radius);
+      overflow: hidden;
+      background: var(--ivory-deep);
+      box-shadow: var(--shadow-sm);
+      transition: box-shadow 0.25s ease;
+    }
+    .coloris-piste figure.choisi { box-shadow: 0 0 0 2px var(--emerald), var(--shadow-sm); }
+    .coloris-piste img {
+      display: block;
+      width: 100%;
+      height: auto;
+      aspect-ratio: 3 / 4;
+      object-fit: cover;
+    }
+    .coloris-piste figcaption {
+      position: absolute;
+      inset: 0 0 auto;
+      padding: 1.1rem 0.8rem 0;
+      text-align: center;
+      color: var(--ink);
+    }
+    .coloris-nom {
+      display: block;
+      font-family: var(--font-display);
+      font-style: italic;
+      font-weight: 500;
+      font-size: 1.6rem;
+      line-height: 1.1;
+      letter-spacing: -0.01em;
+    }
+    .coloris-motif {
+      display: block;
+      margin-top: 0.4rem;
+      font-size: 0.64rem;
+      font-weight: 600;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      opacity: 0.6;
+    }
+    .coloris-fleche {
+      position: absolute;
+      top: calc(50% - 5px);    /* le milieu des photos, marge basse de la bande exclue */
+      transform: translateY(-50%);
+      width: 44px; height: 44px;
+      display: flex; align-items: center; justify-content: center;
+      border: 1px solid var(--line);
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.94);
+      color: var(--ink);
+      cursor: pointer;
+      box-shadow: var(--shadow-sm);
+      transition: opacity 0.2s, transform 0.2s;
+      z-index: 2;
+    }
+    .coloris-fleche[hidden] { display: none; }
+    .coloris-fleche:hover { transform: translateY(-50%) scale(1.06); }
+    .coloris-fleche:focus-visible { outline: 2px solid var(--emerald); outline-offset: 2px; }
+    .coloris-fleche:disabled { opacity: 0; pointer-events: none; }
+    .coloris-fleche svg { width: 20px; height: 20px; }
+    .coloris-prec { left: -18px; }
+    .coloris-suiv { right: -18px; }
+    .coloris-note {
+      margin-top: 0.5rem;
+      text-align: center;
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+    .coloris-note [data-finish] { white-space: nowrap; transition: color 0.2s; }
+    .coloris-note [data-finish].choisi { color: var(--emerald); font-weight: 600; }
+    .coloris-note .pastille {
+      display: inline-block;
+      width: 0.75em; height: 0.75em;
+      margin: 0 0.3em 0 0.1em;
+      border-radius: 50%;
+      border: 1px solid rgba(21, 37, 31, 0.2);
+      vertical-align: -0.05em;
+    }
+    @media (max-width: 880px) {
+      .coloris-piste figure { flex-basis: calc((100% - 2 * 16px) / 2.5); }
+      .coloris-fleche { display: none; }   /* au doigt, on fait glisser */
+    }
+    @media (max-width: 560px) {
+      /* Bord à bord : la bande dépasse du conteneur, la carte suivante dépasse
+         à droite et invite à faire glisser. */
+      .coloris-cadre { margin-inline: -1.5rem; }
+      .coloris-piste { gap: 12px; padding-inline: 1.5rem; scroll-padding-inline: 1.5rem; }
+      .coloris-piste figure { flex-basis: 66%; }
+      .coloris-nom { font-size: 1.45rem; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .coloris-piste { scroll-behavior: auto; }
+      .coloris-piste figure, .coloris-fleche, .coloris-note [data-finish] { transition: none; }
+    }
+
     /* ═══ APPLICATION ═══ */
     .app-section { background: var(--paper); border-block: 1px solid var(--line); }
     .app-grid {
