@@ -923,6 +923,7 @@
       background: var(--ivory-deep);
       box-shadow: var(--shadow-sm);
       transition: box-shadow 0.25s ease;
+      container-type: inline-size;   /* le nom se regle sur la largeur de la carte */
     }
     .coloris-piste figure.choisi { box-shadow: 0 0 0 2px var(--emerald), var(--shadow-sm); }
     .coloris-piste img {
@@ -935,7 +936,7 @@
     .coloris-piste figcaption {
       position: absolute;
       inset: 0 0 auto;
-      padding: 1.1rem 0.8rem 0;
+      padding: min(1.1rem, 7cqi) 0.8rem 0;
       text-align: center;
       color: var(--ink);
     }
@@ -944,9 +945,14 @@
       font-family: var(--font-display);
       font-style: italic;
       font-weight: 500;
+      /* « Marron cacahuète » mesure 8 em : a 10 % de la largeur de la carte,
+         il tient sur une ligne des 131 px de carte, donc a toutes les
+         largeurs d'ecran. Au-dela de 1.6rem, ce serait trop gros. */
       font-size: 1.6rem;
+      font-size: min(1.6rem, 10cqi);
       line-height: 1.1;
       letter-spacing: -0.01em;
+      text-wrap: balance;
     }
     .coloris-motif {
       display: block;
@@ -1005,7 +1011,6 @@
       .coloris-cadre { margin-inline: -1.5rem; }
       .coloris-piste { gap: 12px; padding-inline: 1.5rem; scroll-padding-inline: 1.5rem; }
       .coloris-piste figure { flex-basis: 66%; }
-      .coloris-nom { font-size: 1.45rem; }
     }
     @media (prefers-reduced-motion: reduce) {
       .coloris-piste { scroll-behavior: auto; }
