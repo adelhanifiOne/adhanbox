@@ -1,6 +1,6 @@
 {
-  "version": "3.0.50",
+  "version": "3.0.52",
   "hardware": "v3",
   "url": "https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/build_temp_v3/adhanbox_v3.ino.bin",
-  "changelog": "Nouveau : les rituels. Votre AdhanBox lit toute seule les azkar du matin et du soir, Al-Kahf le vendredi ou la sourate de votre choix, à heure fixe ou juste après une prière. Vos automatismes actuels sont conservés. Réglez-les dans l'onglet Rituels de l'application (version 1.1 et suivantes). Cette version prépare aussi le choix de ne plus suivre de mosquée pour revenir aux horaires calculés, qui arrive avec la prochaine mise à jour de l'application."
+  "changelog": "Votre AdhanBox fonctionne aussi dans une maison sans Wi-Fi : quand elle ne trouve pas votre réseau, elle ouvre le sien, et l'application s'y connecte directement, sans Internet ni partage de connexion (Réglages › Connexion directe, application 1.1.3 et suivantes). Après une coupure de courant, elle reprend tout de suite son fonctionnement normal, sans clignoter en rouge, et l'application la retrouve quand votre Wi-Fi revient, sans avoir à la débrancher."
 }

@@ -2,7 +2,7 @@
 // - Starts an AP when a long-press is detected on CONFIG_BUTTON_PIN
 // - Serves a small webpage that requests navigator.geolocation and POSTs lat/lon
 // - Stores lat/lon/accuracy/timestamp in Preferences (NVS)
-//Version: 3.0.50 (AdhanBox V3 / HW v3)
+//Version: 3.0.52 (AdhanBox V3 / HW v3)
 #include <Arduino.h>
 #include <esp_mac.h>   // esp_read_mac() : MAC eFuse, lisible sans Wi-Fi
 #include <Wire.h>
@@ -68,6 +68,7 @@ static inline void securiser(WiFiClientSecure &c) {
 #include <math.h>
 #include "esp_task_wdt.h"   // [SECU] watchdog materiel : reboot si le firmware freeze
 #include "esp_ota_ops.h"    // [SECU] rollback OTA : revient a la version precedente si le firmware boot-loop
+#include "mbedtls/sha256.h"  // [DIRECT] mot de passe du Wi-Fi de la box, tire du jeton
 static volatile bool _wdtArmed = false;  // WDT arme seulement une fois loop() lance
 // BLE provisioning (first-boot WiFi setup without leaving the app)
 #define ENABLE_BLE 1
@@ -94,6 +95,10 @@ static bool _bleClientConn = false;
 static String _blePendingSSID;
 static String _blePendingPass;
 static volatile bool _bleCredsReady = false;  // set in BLE task, handled in loop()
+// [3.0.51] Vrai quand le BLE tourne en ARRIERE-PLAN : box deja configuree,
+// demarree sans reseau. La boucle garde la main (adhan, lumiere, bouton) ; voir
+// setup() et libererBlePourLeSon().
+static bool _bleFond = false;
 
 class _BLEServerCB : public BLEServerCallbacks {
   void onConnect(BLEServer *) override {
@@ -190,6 +195,7 @@ class _BLEWifiScanCB : public BLECharacteristicCallbacks {
 };
 #else
 static bool _bleActive = false;
+static bool _bleFond = false;
 #endif
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -632,6 +638,8 @@ class AudioFileSourceHTTPS : public AudioFileSource {
 // Plus grand numero de piste d'adhan (/mp3/NNNN.mp3) accepte pour une priere.
 #define PISTE_MAX 99
 
+void libererBlePourLeSon();   // [3.0.51] definie apres le code BLE
+
 class I2SAudio {
   SPIClass spi{FSPI};
   AudioOutputI2S        *out = nullptr;
@@ -839,6 +847,7 @@ class I2SAudio {
       stop(c);
     } else stop();
     g_blocage.raz();                 // [CREPITEMENT] chaque lecture repart a zero
+    libererBlePourLeSon();           // [3.0.51] la RAM du BLE d'arriere-plan revient au canal audio
     if (!_sdOk || !SD.exists(path)) return false;
     strncpy(_curPath, path, sizeof(_curPath) - 1);   // [PLAYER] memorise le fichier
     _curPath[sizeof(_curPath) - 1] = 0;
@@ -1126,7 +1135,7 @@ void mqttPublishStatus();
 void mqttPublishPrayerFired(int prayerIndex);
 void stopConfigAP();
 #if ENABLE_BLE
-void startBLEProvisioning();
+void startBLEProvisioning(bool clignoter = true);
 void stopBLEProvisioning();
 static void bancCommande(String c);   // [BANC] pilotage par le cable USB
 void handleBLEProvisioning();
@@ -2222,7 +2231,7 @@ void handleOtaUploadComplete() {
 // GET /api/firmware/version
 void handleFirmwareVersion() {
   server.send(200, "application/json",
-              "{\"version\":\"3.0.50\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
+              "{\"version\":\"3.0.52\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
 }
 
 // Returns true if the request carries the correct API key (or if token not yet set).
@@ -2336,11 +2345,11 @@ void handleDeviceInfo() {
   char buf[512];
   if (pairingWindow || hasValidToken) {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.50\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
+             "{\"version\":\"3.0.52\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
              OTA_HOSTNAME, deviceIdHex().c_str(), _apiToken.c_str(), _otaPass.c_str());
   } else {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.50\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
+             "{\"version\":\"3.0.52\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
              OTA_HOSTNAME, deviceIdHex().c_str());
   }
   server.send(200, "application/json", buf);
@@ -3238,13 +3247,28 @@ bool syncTimeFromNtp(unsigned long timeoutMs) {
   return true;
 }
 
+// [3.0.51] Serveur web, mDNS, OTA et MQTT demarrent une fois, au PREMIER reseau.
+// Avant, seul un Wi-Fi present AU DEMARRAGE les lancait : une box allumee sans
+// reseau (coupure de courant, partage de connexion eteint) retrouvait ensuite
+// son Wi-Fi, mais plus rien ne repondait a l'application jusqu'au redemarrage
+// suivant. loop() les lance desormais des que le Wi-Fi est la, quel que soit le
+// chemin : reconnexion du pilote, nouvel essai des 60 s, appairage.
+static bool g_servicesDemarres = false;
+// Les routes ne se posent qu'une fois : startServices() et startConfigAP() les
+// posaient chacun, et les deux chemins peuvent se suivre.
+static bool g_routesPosees = false;
+
 #if ENABLE_BLE
 // ── BLE Provisioning functions ────────────────────────────────────────────────
 
-void startBLEProvisioning() {
+void startBLEProvisioning(bool clignoter) {
   // remember previous LED scenario and enter BLINK mode for indication
-  if (prevLedScenario < 0) prevLedScenario = ledScenario;
-  ledScenario = BLINK_INDEX;
+  // [3.0.51] Sauf en arriere-plan (clignoter = false) : la box est configuree et
+  // fonctionne, la lumiere reste celle que le client a choisie.
+  if (clignoter) {
+    if (prevLedScenario < 0) prevLedScenario = ledScenario;
+    ledScenario = BLINK_INDEX;
+  }
 
   // Initialize Wi-Fi STA mode so WiFi.macAddress() can read the actual hardware MAC
   WiFi.mode(WIFI_STA);
@@ -3327,6 +3351,8 @@ void stopBLEProvisioning() {
   BLEDevice::deinit(true);   // [V2] libere la RAM BLE
   _bleCredsReady = false;
   _bleClientConn = false;
+  if (_bleFond) WiFi.setAutoReconnect(true);   // [3.0.51] coupee pendant le BLE d'arriere-plan
+  _bleFond = false;
   Serial.println("[BLE] provisioning stopped");
 
   // restore previous LED scenario if present
@@ -3337,9 +3363,8 @@ void stopBLEProvisioning() {
 }
 
 void startServices() {
-  static bool servicesStarted = false;
-  if (servicesStarted) return;
-  setupServerRoutes();
+  if (g_servicesDemarres) return;
+  if (!g_routesPosees) { setupServerRoutes(); g_routesPosees = true; }
   server.begin();
   Serial.println("[WiFi] Web server started — http://" + WiFi.localIP().toString());
 
@@ -3358,7 +3383,7 @@ void startServices() {
     mqtt.setCallback(mqttCallback);
     Serial.printf("MQTT broker initialized: %s\n", broker.c_str());
   }
-  servicesStarted = true;
+  g_servicesDemarres = true;
 }
 
 // Called from loop() — handles WiFi connection after credentials are received via BLE
@@ -3440,6 +3465,219 @@ void handleBLEProvisioning() {
 #endif
 // ─────────────────────────────────────────────────────────────────────────────
 
+// [3.0.51] L'adhan d'abord. Le BLE d'arriere-plan tient ~100 Ko de RAM interne,
+// celle-la meme dont le canal audio a besoin (DMA) : demarrer le BLE a cote
+// d'un son faisait deja planter la carte (voir /api/pair). Avant tout son, on
+// le rend donc, client connecte ou pas ; l'appairage reprendra au prochain
+// demarrage. Le BLE BLOQUANT (box neuve, appairage demande) n'est pas concerne :
+// aucun son ne part pendant qu'il tourne.
+void libererBlePourLeSon() {
+#if ENABLE_BLE
+  if (_bleActive && _bleFond) {
+    Serial.println("[BLE] Un son va partir : arret du BLE d'arriere-plan, sa memoire revient a l'audio.");
+    stopBLEProvisioning();
+  }
+#endif
+}
+
+// ── [DIRECT] Connexion directe : le Wi-Fi de la box ─────────────────────────
+// Pour les foyers sans Wi-Fi. Une cliente passait par son partage de connexion
+// et perdait l'application des qu'elle le coupait. La box ouvre ici son PROPRE
+// reseau, protege par un mot de passe : le telephone s'y connecte et
+// l'application parle a la box sur 192.168.4.1, sans Internet.
+//   - tout seul : une box configuree SANS RESEAU depuis 5 min ouvre le sien, et
+//     le referme des que le sien revient (si aucun telephone n'y est branche).
+//     Une maison sans Wi-Fi l'a donc toujours, sans rien faire ;
+//   - a la demande de l'application (POST /api/direct), box joignable : il se
+//     referme apres 15 min sans aucun telephone ;
+//   - en permanence (« maison sans Wi-Fi », reglage direct_perm) : ouvert des
+//     le demarrage, jamais referme.
+// PAS d'appui long sur le bouton tactile : essaye avant, et le TTP223 tient
+// parfois des appuis tout seul (voir checkConfigButton), il ouvrirait le Wi-Fi
+// sans que personne ne l'ait demande.
+// Le mot de passe se deduit du jeton d'API, que seuls les telephones appaires
+// connaissent : l'application le recalcule sans qu'il circule. Le nom du
+// reseau reprend les 4 derniers caracteres de l'identifiant de la carte.
+// Ce n'est PAS le point d'acces de configuration (startConfigAP : ouvert, sans
+// mot de passe, reserve au cable) : aucune fenetre d'appairage ne s'y attache.
+#define DIRECT_INACTIF_MS (15UL * 60UL * 1000UL)
+#define DIRECT_AUTO_MS    (5UL * 60UL * 1000UL)    // sans reseau depuis 5 min : on ouvre
+static bool g_directActif = false;
+static bool g_directPermanent = false;
+static bool g_directAuto = false;       // ouvert tout seul, faute de reseau
+static unsigned long g_directDernierClient = 0;
+
+String directSsid() {
+  char ssid[32];
+  snprintf(ssid, sizeof(ssid), "%s%04X", AP_SSID_PREFIX, (unsigned)(ESP.getEfuseMac() & 0xFFFF));
+  return String(ssid);
+}
+
+// « adhanbox-direct: » + jeton -> SHA-256 -> 12 lettres faciles a taper (ni i,
+// ni l, ni o), en trois groupes : « kmtr-bexa-pqzn ». 23^12 ~ 2^54. Le MEME
+// calcul est dans l'application (lib/services/connexion_directe.dart) : les
+// deux doivent bouger ensemble.
+String directMotDePasse() {
+  static const char ALPHA[] = "abcdefghjkmnpqrstuvwxyz";   // 23 lettres
+  const String entree = "adhanbox-direct:" + _apiToken;
+  unsigned char h[32];
+  mbedtls_sha256((const unsigned char *)entree.c_str(), entree.length(), h, 0);
+  char mdp[16];
+  int k = 0;
+  for (int i = 0; i < 12; i++) {
+    if (i && i % 4 == 0) mdp[k++] = '-';
+    mdp[k++] = ALPHA[h[i] % 23];
+  }
+  mdp[k] = 0;
+  return String(mdp);
+}
+
+// Trois eclairs bleus : « le Wi-Fi de la box est ouvert ». Jamais pendant un son.
+static void directSignal() {
+  if (audio.isRunning() || !useAddressableLEDs) return;
+  for (int i = 0; i < 3; i++) {
+    stripSetAll(0, 70, 255); delay(160);
+    stripSetAll(0, 0, 0);    delay(140);
+  }
+}
+
+static void directEnregistrerPermanent(bool permanent) {
+  if (permanent == g_directPermanent) return;
+  g_directPermanent = permanent;
+  prefs.begin("adhancfg", false);
+  prefs.putBool("direct_perm", permanent);
+  prefs.end();
+}
+
+// `automatique` : ouvert faute de reseau, referme quand il revient.
+// `signal` : trois eclairs bleus, seulement quand quelqu'un vient de le
+// demander (pas la nuit, pendant une coupure de la box internet).
+void demarrerDirect(const char *cause, bool automatique = false, bool signal = true) {
+  g_directDernierClient = millis();
+  // Deja ouvert : une demande de l'application ne change pas son origine (ouvert
+  // tout seul, il se refermera toujours au retour du reseau).
+  if (g_directActif) { Serial.printf("[DIRECT] deja ouvert (%s)\n", cause); if (signal) directSignal(); return; }
+  if (apRunning || _apiToken.length() == 0) return;
+#if ENABLE_BLE
+  // Point d'acces + serveur web + BLE : la memoire ne suit pas (voir /api/pair).
+  if (_bleActive) stopBLEProvisioning();
+#endif
+  if (WiFi.status() != WL_CONNECTED) {
+    // Personne a joindre : le pilote cesse de chercher, le point d'acces garde
+    // son canal. Le nouvel essai des 60 s continue, mais seulement quand aucun
+    // telephone n'est connecte a la box (voir loop()).
+    WiFi.setAutoReconnect(false);
+    WiFi.disconnect(false, false);
+  }
+  WiFi.mode(WIFI_AP_STA);            // garde la connexion a la maison si elle existe
+  const String ssid = directSsid();
+  if (!WiFi.softAP(ssid.c_str(), directMotDePasse().c_str())) {
+    Serial.println("[DIRECT] le point d'acces refuse de s'ouvrir");
+    return;
+  }
+  if (!g_routesPosees) { setupServerRoutes(); g_routesPosees = true; }
+  server.begin();                    // sans effet s'il ecoute deja
+  g_directActif = true;
+  g_directAuto = automatique;        // seulement une fois ouvert pour de bon
+  Serial.printf("[DIRECT] Wi-Fi de la box ouvert : %s, 192.168.4.1, %s (%s)\n", ssid.c_str(),
+                g_directPermanent ? "permanent"
+                : g_directAuto    ? "referme au retour du reseau"
+                                  : "ferme apres 15 min sans telephone", cause);
+  if (signal) directSignal();
+}
+
+void arreterDirect(const char *cause) {
+  if (!g_directActif) return;
+  WiFi.softAPdisconnect(true);       // coupe le point d'acces seul, garde le STA
+  g_directActif = false;
+  g_directAuto = false;
+  if (WiFi.status() != WL_CONNECTED) WiFi.mode(WIFI_STA);   // le nouvel essai des 60 s reprend tel qu'avant
+  WiFi.setAutoReconnect(true);       // coupee a l'ouverture si le reseau manquait
+  Serial.printf("[DIRECT] Wi-Fi de la box ferme (%s)\n", cause);
+}
+
+// Une box qui a deja un Wi-Fi memorise (la NVS n'est relue qu'une fois par
+// minute : ce test tourne chaque seconde pendant une coupure).
+static bool directBoxConfiguree() {
+  static unsigned long lu = 0;
+  static bool dejaLu = false, oui = false;
+  if (!dejaLu || millis() - lu > 60000UL) {
+    dejaLu = true; lu = millis();
+    prefs.begin("adhancfg", true);
+    oui = prefs.getString("wifi_ssid", "").length() > 0;
+    prefs.end();
+  }
+  return oui;
+}
+
+// Appele par loop(), une fois par seconde :
+//  - ouvre le Wi-Fi de la box quand elle est sans reseau depuis 5 min (jamais
+//    pendant le BLE : les deux ne tiennent pas en memoire ; celui du demarrage
+//    dure 5 min, le Wi-Fi de la box suit donc de pres) ;
+//  - le referme quand le reseau revient (ouvert tout seul), ou 15 min apres le
+//    depart du dernier telephone (ouvert par l'application), jamais s'il est
+//    permanent. Tant qu'un telephone y est branche, on n'y touche pas.
+void directTick() {
+  static unsigned long dernier = 0;
+  static unsigned long horsReseauDepuis = 0;
+  if (millis() - dernier < 1000) return;
+  dernier = millis();
+  const bool staOk = (WiFi.status() == WL_CONNECTED);
+  if (staOk) horsReseauDepuis = 0;
+  else if (!horsReseauDepuis) horsReseauDepuis = millis();
+
+  if (!g_directActif) {
+    // Ni pendant un son : ouvrir le point d'acces prend de la memoire et du
+    // temps au pilote, le decodeur aurait faim. Ce sera juste apres.
+    if (!staOk && millis() - horsReseauDepuis >= DIRECT_AUTO_MS && !_bleActive && !apRunning
+        && !audio.isRunning() && directBoxConfiguree())
+      demarrerDirect("pas de reseau depuis 5 min", true, false);
+    return;
+  }
+  if (WiFi.softAPgetStationNum() > 0) { g_directDernierClient = millis(); return; }
+  if (g_directPermanent) return;
+  if (g_directAuto) {
+    if (staOk) arreterDirect("reseau revenu");
+    return;
+  }
+  if (millis() - g_directDernierClient > DIRECT_INACTIF_MS)
+    arreterDirect("15 min sans telephone connecte");
+}
+
+// GET  /api/direct -> {"actif":..,"permanent":..,"auto":..,"ssid":"..","mdp":"..","clients":n,"ip":"192.168.4.1"}
+// POST /api/direct {"actif":true|false, "permanent":true|false}
+//   permanent:true ouvre aussi ; actif:false referme ET retire le permanent.
+// Le mot de passe voyage ici en clair sur le reseau local, comme le jeton dans
+// chaque requete : qui peut poser la question a deja le jeton, dont il se deduit.
+void handleDirect() {
+  if (!requireApiKey()) return;
+  bool fermer = false;
+  if (server.method() == HTTP_POST) {
+    const String b = server.arg("plain");
+    const bool aPerm = b.indexOf("\"permanent\"") >= 0;
+    const bool perm = b.indexOf("\"permanent\":true") >= 0;
+    const bool aActif = b.indexOf("\"actif\"") >= 0;
+    const bool actif = b.indexOf("\"actif\":true") >= 0;
+    if (aActif && !actif) {
+      directEnregistrerPermanent(false);
+      fermer = true;
+    } else {
+      if (aPerm) directEnregistrerPermanent(perm);
+      if ((aActif && actif) || (aPerm && perm)) demarrerDirect("application");
+    }
+  }
+  char buf[256];
+  snprintf(buf, sizeof(buf),
+           "{\"actif\":%s,\"permanent\":%s,\"auto\":%s,\"ssid\":\"%s\",\"mdp\":\"%s\",\"clients\":%d,\"ip\":\"192.168.4.1\"}",
+           (g_directActif && !fermer) ? "true" : "false", g_directPermanent ? "true" : "false",
+           (g_directAuto && !fermer) ? "true" : "false",
+           directSsid().c_str(), directMotDePasse().c_str(),
+           g_directActif ? (int)WiFi.softAPgetStationNum() : 0);
+  server.send(200, "application/json", buf);
+  // Fermer APRES avoir repondu : le telephone parle peut-etre par ce reseau-la.
+  if (fermer) { delay(300); arreterDirect("application"); }
+}
+
 void startConfigAP() {
   if (apRunning) return;
   // remember previous LED scenario and enter BLINK mode for indication
@@ -3463,7 +3701,7 @@ void startConfigAP() {
     server.send(302, "text/plain", "");
   });
   // Enregistrer toutes les routes et démarrer le serveur
-  setupServerRoutes();
+  if (!g_routesPosees) { setupServerRoutes(); g_routesPosees = true; }
   server.begin();
   apRunning = true;
   apStartTime = millis();
@@ -3549,6 +3787,8 @@ void setupServerRoutes() {
   server.on("/api/bouton", HTTP_GET, handleBouton);          // [BOUTON] capteur tactile
   server.on("/api/mosquee", HTTP_GET, handleMosqueeGet);     // [MOSQUEE] etat + sujets MQTT
   server.on("/api/mosquee", HTTP_POST, handleMosqueeSet);    // [MOSQUEE] activer / regler
+  server.on("/api/direct", HTTP_GET, handleDirect);          // [DIRECT] Wi-Fi de la box
+  server.on("/api/direct", HTTP_POST, handleDirect);         // [DIRECT] ouvrir / fermer / permanent
 #if ENABLE_BLE
   // Depuis la page web de la box : demande l'appairage BLE. Demarrer le BLE A CHAUD
   // (WiFi+web+audio en RAM) manque de memoire -> crash. On memorise la demande et on
@@ -6319,7 +6559,9 @@ void setup() {
   prefs.begin("adhancfg", true);
   String bootSSID = prefs.getString("wifi_ssid", "");
   String bootPass = prefs.getString("wifi_pass", "");
+  const bool directPerm = prefs.getBool("direct_perm", false);   // [DIRECT] maison sans Wi-Fi
   prefs.end();
+  g_directPermanent = directPerm;
 
   if (bootSSID.length() > 0 && !pairBoot) {
     Serial.printf("Boot: tentative WiFi memorise (SSID=%s)...\n", bootSSID.c_str());
@@ -6343,7 +6585,36 @@ void setup() {
   }
 
 #if ENABLE_BLE
-  if (!wifiConnected) {
+  // [3.0.51] Une box DEJA configuree dont le Wi-Fi ne repond pas au demarrage
+  // n'entre plus dans la fenetre BLE bloquante ci-dessous : cinq minutes de
+  // rouge clignotant pendant lesquelles aucun adhan ne pouvait partir. Tout le
+  // monde y passait apres une coupure de courant (la box internet met 1 a 3 min
+  // a revenir, nous n'attendons que 15 s), et une cliente sans Wi-Fi, qui passe
+  // par son partage de connexion, la prenait pour une panne. Le BLE tourne
+  // desormais en ARRIERE-PLAN, 5 min, sans toucher a la lumiere : l'application
+  // peut toujours reassocier la box (nouvelle box internet), et la boucle garde
+  // la main. La fenetre bloquante reste pour une box neuve (pas de Wi-Fi
+  // memorise, rouge clignotant documente dans la FAQ) et pour l'appairage
+  // demande par l'application (pairBoot).
+  if (!wifiConnected && !pairBoot && bootSSID.length() > 0 && directPerm) {
+    // [DIRECT] Maison sans Wi-Fi : pas de BLE (son Wi-Fi s'ouvre a la fin du
+    // demarrage, et les deux ensemble ne tiennent pas en memoire), pas de
+    // pilote qui cherche sans fin non plus.
+    Serial.println("\n══ Maison sans Wi-Fi : le Wi-Fi de la box va s'ouvrir ══");
+    WiFi.setAutoReconnect(false);
+    WiFi.disconnect(false, false);
+  } else if (!wifiConnected && !pairBoot && bootSSID.length() > 0) {
+    Serial.println("\n══ Wi-Fi memorise injoignable : service normal, BLE en arriere-plan 5 min ══");
+    // Le pilote, en reconnexion automatique, reessaie sans arret quand le reseau
+    // manque (NO_AP_FOUND relance begin()) : chaque essai derange l'appairage, et
+    // ses salves d'emission font partir le capteur tactile tout seul (voir
+    // checkConfigButton). On le calme le temps du BLE ; stopBLEProvisioning() le
+    // relance.
+    WiFi.setAutoReconnect(false);
+    WiFi.disconnect(false, false);   // arrete l'essai en cours, garde les identifiants
+    startBLEProvisioning(false);
+    _bleFond = true;
+  } else if (!wifiConnected) {
   Serial.println("\n══ BLE provisioning actif ══");
   Serial.println("   Appui bouton = quitter | 5 min sans connexion = quitter auto");
   startBLEProvisioning();
@@ -6461,7 +6732,7 @@ void setup() {
   if (WiFi.status() == WL_CONNECTED) {
     wifiConnected = true;
     Serial.printf("WiFi deja connecte — IP=%s\n", WiFi.localIP().toString().c_str());
-  } else if (savedSSID.length() > 0) {
+  } else if (savedSSID.length() > 0 && !_bleFond && !directPerm) {
     Serial.printf("Tentative WiFi: SSID=%s\n", savedSSID.c_str());
     WiFi.mode(WIFI_STA);
     WiFi.setAutoReconnect(true);
@@ -6485,6 +6756,10 @@ void setup() {
     } else {
       Serial.println("\n✗ WiFi echoue.");
     }
+  } else if (directPerm) {
+    Serial.println("Maison sans Wi-Fi — hors ligne, le telephone passera par le Wi-Fi de la box.");
+  } else if (_bleFond) {
+    Serial.println("Wi-Fi memorise injoignable — hors ligne, nouvel essai toutes les 60 s apres le BLE.");
   } else {
     Serial.println("Aucun WiFi sauvegarde — mode hors-ligne.");
   }
@@ -6494,6 +6769,7 @@ void setup() {
   } else {
     Serial.println("Mode hors-ligne — horaires locaux (calcul/RTC) actifs.");
   }
+  if (directPerm) demarrerDirect("maison sans Wi-Fi (reglage permanent)", false, false);
 
   Serial.println("Commandes serie: startap, stopap, startble, stopble, showloc");
 }
@@ -6626,7 +6902,7 @@ static void bancCommande(String c) {
 
   if (verbe == "info") {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.50\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
+             "{\"version\":\"3.0.52\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
              deviceIdHex().c_str());
     bancRep(buf);
 
@@ -6926,6 +7202,7 @@ void loop() {
   // If you have a config button connected, you can re-enable checkConfigButton();
   checkConfigButton();
   ledFlushSave();   // [V2] sauvegarde differee de la couleur libre (anti-flash)
+  directTick();     // [DIRECT] referme le Wi-Fi de la box quand plus personne ne s'en sert
 
   // Simple serial command interface for testing without a button
   if (Serial.available()) {
@@ -6948,6 +7225,11 @@ void loop() {
       stopBLEProvisioning();
       Serial.println("BLE provisioning stopped via serial command");
 #endif
+    } else if (cmd.equalsIgnoreCase("direct")) {
+      demarrerDirect("commande serie");
+      Serial.printf("[DIRECT] %s / %s\n", directSsid().c_str(), g_directActif ? "ouvert" : "refuse");
+    } else if (cmd.equalsIgnoreCase("stopdirect")) {
+      arreterDirect("commande serie");
     } else if (cmd.equalsIgnoreCase("stopap")) {
       stopConfigAP();
       Serial.println("AP stopped via serial command");
@@ -7506,26 +7788,53 @@ void loop() {
       prefs.putString("wifi_ssid", wifiConnectSSID);
       prefs.putString("wifi_pass", wifiConnectPass);
       prefs.end();
-      // mDNS
-      if (MDNS.begin("adhanbox")) {
-        MDNS.addService("http", "tcp", 80);
-        Serial.println("mDNS: adhanbox.local");
+      // [3.0.51] Services jamais lances (box allumee sans reseau) : le bloc
+      // « Wi-Fi revenu » juste en dessous les demarre, mDNS, OTA et MQTT compris.
+      // Les relancer ici aussi les initialiserait deux fois.
+      if (g_servicesDemarres) {
+        // mDNS
+        if (MDNS.begin("adhanbox")) {
+          MDNS.addService("http", "tcp", 80);
+          Serial.println("mDNS: adhanbox.local");
+        }
+        setupOTA();
       }
-      setupOTA();
       // NTP + prayer reschedule
       if (syncTimeFromNtp(15000) && rtcPresent) scheduleNextPrayerAlarm();
       // Init MQTT if broker stored
-      prefs.begin("adhancfg", true);
-      String broker = prefs.getString("mqtt_broker", "");
-      prefs.end();
-      if (broker.length() > 0) {
-        mqtt.setServer(broker.c_str(), MQTT_PORT);
-        mqtt.setCallback(mqttCallback);
+      if (g_servicesDemarres) {
+        prefs.begin("adhancfg", true);
+        String broker = prefs.getString("mqtt_broker", "");
+        prefs.end();
+        if (broker.length() > 0) {
+          mqtt.setServer(broker.c_str(), MQTT_PORT);
+          mqtt.setCallback(mqttCallback);
+        }
       }
     } else if (millis() - wifiConnectStart > WIFI_CONNECT_TIMEOUT_MS) {
       wifiConnectState = WCS_FAILED;
       Serial.println("✗ Async WiFi connect timed out");
       WiFi.disconnect(true);
+    }
+  }
+
+  // [3.0.51] Le Wi-Fi est la, mais rien ne repond encore a l'application : box
+  // allumee sans reseau, reseau revenu depuis (reconnexion du pilote, essai des
+  // 60 s, appairage). On lance les services, apres avoir rendu la memoire du BLE
+  // d'arriere-plan : le serveur web et la synchro ne tiennent pas a cote.
+  if (!g_servicesDemarres && WiFi.status() == WL_CONNECTED) {
+#if ENABLE_BLE
+    if (_bleActive && _bleFond) {
+      Serial.println("[BLE] Wi-Fi revenu : fin du BLE d'arriere-plan.");
+      stopBLEProvisioning();
+    }
+#endif
+    if (!_bleActive) {
+      Serial.printf("[WiFi] Reseau revenu (IP %s) : demarrage des services.\n",
+                    WiFi.localIP().toString().c_str());
+      startServices();
+      wifiConnectState = WCS_CONNECTED;
+      if (rtcPresent) scheduleNextPrayerAlarm();
     }
   }
 
@@ -7574,7 +7883,15 @@ void loop() {
 
   // [COUPURES] Retente le Wi-Fi toutes les 60 s s'il est tombe.
   static unsigned long lastWifiRetry = 0;
-  if (wifiConnectState != WCS_CONNECTING && !apRunning &&
+  // [3.0.51] Pas pendant le BLE : une connexion en fond derange l'appairage
+  // (vu au pairBoot, sortie a ~24 s). Il s'arrete seul au bout de 5 min.
+  // Ni pendant un son : WiFi.disconnect(true) arrete le pilote et bloque la
+  // boucle, le decodeur a faim (meme regle que l'OTA et le MQTT plus haut). Une
+  // box sans reseau retentait toutes les 60 s, adhan compris.
+  // [DIRECT] Ni quand un telephone est branche sur le Wi-Fi de la box : un
+  // essai balaie tous les canaux, et le point d'acces le suit.
+  if (wifiConnectState != WCS_CONNECTING && !apRunning && !_bleActive && !audio.isRunning() &&
+      !(g_directActif && WiFi.softAPgetStationNum() > 0) &&
       WiFi.status() != WL_CONNECTED && millis() - lastWifiRetry > 60000) {
     lastWifiRetry = millis();
     prefs.begin("adhancfg", true);
@@ -7583,8 +7900,12 @@ void loop() {
     prefs.end();
     if (rSsid.length() > 0) {
       Serial.printf("[COUPURES] Wi-Fi tombe, nouvelle tentative vers '%s'...\n", rSsid.c_str());
-      WiFi.disconnect(true);
-      WiFi.mode(WIFI_STA);
+      if (g_directActif) {
+        WiFi.mode(WIFI_AP_STA);   // [DIRECT] disconnect(true) et STA seul couperaient le point d'acces
+      } else {
+        WiFi.disconnect(true);
+        WiFi.mode(WIFI_STA);
+      }
       wifiConnectSSID = rSsid;
       wifiConnectPass = rPass;
       WiFi.begin(rSsid.c_str(), rPass.c_str());
