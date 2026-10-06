@@ -21,7 +21,12 @@
   <link rel="icon" type="image/png" href="logo-app.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,500;1,9..144,600&family=Inter:wght@400;500;600;700&family=Amiri:wght@400;700&display=swap" rel="stylesheet">
+  <!-- Polices chargees sans bloquer le premier affichage : la feuille arrive en
+       « print » puis bascule sur « all » ; les textes s'affichent d'abord avec
+       la police de secours (display=swap). -->
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,500;1,9..144,600&family=Inter:wght@400;500;600;700&family=Amiri:wght@400;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+  <noscript><link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,500;1,9..144,600&family=Inter:wght@400;500;600;700&family=Amiri:wght@400;700&display=swap" rel="stylesheet"></noscript>
+  <link rel="preload" as="image" href="coloris/noir--or.jpg" fetchpriority="high">
   <link rel="stylesheet" href="styles.css?v=2026100602">
   <script defer src="configurator.js?v=20261006c"></script>
   <script defer src="site.js"></script>
@@ -30,13 +35,13 @@
   <main>
     <section id="configurateur" class="first-section">
     <div class="container">
-      <div class="section-head reveal">
+      <div class="section-head">
         <div class="eyebrow">Personnalisez le vôtre</div>
         <h2>Composez <em>votre AdhanBox</em></h2>
         <p>Chaque boîtier est imprimé en 3D à la commande. Choisissez la couleur du châssis, le motif de la façade et sa teinte&nbsp;: toutes les finitions sont mates.</p>
       </div>
 
-      <div class="configurator-panel reveal">
+      <div class="configurator-panel">
         <!-- Apercu : la photo reelle du chassis choisi. La 3D (three.js, ~500 Ko)
              ne se charge qu'au clic sur « 3D » ou au choix d'un motif : la page
              s'affiche en moins de 2 s au lieu de 7 (audit du 06/10/2026). -->
@@ -102,52 +107,52 @@
                aria-roledescription="carrousel" aria-label="Les coloris en photo">
 <!-- coloris:debut -->
           <figure data-finish="noir">
-            <img src="coloris/noir--or.jpg" width="720" height="960"
+            <img src="coloris/mini/noir--or.jpg" width="360" height="480"
                  alt="AdhanBox, châssis Noir, motif or" loading="lazy" decoding="async">
             <figcaption><span class="coloris-nom">Noir</span><span class="coloris-motif">motif or</span></figcaption>
           </figure>
           <figure data-finish="vert-foret">
-            <img src="coloris/vert-foret--or.jpg" width="720" height="960"
+            <img src="coloris/mini/vert-foret--or.jpg" width="360" height="480"
                  alt="AdhanBox, châssis Vert forêt, motif or" loading="lazy" decoding="async">
             <figcaption><span class="coloris-nom">Vert forêt</span><span class="coloris-motif">motif or</span></figcaption>
           </figure>
           <figure data-finish="gris-texture">
-            <img src="coloris/gris-texture--noir.jpg" width="720" height="960"
+            <img src="coloris/mini/gris-texture--noir.jpg" width="360" height="480"
                  alt="AdhanBox, châssis Gris texturé, motif noir" loading="lazy" decoding="async">
             <figcaption><span class="coloris-nom">Gris texturé</span><span class="coloris-motif">motif noir</span></figcaption>
           </figure>
           <figure data-finish="marron">
-            <img src="coloris/marron--blanc.jpg" width="720" height="960"
+            <img src="coloris/mini/marron--blanc.jpg" width="360" height="480"
                  alt="AdhanBox, châssis Marron, motif blanc" loading="lazy" decoding="async">
             <figcaption><span class="coloris-nom">Marron</span><span class="coloris-motif">motif blanc</span></figcaption>
           </figure>
           <figure data-finish="cacahuete">
-            <img src="coloris/cacahuete--blanc.jpg" width="720" height="960"
+            <img src="coloris/mini/cacahuete--blanc.jpg" width="360" height="480"
                  alt="AdhanBox, châssis Marron cacahuète, motif blanc" loading="lazy" decoding="async">
             <figcaption><span class="coloris-nom">Marron cacahuète</span><span class="coloris-motif">motif blanc</span></figcaption>
           </figure>
           <figure data-finish="gris">
-            <img src="coloris/gris--blanc.jpg" width="720" height="960"
+            <img src="coloris/mini/gris--blanc.jpg" width="360" height="480"
                  alt="AdhanBox, châssis Gris, motif blanc" loading="lazy" decoding="async">
             <figcaption><span class="coloris-nom">Gris</span><span class="coloris-motif">motif blanc</span></figcaption>
           </figure>
           <figure data-finish="beige">
-            <img src="coloris/beige--noir.jpg" width="720" height="960"
+            <img src="coloris/mini/beige--noir.jpg" width="360" height="480"
                  alt="AdhanBox, châssis Beige, motif noir" loading="lazy" decoding="async">
             <figcaption><span class="coloris-nom">Beige</span><span class="coloris-motif">motif noir</span></figcaption>
           </figure>
           <figure data-finish="marbre">
-            <img src="coloris/marbre--noir.jpg" width="720" height="960"
+            <img src="coloris/mini/marbre--noir.jpg" width="360" height="480"
                  alt="AdhanBox, châssis Marbre, motif noir" loading="lazy" decoding="async">
             <figcaption><span class="coloris-nom">Marbre</span><span class="coloris-motif">motif noir</span></figcaption>
           </figure>
           <figure data-finish="creme">
-            <img src="coloris/creme--blanc.jpg" width="720" height="960"
+            <img src="coloris/mini/creme--blanc.jpg" width="360" height="480"
                  alt="AdhanBox, châssis Crème, motif blanc" loading="lazy" decoding="async">
             <figcaption><span class="coloris-nom">Crème</span><span class="coloris-motif">motif blanc</span></figcaption>
           </figure>
           <figure data-finish="blanc">
-            <img src="coloris/blanc--noir.jpg" width="720" height="960"
+            <img src="coloris/mini/blanc--noir.jpg" width="360" height="480"
                  alt="AdhanBox, châssis Blanc, motif noir" loading="lazy" decoding="async">
             <figcaption><span class="coloris-nom">Blanc</span><span class="coloris-motif">motif noir</span></figcaption>
           </figure>

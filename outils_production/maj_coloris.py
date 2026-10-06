@@ -101,7 +101,7 @@ def figures(chassis, motifs):
         charge = ' loading="lazy"'
         blocs.append('\n'.join([
             '          <figure data-finish="%s">' % c,
-            '            <img src="coloris/%s" width="%d" height="%d"' % (f, LARGEUR, HAUTEUR),
+            '            <img src="coloris/mini/%s" width="%d" height="%d"' % (f, LARGEUR // 2, HAUTEUR // 2),
             '                 alt="AdhanBox, châssis %s, motif %s"%s decoding="async">'
             % (echapper(nom), echapper(motif), charge),
             '            <figcaption><span class="coloris-nom">%s</span>'

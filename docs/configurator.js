@@ -468,7 +468,8 @@
       if (!fig) return null;
       const img = fig.querySelector('img');
       const m = (img.getAttribute('src') || '').match(/--([a-z-]+)\.jpg$/);
-      return { src: img.getAttribute('src'), couleur: m ? m[1] : null, alt: img.alt };
+      // La bande affiche la vignette (coloris/mini/) ; l'apercu veut la grande photo.
+      return { src: img.getAttribute('src').replace('coloris/mini/', 'coloris/'), couleur: m ? m[1] : null, alt: img.alt };
     }
     function alignerSurPhoto(finish) {
       const ph = photoDe(finish);
