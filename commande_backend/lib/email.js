@@ -24,7 +24,7 @@ export function shell(bodyHtml) {
     <tr><td style="background:#FFFFFF;padding:32px;">
       ${bodyHtml}
       <p style="color:#777;font-size:13px;line-height:1.6;margin:22px 0 0;">
-        Garantie 2 ans · Retour 14 jours<br>
+        Garantie 2 ans · Satisfait ou remboursé 14 jours, retour offert<br>
         Une question&nbsp;? Répondez simplement à cet email ou écrivez-nous à
         <a href="mailto:contact@adhanbox.fr" style="color:#0C5B45;">contact@adhanbox.fr</a>.
       </p>

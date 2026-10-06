@@ -218,7 +218,7 @@ export default async function handler(req, res) {
       // promesse de fabrication. (Limites Stripe : 1 200 caracteres chacun.)
       custom_text: {
         shipping_address: { message: 'Prénom et nom complets, s\'il vous plaît : ils figurent sur l\'étiquette du colis.' },
-        submit: { message: 'Fabriquée à la main à la commande, expédiée sous 1 à 2 semaines avec numéro de suivi. Retour 14 jours, garantie 2 ans.' },
+        submit: { message: 'Fabriquée à la main à la commande, expédiée sous 1 à 2 semaines avec numéro de suivi. Satisfait ou remboursé 14 jours, retour offert. Garantie 2 ans.' },
       },
       // Champ « code promo » sur la page de paiement. Les codes eux-memes
       // (FAMILLE, ADHAN5...) se creent dans le dashboard Stripe : on peut

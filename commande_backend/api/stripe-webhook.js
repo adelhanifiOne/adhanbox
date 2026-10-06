@@ -107,7 +107,7 @@ function clientEmailText({ firstName, ref, config, amount, shipToLines, livraiso
         : (shipToLines.length ? ['Adresse de livraison :', ...shipToLines, ''] : [])),
     `Expédition prévue : ${SHIP_DATE}. Vous serez tenu informé à chaque étape : confirmation, assemblage, envoi avec numéro de suivi.`,
     '',
-    'Garantie 2 ans · Retour 14 jours · Paiement sécurisé Stripe',
+    'Garantie 2 ans · Satisfait ou remboursé 14 jours, retour offert · Paiement sécurisé Stripe',
     'Une question ? Répondez à cet email ou écrivez-nous : contact@adhanbox.fr',
     '',
     'AdhanBox — Fait main en France',
@@ -179,7 +179,7 @@ function clientEmailHtml({ firstName, ref, config, amount, shipTo, livraison }) 
       </div>
 
       <p style="color:#777;font-size:13px;line-height:1.6;margin:22px 0 0;">
-        Garantie 2 ans · Retour 14 jours · Paiement sécurisé Stripe<br>
+        Garantie 2 ans · Satisfait ou remboursé 14 jours, retour offert · Paiement sécurisé Stripe<br>
         Une question&nbsp;? Répondez simplement à cet email ou écrivez-nous à
         <a href="mailto:contact@adhanbox.fr" style="color:#0C5B45;">contact@adhanbox.fr</a>.
       </p>
