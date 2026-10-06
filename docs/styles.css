@@ -920,6 +920,13 @@
       transition: all 0.2s ease;
     }
     .pill-btn:hover { border-color: var(--emerald); color: var(--emerald); }
+    /* Motifs : une image du motif (rendu 3D) et son nom */
+    .motif-btn { display: inline-flex; align-items: center; gap: 0.55rem; padding: 0.3rem 1rem 0.3rem 0.35rem; }
+    .motif-btn img {
+      width: 38px; height: 38px; border-radius: 50%; object-fit: contain;
+      padding: 3px; background: #FFF; border: 1px solid var(--line);
+    }
+    .motif-btn.active img { border-color: rgba(255, 255, 255, 0.5); }
     .pill-btn.active {
       background: var(--emerald);
       border-color: var(--emerald);

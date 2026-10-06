@@ -35,6 +35,9 @@
     // Motif photographie sur toutes les photos de coloris : c'est le choix par
     // defaut, pour que la photo affichee soit exactement ce qui est commande.
     const MOTIF_PHOTO = 3;   // confirme par Adel le 06/10/2026
+    // Noms des motifs (06/10/2026). Le numero reste la reference de l'atelier
+    // (fichiers mandalaN) ; les deux voyagent ensemble jusqu'a la commande Stripe.
+    const MOTIF_NOMS = { 1: 'Arabesque', 2: 'Lotus', 3: 'Rosace' };
     const state = { finish: 'noir', mandala: MOTIF_PHOTO, mandalaColor: 'or' };
     let scene, camera, renderer, controls, boxGroup, boxMesh = null, mandalaMesh = null, lidMesh = null;
     let boxSize = null, boxCenter = null;
@@ -567,7 +570,7 @@
       const finish = FINISHES[state.finish].label;
       const motif = state.mandala === 0
         ? 'Sans motif'
-        : 'Motif ' + state.mandala + ' (' + MANDALA_COLORS[state.mandalaColor].label + ')';
+        : 'Motif ' + state.mandala + ' « ' + (MOTIF_NOMS[state.mandala] || '') + ' » (' + MANDALA_COLORS[state.mandalaColor].label + ')';
       // référence lisible pour Stripe : chassis + motif (+ teinte)
       let ref = 'chassis-' + slug(finish);
       if (state.mandala === 0) {

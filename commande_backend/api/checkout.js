@@ -28,6 +28,9 @@ const CHASSIS = {
   cacahuete: 'Marron cacahuète', 'vert-foret': 'Vert forêt',
   'gris-texture': 'Gris texturé',
 };
+// Noms des trois motifs de facade (06/10/2026), alignes sur docs/configurator.js.
+// Le numero reste la reference de l'atelier : les deux figurent dans la commande.
+const MOTIF_NOMS = { 1: 'Arabesque', 2: 'Lotus', 3: 'Rosace' };
 const MOTIFS = {
   noir: 'Noir', blanc: 'Blanc', rouge: 'Rouge', rose: 'Rose',
   bleu: 'Bleu', 'vert-foret': 'Vert forêt', or: 'Or', marron: 'Marron',
@@ -92,9 +95,10 @@ export default async function handler(req, res) {
     return sendJson(res, 400, { error: 'Configuration invalide' });
   }
 
+  const nomMotif = MOTIF_NOMS[m] ? ` « ${MOTIF_NOMS[m]} »` : '';
   const configLabel = m === 0
     ? `Châssis ${chassis} · Sans motif`
-    : `Châssis ${chassis} · Motif ${m} (${motifColor})`;
+    : `Châssis ${chassis} · Motif ${m}${nomMotif} (${motifColor})`;
 
   // Livraison : 'relais' = Mondial Relay offert. Depuis le 06/10/2026 le point
   // n'est plus choisi AVANT le paiement (le bouton de commande restait grise
@@ -133,7 +137,7 @@ export default async function handler(req, res) {
 
   const metadata = {
     couleur_boitier: chassis,
-    motif: m === 0 ? 'Sans motif' : `Motif ${m}`,
+    motif: m === 0 ? 'Sans motif' : `Motif ${m}${nomMotif}`,
     couleur_motif: m === 0 ? '-' : motifColor,
     config: configLabel,
     livraison: modeRelais ? 'Point relais' : 'Domicile',
