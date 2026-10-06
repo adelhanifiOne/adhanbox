@@ -28,8 +28,6 @@
   <noscript><link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,500;1,9..144,600&family=Inter:wght@400;500;600;700&family=Amiri:wght@400;700&display=swap" rel="stylesheet"></noscript>
   <link rel="preload" as="image" href="coloris/noir--or.jpg" fetchpriority="high">
   <link rel="stylesheet" href="styles.css?v=2026100602">
-  <script defer src="configurator.js?v=20261006c"></script>
-  <script defer src="site.js"></script>
 </head>
 <body data-page="personnaliser">
   <main>
@@ -178,6 +176,27 @@
     <div class="prix"><span><b>95&nbsp;€</b><s>119&nbsp;€</s></span><span class="detail">ou 3 × 31,67&nbsp;€ · point relais offert</span></div>
     <a href="#commande" class="btn btn-gold">Commander</a>
   </div>
+  <script>
+  // Les scripts partent APRES le premier affichage : la photo et le texte ne
+  // doivent attendre ni leur telechargement ni leur execution. Deux images
+  // d'animation apres le premier rendu, ou 1,5 s au plus (onglet en arriere-plan,
+  // ou le rendu tarde) : le premier des deux lance le chargement, une seule fois.
+  (function () {
+    var fait = false;
+    function charger() {
+      if (fait) return;
+      fait = true;
+      ['configurator.js?v=20261006c', 'site.js'].forEach(function (src) {
+        var el = document.createElement('script');
+        el.src = src;
+        el.async = false;   // garde l'ordre : configurateur, puis en-tete et pied de page
+        document.body.appendChild(el);
+      });
+    }
+    if (window.requestAnimationFrame) requestAnimationFrame(function () { requestAnimationFrame(charger); });
+    setTimeout(charger, 1500);
+  })();
+  </script>
 <!-- plan:debut -->
 <nav aria-label="Plan du site" style="max-width:1100px;margin:0 auto;padding:18px 20px 34px;font-size:.82rem;line-height:1.9;opacity:.55">
   <ul style="list-style:none;display:flex;flex-wrap:wrap;gap:0 18px;margin:0;padding:0">
