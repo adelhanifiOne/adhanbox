@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <script>document.documentElement.classList.add('js')</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Offrir une AdhanBox — le cadeau fait main, avec votre message</title>
+  <meta name="description" content="Mariage, naissance, nouvelle maison, retour de Omra : offrez une AdhanBox, fabriquée à la main en France, avec une carte signée et votre message, livrée directement chez la personne. 95 €, retour offert 14 jours.">
+  <meta name="theme-color" content="#0C5B45">
+  <!-- Page d'atterrissage pour les publicites « cadeau » (point 13 de l'audit
+       du 06/10/2026). Meme box, autre entree : la pub parle de cadeau, la page
+       parle de cadeau. Pour une autre pub (Ramadan, nouvelle maison...), copier
+       ce fichier et changer le texte, pas la structure. -->
+  <link rel="canonical" href="https://adhanbox.fr/cadeau.html">
+  <meta name="robots" content="index, follow, max-image-preview:large">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="AdhanBox">
+  <meta property="og:url" content="https://adhanbox.fr/cadeau.html">
+  <meta property="og:title" content="Offrir une AdhanBox — le cadeau que l'on est fier d'offrir">
+  <meta property="og:description" content="Fait main en France, carte signée avec votre message, livré chez la personne. 95 €, retour offert 14 jours.">
+  <meta property="og:locale" content="fr_FR">
+  <meta property="og:image" content="https://adhanbox.fr/og-adhanbox.jpg">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:image" content="https://adhanbox.fr/og-adhanbox.jpg">
+  <link rel="icon" type="image/png" href="logo-app.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,500;1,9..144,600&family=Inter:wght@400;500;600;700&family=Amiri:wght@400;700&display=swap" rel="stylesheet">
+  <link rel="preload" as="image" href="photos/02-dans-le-salon.jpg" fetchpriority="high">
+  <link rel="stylesheet" href="styles.css?v=2026100604">
+  <script defer src="site.js"></script>
+  <style>
+    /* Propre a cette page : le reste vient de styles.css */
+    .cadeau-hero { display:grid; grid-template-columns:1.05fr .95fr; gap:40px; align-items:center; }
+    .cadeau-hero .eyebrow { margin-bottom:.8rem; }
+    .cadeau-hero h1 { font-family:var(--font-display); font-weight:600; font-size:clamp(2.1rem,5vw,3.3rem); line-height:1.08; letter-spacing:-.01em; margin:0 0 1rem; text-wrap:balance; }
+    .cadeau-hero h1 em { font-style:italic; color:var(--emerald); }
+    .cadeau-hero .sub { font-size:1.08rem; color:var(--muted); max-width:34rem; margin:0 0 1.4rem; }
+    .cadeau-photo { border-radius:26px; overflow:hidden; border:1px solid var(--line); box-shadow:var(--shadow-md); aspect-ratio:1/1.05; background:var(--ivory-deep); }
+    .cadeau-photo img { display:block; width:100%; height:100%; object-fit:cover; object-position:center 46%; }
+    .cadeau-note { display:flex; align-items:center; gap:.5rem; color:var(--muted); font-size:.92rem; text-decoration:none; width:fit-content; margin-bottom:.9rem; }
+    .cadeau-note .stars { color:var(--gold); letter-spacing:2px; }
+    .cadeau-note b { color:var(--ink); }
+    .cadeau-offre { display:flex; align-items:baseline; flex-wrap:wrap; gap:.3rem .7rem; margin-bottom:.9rem; }
+    .cadeau-offre .now { font-family:var(--font-display); font-weight:700; font-size:2rem; color:var(--emerald); line-height:1; }
+    .cadeau-offre s { color:var(--faint); }
+    .cadeau-offre .free { color:var(--muted); font-size:.9rem; }
+    .cadeau-ctas { display:flex; flex-wrap:wrap; gap:.9rem; align-items:center; }
+    .cadeau-ctas .btn-lg { padding:1.1rem 2.2rem; font-size:1.05rem; }
+    .cadeau-ctas .aussi { color:var(--muted); font-size:.92rem; }
+    .cadeau-ctas .aussi b { color:var(--ink); }
+    .reassure { display:flex; flex-wrap:wrap; gap:.5rem 1.4rem; font-size:.85rem; color:var(--muted); margin-top:1.1rem; }
+    .reassure span::before { content:"✓"; color:var(--emerald); font-weight:700; margin-right:.4rem; }
+
+    .cadeau-section { padding:64px 0; }
+    .cadeau-section.alt { background:var(--paper); border-top:1px solid var(--line); border-bottom:1px solid var(--line); }
+    .cadeau-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:18px; margin-top:28px; }
+    .cadeau-carte { background:var(--paper); border:1px solid var(--line); border-radius:18px; padding:22px 22px; box-shadow:var(--shadow-sm); }
+    .cadeau-section.alt .cadeau-carte { background:var(--ivory); }
+    .cadeau-carte .ic { width:42px; height:42px; border-radius:12px; background:var(--gold-soft); color:var(--gold-deep); display:grid; place-items:center; margin-bottom:12px; font-size:1.2rem; }
+    .cadeau-carte h3 { font-size:1.02rem; margin:0 0 .35rem; }
+    .cadeau-carte p { font-size:.93rem; color:var(--muted); margin:0; line-height:1.55; }
+    .etapes { display:grid; grid-template-columns:repeat(3,1fr); gap:18px; margin-top:28px; counter-reset:etape; }
+    .etape { background:var(--paper); border:1px solid var(--line); border-radius:18px; padding:22px; }
+    .etape::before { counter-increment:etape; content:counter(etape); display:inline-grid; place-items:center; width:32px; height:32px; border-radius:50%; background:var(--emerald); color:#fff; font-weight:700; margin-bottom:10px; }
+    .etape h3 { font-size:1.02rem; margin:0 0 .35rem; }
+    .etape p { font-size:.93rem; color:var(--muted); margin:0; line-height:1.55; }
+    .citations { display:grid; grid-template-columns:1fr 1fr; gap:18px; margin-top:28px; }
+    .citations blockquote { margin:0; background:var(--paper); border:1px solid var(--line); border-radius:18px; padding:22px; }
+    .citations p { margin:0; font-style:italic; line-height:1.6; }
+    .citations footer { margin-top:.6rem; font-weight:600; color:var(--emerald); font-size:.9rem; }
+    .cadeau-final { text-align:center; padding:64px 0 80px; }
+    .cadeau-final h2 { font-family:var(--font-display); font-weight:600; font-size:clamp(1.7rem,3.6vw,2.4rem); margin:0 0 .6rem; }
+    .cadeau-final p { color:var(--muted); max-width:36rem; margin:0 auto 1.4rem; }
+    .section-head h2 { text-wrap:balance; }
+
+    @media (max-width:860px) {
+      .cadeau-hero { display:flex; flex-direction:column; gap:16px; }
+      .cadeau-photo { order:-1; aspect-ratio:1/.82; }
+      .cadeau-hero h1 { font-size:2.05rem; margin-bottom:.4rem; }
+      /* Sur mobile : titre, note, prix, bouton, puis le texte. Le premier
+         ecran doit finir sur le bouton, pas sur un paragraphe. */
+      .cadeau-hero > div:first-child { display:flex; flex-direction:column; }
+      .cadeau-hero .sub { order:5; margin:1rem 0 0; }
+      .cadeau-hero .reassure { order:6; }
+      .cadeau-section { padding:48px 0; }
+      .cadeau-grid, .etapes, .citations { grid-template-columns:1fr; }
+    }
+    @media (min-width:861px) and (max-width:1080px) { .cadeau-grid { grid-template-columns:repeat(2,1fr); } }
+  </style>
+</head>
+<body data-page="cadeau">
+  <main>
+    <section class="first-section" style="padding-bottom:40px;">
+      <div class="container cadeau-hero">
+        <div>
+          <div class="eyebrow">Offrir une AdhanBox</div>
+          <h1>Le cadeau que l'on est <em>fier d'offrir</em></h1>
+          <p class="sub">Mariage, naissance, nouvelle maison, retour de Omra&nbsp;: une box qui fait entendre l'adhan de sa mosquée, fabriquée à la main en France, avec une carte signée et <strong>votre message écrit à la main</strong>. Livrée chez vous, ou directement chez la personne.</p>
+          <a class="cadeau-note" href="avis.html"><span class="stars" aria-hidden="true">★★★★★</span><b id="note-moyenne">5/5</b><span id="nb-avis">8 avis</span></a>
+          <p class="cadeau-offre"><span class="now">95&nbsp;€</span><s>119&nbsp;€</s><span class="free">livraison offerte en point relais</span></p>
+          <div class="cadeau-ctas">
+            <a href="personnaliser.html" class="btn btn-gold btn-lg">Composer le cadeau</a>
+            <span class="aussi">ou <b>3 × 31,67&nbsp;€</b> sans frais</span>
+          </div>
+          <div class="reassure">
+            <span>Carte signée, message à la main</span>
+            <span>Retour offert 14 jours</span>
+            <span>Fabriqué à la commande, en France</span>
+          </div>
+        </div>
+        <div class="cadeau-photo">
+          <img src="photos/02-dans-le-salon.jpg" width="548" height="630" alt="Une AdhanBox allumée dans un salon" fetchpriority="high" decoding="async">
+        </div>
+      </div>
+    </section>
+
+    <section class="cadeau-section alt">
+      <div class="container">
+        <div class="section-head" style="text-align:center;">
+          <div class="eyebrow">Dans le colis</div>
+          <h2>Tout est prêt à offrir, <em>en sortant du carton</em></h2>
+        </div>
+        <div class="cadeau-grid">
+          <div class="cadeau-carte"><div class="ic">🎁</div><h3>La box, à ses couleurs</h3><p>Dix couleurs de châssis, trois motifs, huit teintes&nbsp;: vous composez la sienne. Chaque boîtier est imprimé et assemblé à la commande, testé un par un.</p></div>
+          <div class="cadeau-carte"><div class="ic">✍️</div><h3>Une carte signée à la main</h3><p>Au moment du paiement, un champ «&nbsp;Message pour la carte&nbsp;». Nous l'écrivons à la main, mot pour mot, et la glissons sur le dessus du colis.</p></div>
+          <div class="cadeau-carte"><div class="ic">🔌</div><h3>Rien d'autre à acheter</h3><p>L'alimentation, le câble et la notice sont dans la boîte. L'installation prend cinq minutes, guidée par l'application gratuite.</p></div>
+          <div class="cadeau-carte"><div class="ic">📦</div><h3>Livrée où vous voulez</h3><p>Chez vous pour l'offrir en main propre, ou directement chez la personne. Vous recevez le suivi à chaque étape.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="cadeau-section">
+      <div class="container">
+        <div class="section-head reveal" style="text-align:center;">
+          <div class="eyebrow">Comment ça se passe</div>
+          <h2>Trois minutes, <em>et c'est en route</em></h2>
+        </div>
+        <div class="etapes reveal">
+          <div class="etape"><h3>Vous composez</h3><p>Couleur, motif, teinte. L'aperçu change à chaque choix. Vous choisissez point relais offert ou domicile.</p></div>
+          <div class="etape"><h3>Vous écrivez le message</h3><p>Sur la page de paiement, avec l'adresse de livraison&nbsp;: la vôtre, ou celle de la personne. Paiement en une fois ou en 3 × sans frais.</p></div>
+          <div class="etape"><h3>Elle reçoit la box</h3><p>Fabriquée sous 1 à 2 semaines, expédiée avec numéro de suivi. Vous êtes prévenu à chaque étape&nbsp;: préparation, assemblage, envoi.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="cadeau-section alt">
+      <div class="container">
+        <div class="section-head reveal" style="text-align:center;">
+          <div class="eyebrow">Pourquoi ce cadeau marque</div>
+          <h2>Un objet qu'on garde, <em>cinq fois par jour</em></h2>
+          <p style="max-width:40rem;margin:0 auto;">Pas un gadget de plus&nbsp;: l'adhan de <strong>sa</strong> mosquée à la minute près, la lumière qui s'éveille à travers les arches à chaque prière, le Coran et les azkar à la demande. Et des mises à jour après l'achat&nbsp;: la box de cette année sera meilleure l'année prochaine.</p>
+        </div>
+        <div class="citations reveal">
+          <blockquote><p>«&nbsp;Simple, rapide d'installation […] la box est plutôt jolie et pas trop grosse. J'y penserais pour un prochain cadeau.&nbsp;»</p><footer>Hafid</footer></blockquote>
+          <blockquote><p>«&nbsp;Votre adhan box a égayé notre foyer. L'adhan résonne, on peut choisir la personne qui fait l'appel à la prière, le volume sonore, le design est simple […]&nbsp;»</p><footer>Besma · Amiens</footer></blockquote>
+        </div>
+      </div>
+    </section>
+
+    <section class="cadeau-section" id="faq">
+      <div class="container">
+        <div class="section-head reveal" style="text-align:center;">
+          <div class="eyebrow">Questions</div>
+          <h2>Avant d'offrir</h2>
+        </div>
+        <div class="faq-list reveal">
+          <div class="faq-item">
+            <button class="faq-q" aria-expanded="false">
+              <span>Puis-je la faire livrer directement chez la personne ?</span>
+              <svg class="chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg>
+            </button>
+            <div class="faq-a"><p>Oui. Sur la page de paiement, indiquez son adresse comme adresse de livraison et votre e-mail pour le suivi. En point relais, le point le plus proche de chez elle lui est proposé&nbsp;; à domicile, Colissimo suivi. Le colis ne contient aucun prix.</p></div>
+          </div>
+          <div class="faq-item">
+            <button class="faq-q" aria-expanded="false">
+              <span>Et si la couleur ou le motif ne lui plaît pas ?</span>
+              <svg class="chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg>
+            </button>
+            <div class="faq-a"><p>Retour offert pendant 14 jours après la réception, même sur un boîtier personnalisé&nbsp;: nous envoyons une étiquette prépayée, et nous échangeons ou remboursons intégralement. Garantie légale de 2 ans.</p></div>
+          </div>
+          <div class="faq-item">
+            <button class="faq-q" aria-expanded="false">
+              <span>Faut-il du Wi-Fi chez la personne ?</span>
+              <svg class="chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg>
+            </button>
+            <div class="faq-a"><p>Une seule fois, pour l'installation&nbsp;: son Wi-Fi ou le partage de connexion d'un téléphone. Ensuite, la box sonne toute seule, même sans réseau. Les horaires de sa mosquée (Mawaqit) et le Coran en ligne demandent une connexion.</p></div>
+          </div>
+          <div class="faq-item">
+            <button class="faq-q" aria-expanded="false">
+              <span>Pour quelle date ?</span>
+              <svg class="chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg>
+            </button>
+            <div class="faq-a"><p>Chaque box est fabriquée à la commande&nbsp;: comptez 1 à 2 semaines avant l'expédition, puis 2 à 4 jours de livraison. Pour une date précise, écrivez-nous à contact@adhanbox.fr avant de commander, nous vous dirons si c'est possible.</p></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="cadeau-final">
+      <div class="container">
+        <h2>Composez la sienne</h2>
+        <p>Couleur, motif, teinte, votre message. Fait main à Vic-en-Bigorre, livré partout en France.</p>
+        <a href="personnaliser.html" class="btn btn-gold btn-lg">Composer le cadeau — 95&nbsp;€</a>
+        <p class="control-note" style="margin-top:14px;">Paiement sécurisé Stripe · 3× sans frais · retour offert 14 jours</p>
+      </div>
+    </section>
+  </main>
+  <script>
+    // Note et nombre d'avis, depuis le backend (cache CDN 5 min).
+    fetch('https://adhanbox-commande.vercel.app/api/reviews')
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (!d || !d.count) return;
+        var note = document.getElementById('note-moyenne'), nb = document.getElementById('nb-avis');
+        if (note && d.average) note.textContent = String(Math.round(d.average * 10) / 10).replace('.', ',') + '/5';
+        if (nb) nb.textContent = d.count + ' avis';
+      })
+      .catch(function () {});
+  </script>
+<!-- plan:debut -->
+<nav aria-label="Plan du site" style="max-width:1100px;margin:0 auto;padding:18px 20px 34px;font-size:.82rem;line-height:1.9;opacity:.55">
+  <ul style="list-style:none;display:flex;flex-wrap:wrap;gap:0 18px;margin:0;padding:0">
+    <li><a href="./">Accueil</a></li>
+    <li><a href="produit.html">Le produit</a></li>
+    <li><a href="personnaliser.html">Personnaliser et commander</a></li>
+    <li><a href="avis.html">Avis clients</a></li>
+    <li><a href="faq.html">Questions fréquentes</a></li>
+    <li><a href="contact.html">Contact</a></li>
+    <li><a href="cgv.html">Conditions générales de vente</a></li>
+  </ul>
+</nav>
+<!-- plan:fin -->
+</body>
+</html>

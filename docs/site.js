@@ -45,6 +45,7 @@
             '<ul>' +
               '<li><a href="personnaliser.html">Personnaliser</a></li>' +
               '<li><a href="produit.html">Le produit</a></li>' +
+              '<li><a href="cadeau.html">Offrir en cadeau</a></li>' +
               '<li><a href="avis.html">Avis</a></li>' +
               '<li><a href="faq.html">FAQ</a></li>' +
               '<li><a href="contact.html">Contact</a></li>' +
