@@ -32,10 +32,16 @@
       'marron':     { label: 'Marron',     hex: '#927968', color: 0x927968, roughness: 0.85, metalness: 0.0 }
     };
 
-    const state = { finish: 'noir', mandala: 0, mandalaColor: 'or' };
+    // Motif photographie sur toutes les photos de coloris : c'est le choix par
+    // defaut, pour que la photo affichee soit exactement ce qui est commande.
+    const MOTIF_PHOTO = 2;
+    const state = { finish: 'noir', mandala: MOTIF_PHOTO, mandalaColor: 'or' };
     let scene, camera, renderer, controls, boxGroup, boxMesh = null, mandalaMesh = null, lidMesh = null;
     let boxSize = null, boxCenter = null;
     let threeStarted = false;
+    let rendu3DActif = false;     // la boucle de rendu ne tourne qu'en mode 3D
+    let boucleActive = false;
+    let mandalaCharge = 0;        // motif deja dans la scene, pour ne pas le recharger
 
     function makeLoader() {
       const loader = new THREE.GLTFLoader();
@@ -102,12 +108,15 @@
         boxGroup.rotation.x = -Math.PI / 2;
         addGlowAndPort();
         applyFinish();
-        animate3D();
+        if (!boucleActive) animate3D();
         loadLid();
+        if (state.mandala) loadMandala(state.mandala);
+        legende3D();
       }, undefined, (err) => console.error('Erreur de chargement du modèle 3D :', err));
 
       window.addEventListener('resize', () => {
         const w = container.clientWidth, h = container.clientHeight;
+        if (!w || !h) return;    // conteneur masque (mode photo)
         camera.aspect = w / h;
         camera.updateProjectionMatrix();
         renderer.setSize(w, h);
@@ -115,6 +124,8 @@
     }
 
     function animate3D() {
+      if (!rendu3DActif) { boucleActive = false; return; }
+      boucleActive = true;
       requestAnimationFrame(animate3D);
       controls.update();
       renderer.render(scene, camera);
@@ -271,9 +282,11 @@
     }
 
     function loadMandala(index) {
+      if (mandalaMesh && mandalaCharge === index) { applyMandalaColor(); return; }
       if (mandalaMesh) {
         boxGroup.remove(mandalaMesh);
         mandalaMesh = null;
+        mandalaCharge = 0;
       }
       if (index === 0 || !boxSize) return;
 
@@ -304,20 +317,90 @@
 
         if (mandalaMesh) boxGroup.remove(mandalaMesh);
         mandalaMesh = wrapper;
+        mandalaCharge = index;
         boxGroup.add(mandalaMesh);
         applyMandalaColor();
       }, undefined, (err) => console.error('Erreur de chargement du mandala :', err));
     }
 
-    // Initialisation différée : la 3D ne démarre que lorsque la section est visible
-    const configSection = document.getElementById('configurateur');
-    new IntersectionObserver((entries, obs) => {
-      if (entries[0].isIntersecting) {
-        const tryInit = () => (typeof THREE !== 'undefined' && THREE.OrbitControls) ? init3D() : setTimeout(tryInit, 150);
-        tryInit();
-        obs.disconnect();
-      }
-    }, { rootMargin: '200px' }).observe(configSection);
+    // ─── Aperçu : la photo réelle d'abord, la 3D à la demande ───
+    // three.js et ses chargeurs (~500 Ko) ne sont demandés qu'au clic sur
+    // « 3D », ou quand un motif ou une teinte est choisi (la photo ne montre
+    // que sa propre configuration). Règle : ce qu'on voit est ce qu'on commande.
+    const SCRIPTS_3D = [
+      'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js',
+      'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js',
+      'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js',
+      'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/DRACOLoader.js',
+    ];
+    let chargement3D = null;
+    function charger3D() {
+      if (chargement3D) return chargement3D;
+      const un = (src) => new Promise((ok, ko) => {
+        const el = document.createElement('script');
+        el.src = src;
+        el.onload = ok;
+        el.onerror = () => ko(new Error('script 3D : ' + src));
+        document.head.appendChild(el);
+      });
+      // three.min.js d'abord (les trois autres étendent THREE), puis les chargeurs ensemble.
+      chargement3D = un(SCRIPTS_3D[0]).then(() => Promise.all(SCRIPTS_3D.slice(1).map(un)));
+      chargement3D.catch(() => { chargement3D = null; });   // un échec réseau n'est pas définitif
+      return chargement3D;
+    }
+
+    const apercuImg = document.getElementById('apercu-photo');
+    const apercuLegende = document.getElementById('apercu-legende');
+    const canvasBox = document.getElementById('canvas3d');
+    const hint3D = document.getElementById('viewport-hint');
+    const btnPhoto = document.getElementById('mode-photo');
+    const btn3D = document.getElementById('mode-3d');
+    let modeApercu = 'photo';
+
+    function majModes() {
+      [[btnPhoto, 'photo'], [btn3D, '3d']].forEach(([b, m]) => {
+        b.classList.toggle('active', modeApercu === m);
+        b.setAttribute('aria-pressed', modeApercu === m ? 'true' : 'false');
+      });
+    }
+    function legende3D() {
+      if (modeApercu !== '3d') return;
+      apercuLegende.textContent = '3D · ' + FINISHES[state.finish].label +
+        (state.mandala ? ' · motif ' + state.mandala + ' (' + MANDALA_COLORS[state.mandalaColor].label.toLowerCase() + ')' : ' · sans motif');
+    }
+    function montrerPhoto() {
+      modeApercu = 'photo';
+      rendu3DActif = false;
+      canvasBox.hidden = true;
+      hint3D.hidden = true;
+      apercuImg.hidden = false;
+      alignerSurPhoto(state.finish);
+      majModes();
+    }
+    function montrer3D() {
+      modeApercu = '3d';
+      apercuImg.hidden = true;
+      canvasBox.hidden = false;
+      hint3D.hidden = false;
+      majModes();
+      if (!threeStarted) apercuLegende.textContent = 'Chargement de l\'aperçu 3D…';
+      rendu3DActif = true;
+      charger3D().then(() => {
+        if (modeApercu !== '3d') return;
+        init3D();
+        if (boxMesh) {
+          applyFinish();
+          loadMandala(state.mandala);
+          if (!boucleActive) animate3D();
+          legende3D();
+        }
+      }).catch(() => {
+        apercuLegende.textContent = 'Aperçu 3D indisponible pour le moment.';
+        setTimeout(() => { if (modeApercu === '3d') montrerPhoto(); }, 1500);
+      });
+    }
+    btnPhoto.addEventListener('click', montrerPhoto);
+    btn3D.addEventListener('click', montrer3D);
 
     // ─── Contrôles du configurateur ───
     function selectIn(group, target) {
@@ -335,6 +418,7 @@
         btn.style.background = c.hex;
         btn.title = c.label;
         btn.setAttribute('aria-label', c.label);
+        btn.dataset.key = key;
         btn.addEventListener('click', () => {
           selectIn(buttons, btn);
           onPick(key);
@@ -346,16 +430,20 @@
       return buttons;
     }
 
-    buildSwatches('finish-swatches', state.finish, (key) => {
+    const finishBtns = buildSwatches('finish-swatches', state.finish, (key) => {
       state.finish = key;
       document.getElementById('finish-note').textContent = FINISHES[key].label + ' — finition mate.';
       applyFinish();
       montrerColoris(key);
+      if (modeApercu === 'photo') { if (photoDe(key)) alignerSurPhoto(key); else montrer3D(); }
+      else legende3D();
     }, FINISHES);
 
-    buildSwatches('mcolor-swatches', state.mandalaColor, (key) => {
+    const mcolorBtns = buildSwatches('mcolor-swatches', state.mandalaColor, (key) => {
       state.mandalaColor = key;
       applyMandalaColor();
+      if (modeApercu !== '3d') { montrer3D(); return; }   // la photo ne montre que sa propre teinte
+      legende3D();
       if (state.mandala !== 0) focusMotifFace();
     }, MANDALA_COLORS);
 
@@ -365,11 +453,37 @@
         state.mandala = parseInt(btn.dataset.mandala, 10);
         selectIn(mandalaBtns, btn);
         document.getElementById('mandala-color-group').style.display = state.mandala === 0 ? 'none' : 'block';
-        loadMandala(state.mandala);
         updateQuoteLink();
+        if (modeApercu !== '3d') { montrer3D(); return; }   // le motif se voit en 3D, chargé dès qu'elle est prête
+        loadMandala(state.mandala);
+        legende3D();
         if (state.mandala !== 0) focusMotifFace();
       });
     });
+
+    // La photo d'un châssis montre le motif photographié dans sa teinte : en
+    // mode photo, choisir un châssis aligne la commande sur ce que l'on voit.
+    function photoDe(finish) {
+      const fig = colorisVues.find((f) => f.dataset.finish === finish);
+      if (!fig) return null;
+      const img = fig.querySelector('img');
+      const m = (img.getAttribute('src') || '').match(/--([a-z-]+)\.jpg$/);
+      return { src: img.getAttribute('src'), couleur: m ? m[1] : null, alt: img.alt };
+    }
+    function alignerSurPhoto(finish) {
+      const ph = photoDe(finish);
+      if (!ph) return;
+      state.mandala = MOTIF_PHOTO;
+      if (ph.couleur && MANDALA_COLORS[ph.couleur]) state.mandalaColor = ph.couleur;
+      mandalaBtns.forEach((b) => b.classList.toggle('active', parseInt(b.dataset.mandala, 10) === state.mandala));
+      mcolorBtns.forEach((b) => b.classList.toggle('active', b.dataset.key === state.mandalaColor));
+      document.getElementById('mandala-color-group').style.display = 'block';
+      if (apercuImg.getAttribute('src') !== ph.src) apercuImg.src = ph.src;
+      apercuImg.alt = ph.alt + ' — photo réelle';
+      apercuLegende.textContent = FINISHES[finish].label + ' · motif ' +
+        MANDALA_COLORS[state.mandalaColor].label.toLowerCase() + ' — photo réelle';
+      updateQuoteLink();
+    }
 
     // ─── Coloris en photo ───
     // La bande de photos au-dessus du configurateur (liste ecrite par
@@ -411,6 +525,14 @@
       colorisPiste.addEventListener('scroll', plusTard, { passive: true });
       window.addEventListener('resize', plusTard);
       peindre();
+
+      colorisVues.forEach((fig) => {
+        fig.style.cursor = 'pointer';
+        fig.addEventListener('click', () => {
+          const btn = finishBtns.find((b) => b.dataset.key === fig.dataset.finish);
+          if (btn) btn.click();
+        });
+      });
 
       const photographies = new Set(colorisVues.map((f) => f.dataset.finish));
       const sansPhoto = Object.keys(FINISHES).filter((k) => !photographies.has(k));

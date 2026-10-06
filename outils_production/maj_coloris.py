@@ -95,8 +95,10 @@ def figures(chassis, motifs):
     blocs = []
     for rang, (c, m, f) in enumerate(presentes):
         nom, motif = chassis[c][0], motifs[m][0].lower()
-        # Les premieres cartes sont a l'ecran des l'arrivee : pas de chargement differe.
-        charge = '' if rang < 2 else ' loading="lazy"'
+        # La bande est sous le panneau de commande depuis le 06/10/2026 : toutes
+        # les photos se chargent en differe. La photo du chassis choisi, elle,
+        # est servie en grand par #apercu-photo (meme fichier, deja en cache).
+        charge = ' loading="lazy"'
         blocs.append('\n'.join([
             '          <figure data-finish="%s">' % c,
             '            <img src="coloris/%s" width="%d" height="%d"' % (f, LARGEUR, HAUTEUR),

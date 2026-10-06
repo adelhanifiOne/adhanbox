@@ -2,6 +2,7 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
+  <script>document.documentElement.classList.add('js')</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Personnaliser — AdhanBox</title>
   <meta name="description" content="Composez votre AdhanBox en 3D : couleur du châssis, motif de la façade et sa teinte. Toutes les finitions sont mates.">
@@ -21,12 +22,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,500;1,9..144,600&family=Inter:wght@400;500;600;700&family=Amiri:wght@400;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=2026100601">
-  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-  <script defer src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
-  <script defer src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
-  <script defer src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/DRACOLoader.js"></script>
-  <script defer src="configurator.js?v=20261006b"></script>
+  <link rel="stylesheet" href="styles.css?v=2026100602">
+  <script defer src="configurator.js?v=20261006c"></script>
   <script defer src="site.js"></script>
 </head>
 <body data-page="personnaliser">
@@ -36,7 +33,62 @@
       <div class="section-head reveal">
         <div class="eyebrow">Personnalisez le vôtre</div>
         <h2>Composez <em>votre AdhanBox</em></h2>
-        <p>Chaque boîtier est imprimé en 3D à la commande. Choisissez la couleur du châssis, le motif de la façade et sa teinte — toutes les finitions sont mates, pensées pour révéler le relief des motifs.</p>
+        <p>Chaque boîtier est imprimé en 3D à la commande. Choisissez la couleur du châssis, le motif de la façade et sa teinte&nbsp;: toutes les finitions sont mates.</p>
+      </div>
+
+      <div class="configurator-panel reveal">
+        <!-- Apercu : la photo reelle du chassis choisi. La 3D (three.js, ~500 Ko)
+             ne se charge qu'au clic sur « 3D » ou au choix d'un motif : la page
+             s'affiche en moins de 2 s au lieu de 7 (audit du 06/10/2026). -->
+        <div class="config-viewport" id="apercu">
+          <img id="apercu-photo" src="coloris/noir--or.jpg" width="720" height="960"
+               alt="AdhanBox, châssis Noir, motif or — photo réelle" fetchpriority="high" decoding="async">
+          <div id="canvas3d" role="img" aria-label="Aperçu 3D interactif du boîtier AdhanBox" hidden></div>
+          <p class="apercu-legende" id="apercu-legende">Noir · motif or — photo réelle</p>
+          <div class="apercu-modes" role="group" aria-label="Aperçu">
+            <button type="button" class="apercu-mode active" id="mode-photo" aria-pressed="true">Photo</button>
+            <button type="button" class="apercu-mode" id="mode-3d" aria-pressed="false">3D</button>
+          </div>
+          <div class="viewport-hint" id="viewport-hint" hidden>Glissez pour pivoter</div>
+        </div>
+
+        <div class="config-controls" id="commande">
+          <div>
+            <span class="control-label">Couleur du châssis</span>
+            <div class="swatches" id="finish-swatches" role="group" aria-label="Couleur du châssis"></div>
+            <p class="control-note" id="finish-note">Noir — finition mate.</p>
+          </div>
+
+          <div>
+            <span class="control-label">Motif de la façade</span>
+            <div class="pill-options" role="group" aria-label="Motif de mandala">
+              <button class="pill-btn" data-mandala="0">Aucun</button>
+              <button class="pill-btn" data-mandala="1">Motif 1</button>
+              <button class="pill-btn active" data-mandala="2">Motif 2</button>
+              <button class="pill-btn" data-mandala="3">Motif 3</button>
+            </div>
+          </div>
+
+          <div id="mandala-color-group">
+            <span class="control-label">Couleur du motif</span>
+            <div class="swatches" id="mcolor-swatches" role="group" aria-label="Couleur du motif"></div>
+          </div>
+
+          <div id="delivery-group">
+            <span class="control-label">Livraison</span>
+            <div class="pill-options" role="group" aria-label="Mode de livraison">
+              <button class="pill-btn active" data-livraison="relais" id="deliv-relais">Point relais — offert</button>
+              <button class="pill-btn" data-livraison="domicile">À domicile — +5 €</button>
+            </div>
+            <p class="control-note" id="relais-note">Mondial Relay, remis en 2 à 4 jours ouvrés. Vous choisirez votre point relais juste après le paiement&nbsp;: le plus proche de chez vous vous est proposé, et vous pourrez en changer jusqu'à l'expédition.</p>
+            <p class="control-note" id="domicile-note" hidden>Colissimo suivi, remis à votre porte en 2 à 3 jours ouvrés (5&nbsp;€).</p>
+          </div>
+
+          <a href="#" id="config-cta" class="btn btn-gold" style="align-self: flex-start;">
+            Commander cette configuration — 95 €
+          </a>
+          <p class="control-note" style="margin-top:.5rem;" id="cta-note">Paiement sécurisé par Stripe · 3× sans frais possible · point relais offert.</p>
+        </div>
       </div>
 
       <!-- Les coloris en photo. La liste est ECRITE PAR
@@ -44,18 +96,19 @@
            docs/coloris/). configurator.js y ramene le coloris choisi et nomme
            ceux qui n'ont pas encore de photo. -->
       <div class="coloris reveal" data-coloris>
+        <p class="control-label coloris-titre">Tous les coloris, en photo</p>
         <div class="coloris-cadre">
           <div class="coloris-piste" tabindex="0" role="group"
                aria-roledescription="carrousel" aria-label="Les coloris en photo">
 <!-- coloris:debut -->
           <figure data-finish="noir">
             <img src="coloris/noir--or.jpg" width="720" height="960"
-                 alt="AdhanBox, châssis Noir, motif or" decoding="async">
+                 alt="AdhanBox, châssis Noir, motif or" loading="lazy" decoding="async">
             <figcaption><span class="coloris-nom">Noir</span><span class="coloris-motif">motif or</span></figcaption>
           </figure>
           <figure data-finish="vert-foret">
             <img src="coloris/vert-foret--or.jpg" width="720" height="960"
-                 alt="AdhanBox, châssis Vert forêt, motif or" decoding="async">
+                 alt="AdhanBox, châssis Vert forêt, motif or" loading="lazy" decoding="async">
             <figcaption><span class="coloris-nom">Vert forêt</span><span class="coloris-motif">motif or</span></figcaption>
           </figure>
           <figure data-finish="gris-texture">
@@ -110,50 +163,6 @@
         <p class="coloris-note">Photos réelles.<span id="coloris-sans-photo"></span></p>
       </div>
 
-      <div class="configurator-panel reveal">
-        <div class="config-viewport">
-          <div id="canvas3d" role="img" aria-label="Aperçu 3D interactif du boîtier AdhanBox"></div>
-          <div class="viewport-hint">Glissez pour faire pivoter · molette pour zoomer</div>
-        </div>
-
-        <div class="config-controls" id="commande">
-          <div>
-            <span class="control-label">Couleur du châssis</span>
-            <div class="swatches" id="finish-swatches" role="group" aria-label="Couleur du châssis"></div>
-            <p class="control-note" id="finish-note">Noir — finition mate.</p>
-          </div>
-
-          <div>
-            <span class="control-label">Motif de la façade</span>
-            <div class="pill-options" role="group" aria-label="Motif de mandala">
-              <button class="pill-btn active" data-mandala="0">Aucun</button>
-              <button class="pill-btn" data-mandala="1">Motif 1</button>
-              <button class="pill-btn" data-mandala="2">Motif 2</button>
-              <button class="pill-btn" data-mandala="3">Motif 3</button>
-            </div>
-          </div>
-
-          <div id="mandala-color-group" style="display: none;">
-            <span class="control-label">Couleur du motif</span>
-            <div class="swatches" id="mcolor-swatches" role="group" aria-label="Couleur du motif"></div>
-          </div>
-
-          <div id="delivery-group">
-            <span class="control-label">Livraison</span>
-            <div class="pill-options" role="group" aria-label="Mode de livraison">
-              <button class="pill-btn active" data-livraison="relais" id="deliv-relais">Point relais — offert</button>
-              <button class="pill-btn" data-livraison="domicile">À domicile — +5 €</button>
-            </div>
-            <p class="control-note" id="relais-note">Mondial Relay, remis en 2 à 4 jours ouvrés. Vous choisirez votre point relais juste après le paiement&nbsp;: le plus proche de chez vous vous est proposé, et vous pourrez en changer jusqu'à l'expédition.</p>
-            <p class="control-note" id="domicile-note" hidden>Colissimo suivi, remis à votre porte en 2 à 3 jours ouvrés (5&nbsp;€).</p>
-          </div>
-
-          <a href="#" id="config-cta" class="btn btn-gold" style="align-self: flex-start;">
-            Commander cette configuration — 95 €
-          </a>
-          <p class="control-note" style="margin-top:.5rem;" id="cta-note">Paiement sécurisé par Stripe · 3× sans frais possible · point relais offert.</p>
-        </div>
-      </div>
     </div>
   </section>
   </main>
