@@ -859,19 +859,6 @@
       background: rgba(255, 255, 255, 0.86); border: 1px solid var(--line);
       padding: 0.3rem 0.85rem; border-radius: 999px;
     }
-    .apercu-modes {
-      position: absolute; right: 0.9rem; bottom: 0.9rem;
-      display: flex; gap: 2px; padding: 3px;
-      background: rgba(255, 255, 255, 0.9); border: 1px solid var(--line); border-radius: 999px;
-      box-shadow: var(--shadow-sm);
-    }
-    .apercu-mode {
-      border: none; background: transparent; cursor: pointer;
-      padding: 0.4rem 0.9rem; border-radius: 999px;
-      font-family: var(--font-body); font-weight: 600; font-size: 0.8rem; color: var(--muted);
-    }
-    .apercu-mode.active { background: var(--emerald); color: #FFF; }
-    .apercu-mode:focus-visible { outline: 2px solid var(--emerald); outline-offset: 2px; }
     .viewport-hint {
       position: absolute;
       bottom: 1.1rem;

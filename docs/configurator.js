@@ -93,7 +93,7 @@
       boxGroup = new THREE.Group();
       scene.add(boxGroup);
 
-      makeLoader().load('adhanbox.glb', (gltf) => {
+      makeLoader().load('adhanbox.glb' + V_MODELES, (gltf) => {
         boxMesh = gltf.scene;
         boxMesh.traverse((child) => {
           if (child.isMesh) child.material = new THREE.MeshStandardMaterial();
@@ -107,11 +107,8 @@
         boxGroup.add(boxMesh);
         boxGroup.rotation.x = -Math.PI / 2;
         addGlowAndPort();
-        applyFinish();
-        if (!boucleActive) animate3D();
         loadLid();
-        if (state.mandala) { loadMandala(state.mandala); focusMotifFace(); }   // montrer la face choisie, pas le dos
-        legende3D();
+        pret3D();
       }, undefined, (err) => console.error('Erreur de chargement du modèle 3D :', err));
 
       window.addEventListener('resize', () => {
@@ -218,7 +215,7 @@
     }
 
     function loadLid() {
-      makeLoader().load('lid.glb', (gltf) => {
+      makeLoader().load('lid.glb' + V_MODELES, (gltf) => {
         lidMesh = gltf.scene;
         // lid.glb (STL Fusion) est en mm, Z-up jupe vers le bas ; adhanbox.glb est en m → scale 1000×
         lidMesh.scale.setScalar(0.001);
@@ -290,7 +287,7 @@
       }
       if (index === 0 || !boxSize) return;
 
-      makeLoader().load('mandala' + index + '.glb', (gltf) => {
+      makeLoader().load('mandala' + index + '.glb' + V_MODELES, (gltf) => {
         // L'utilisateur a pu changer de motif pendant le chargement
         if (state.mandala !== index) return;
 
@@ -333,6 +330,9 @@
       'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js',
       'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/DRACOLoader.js',
     ];
+    // Les modeles ont ete recompresses (Draco) le 06/10/2026 : la version dans
+    // l'URL evite qu'un navigateur reserve les anciens fichiers, 30 fois plus gros.
+    const V_MODELES = '?v=20261006';
     let chargement3D = null;
     function charger3D() {
       if (chargement3D) return chargement3D;
@@ -353,55 +353,35 @@
     const apercuLegende = document.getElementById('apercu-legende');
     const canvasBox = document.getElementById('canvas3d');
     const hint3D = document.getElementById('viewport-hint');
-    const btnPhoto = document.getElementById('mode-photo');
-    const btn3D = document.getElementById('mode-3d');
-    let modeApercu = 'photo';
+    let apercu3DPret = false;
 
-    function majModes() {
-      [[btnPhoto, 'photo'], [btn3D, '3d']].forEach(([b, m]) => {
-        b.classList.toggle('active', modeApercu === m);
-        b.setAttribute('aria-pressed', modeApercu === m ? 'true' : 'false');
-      });
-    }
-    function legende3D() {
-      if (modeApercu !== '3d') return;
-      apercuLegende.textContent = '3D · ' + FINISHES[state.finish].label +
-        (state.mandala ? ' · motif ' + state.mandala + ' (' + MANDALA_COLORS[state.mandalaColor].label.toLowerCase() + ')' : ' · sans motif');
-    }
-    function montrerPhoto() {
-      modeApercu = 'photo';
-      rendu3DActif = false;
-      canvasBox.hidden = true;
-      hint3D.hidden = true;
-      apercuImg.hidden = false;
-      alignerSurPhoto(state.finish);
-      majModes();
-    }
+    // La 3D est l'apercu (Adel, 06/10/2026 : les photos reelles sont dans la
+    // bande en dessous). La photo du chassis tient lieu d'image d'attente le
+    // temps que three.js et le modele arrivent, et reste si la 3D echoue.
+    // Ce script est lance apres le premier affichage (chargeur en fin de
+    // page) : la photo et le texte n'attendent pas la 3D.
     function montrer3D() {
-      modeApercu = '3d';
-      apercuImg.hidden = true;
-      canvasBox.hidden = false;
-      hint3D.hidden = false;
-      majModes();
-      if (!threeStarted) apercuLegende.textContent = 'Chargement de l\'aperçu 3D…';
+      apercuLegende.textContent = 'Chargement de l\'aperçu 3D…';
+      apercuLegende.hidden = false;
       rendu3DActif = true;
       charger3D().then(() => {
-        if (modeApercu !== '3d') return;
+        canvasBox.hidden = false;
         init3D();
-        if (boxMesh) {
-          applyFinish();
-          loadMandala(state.mandala);
-          if (!boucleActive) animate3D();
-          if (state.mandala) focusMotifFace();
-          legende3D();
-        }
+        if (boxMesh) pret3D();     // deja initialisee : le modele est la
       }).catch(() => {
-        apercuLegende.textContent = 'Aperçu 3D indisponible pour le moment.';
-        setTimeout(() => { if (modeApercu === '3d') montrerPhoto(); }, 1500);
+        apercuLegende.textContent = 'Aperçu 3D indisponible : voici la photo du châssis choisi.';
       });
     }
-    btnPhoto.addEventListener('click', montrerPhoto);
-    btn3D.addEventListener('click', montrer3D);
+    function pret3D() {
+      apercu3DPret = true;
+      apercuImg.hidden = true;
+      apercuLegende.hidden = true;
+      hint3D.hidden = false;
+      applyFinish();
+      loadMandala(state.mandala);
+      if (!boucleActive) animate3D();
+      if (state.mandala) focusMotifFace();   // la face du motif, pas le dos
+    }
 
     // ─── Contrôles du configurateur ───
     function selectIn(group, target) {
@@ -436,16 +416,16 @@
       document.getElementById('finish-note').textContent = FINISHES[key].label + ' — finition mate.';
       applyFinish();
       montrerColoris(key);
-      if (modeApercu === 'photo') { if (photoDe(key)) alignerSurPhoto(key); else montrer3D(); }
-      else legende3D();
+      if (!apercu3DPret) {               // en attendant la 3D, l'image d'attente suit le chassis
+        const ph = photoDe(key);
+        if (ph) { apercuImg.src = ph.src; apercuImg.alt = ph.alt; }
+      }
     }, FINISHES);
 
     const mcolorBtns = buildSwatches('mcolor-swatches', state.mandalaColor, (key) => {
       state.mandalaColor = key;
       applyMandalaColor();
-      if (modeApercu !== '3d') { montrer3D(); return; }   // la photo ne montre que sa propre teinte
-      legende3D();
-      if (state.mandala !== 0) focusMotifFace();
+      if (apercu3DPret && state.mandala !== 0) focusMotifFace();
     }, MANDALA_COLORS);
 
     const mandalaBtns = document.querySelectorAll('[data-mandala]');
@@ -455,15 +435,14 @@
         selectIn(mandalaBtns, btn);
         document.getElementById('mandala-color-group').style.display = state.mandala === 0 ? 'none' : 'block';
         updateQuoteLink();
-        if (modeApercu !== '3d') { montrer3D(); return; }   // le motif se voit en 3D, chargé dès qu'elle est prête
-        loadMandala(state.mandala);
-        legende3D();
-        if (state.mandala !== 0) focusMotifFace();
+        if (apercu3DPret) {            // sinon pret3D() chargera le motif de l'etat
+          loadMandala(state.mandala);
+          if (state.mandala !== 0) focusMotifFace();
+        }
       });
     });
 
-    // La photo d'un châssis montre le motif photographié dans sa teinte : en
-    // mode photo, choisir un châssis aligne la commande sur ce que l'on voit.
+    // Photo du chassis dans la bande des coloris (image d'attente de la 3D).
     function photoDe(finish) {
       const fig = colorisVues.find((f) => f.dataset.finish === finish);
       if (!fig) return null;
@@ -471,20 +450,6 @@
       const m = (img.getAttribute('src') || '').match(/--([a-z-]+)\.jpg$/);
       // La bande affiche la vignette (coloris/mini/) ; l'apercu veut la grande photo.
       return { src: img.getAttribute('src').replace('coloris/mini/', 'coloris/'), couleur: m ? m[1] : null, alt: img.alt };
-    }
-    function alignerSurPhoto(finish) {
-      const ph = photoDe(finish);
-      if (!ph) return;
-      state.mandala = MOTIF_PHOTO;
-      if (ph.couleur && MANDALA_COLORS[ph.couleur]) state.mandalaColor = ph.couleur;
-      mandalaBtns.forEach((b) => b.classList.toggle('active', parseInt(b.dataset.mandala, 10) === state.mandala));
-      mcolorBtns.forEach((b) => b.classList.toggle('active', b.dataset.key === state.mandalaColor));
-      document.getElementById('mandala-color-group').style.display = 'block';
-      if (apercuImg.getAttribute('src') !== ph.src) apercuImg.src = ph.src;
-      apercuImg.alt = ph.alt + ' — photo réelle';
-      apercuLegende.textContent = FINISHES[finish].label + ' · motif ' +
-        MANDALA_COLORS[state.mandalaColor].label.toLowerCase() + ' — photo réelle';
-      updateQuoteLink();
     }
 
     // ─── Coloris en photo ───
@@ -619,6 +584,8 @@
         (deliv.mode === 'domicile' ? 'livraison à domicile 5 €.' : 'point relais offert.');
     }
     updateQuoteLink();
+
+    montrer3D();
 
     // Barre d'achat fixe (mobile) : masquee des que le vrai bouton de
     // commande est a l'ecran, pour ne pas le doubler.

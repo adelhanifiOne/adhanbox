@@ -40,18 +40,15 @@
       </div>
 
       <div class="configurator-panel">
-        <!-- Apercu : la photo reelle du chassis choisi. La 3D (three.js, ~500 Ko)
-             ne se charge qu'au clic sur « 3D » ou au choix d'un motif : la page
-             s'affiche en moins de 2 s au lieu de 7 (audit du 06/10/2026). -->
+        <!-- Apercu 3D de la configuration. La photo du chassis sert d'image
+             d'attente : elle s'affiche tout de suite, la 3D (three.js, ~500 Ko)
+             la remplace des qu'elle est prete. Les photos reelles sont dans la
+             bande des coloris, en dessous. -->
         <div class="config-viewport" id="apercu">
           <img id="apercu-photo" src="coloris/noir--or.jpg" width="720" height="960"
-               alt="AdhanBox, châssis Noir, motif or — photo réelle" fetchpriority="high" decoding="async">
+               alt="AdhanBox, châssis Noir, motif or" fetchpriority="high" decoding="async">
           <div id="canvas3d" role="img" aria-label="Aperçu 3D interactif du boîtier AdhanBox" hidden></div>
-          <p class="apercu-legende" id="apercu-legende">Noir · motif or — photo réelle</p>
-          <div class="apercu-modes" role="group" aria-label="Aperçu">
-            <button type="button" class="apercu-mode active" id="mode-photo" aria-pressed="true">Photo</button>
-            <button type="button" class="apercu-mode" id="mode-3d" aria-pressed="false">3D</button>
-          </div>
+          <p class="apercu-legende" id="apercu-legende">Aperçu 3D</p>
           <div class="viewport-hint" id="viewport-hint" hidden>Glissez pour pivoter</div>
         </div>
 
@@ -186,7 +183,7 @@
     function charger() {
       if (fait) return;
       fait = true;
-      ['configurator.js?v=20261006e', 'site.js'].forEach(function (src) {
+      ['configurator.js?v=20261006g', 'site.js'].forEach(function (src) {
         var el = document.createElement('script');
         el.src = src;
         el.async = false;   // garde l'ordre : configurateur, puis en-tete et pied de page
