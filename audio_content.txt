@@ -18,7 +18,9 @@
 /mp3/0012.mp3|https://archive.org/download/28MayFajrAdhanMakkah/28MayFajrAdhanMakkah.mp3
 
 # Pistes 13+ : nouvelles voix (24/09/2026). 9-11 retirees, numeros reserves.
-/mp3/0013.mp3|https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/audio/adhans/suraihi.mp3
+# 06/10/2026 : les telechargements depuis raw.githubusercontent.com s'arretent
+# a ~80 Ko sur les box (TRUNC). Essai : 0013 servi par Vercel (commande_backend/public/).
+/mp3/0013.mp3|https://adhanbox-commande.vercel.app/audio/adhans/suraihi.mp3
 /mp3/0014.mp3|https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/audio/adhans/fouad-adan.mp3
 /mp3/0015.mp3|https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/audio/adhans/nisad.mp3
 /mp3/0016.mp3|https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/audio/adhans/al-aqsa.mp3
