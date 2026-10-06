@@ -58,13 +58,17 @@ function page(res, status, title, message, tone, extra = '') {
 function trackingForm(res, params, livraison) {
   const q = (k) => esc(params[k] || '');
   const relais = livraison && livraison.relais;
-  const mr = relais ? ' selected' : '';
+  const mr = (relais || (livraison && livraison.relaisAChoisir)) ? ' selected' : '';
   const bloc = relais
     ? `<div style="background:#FBF3E3;border-left:3px solid #B4791A;border-radius:0 8px 8px 0;padding:12px 14px;margin:0 0 20px;font-size:14px;line-height:1.5;">
         <b>Point relais</b> — ${esc(relais.name)}<br>${esc(relais.address || '')}<br>
         code <code style="font-size:15px;background:#fff;padding:1px 6px;border-radius:4px;">${esc(relais.code || '')}</code>
         <span style="color:#666;">· à saisir dans Boxtal</span></div>`
-    : '';
+    : (livraison && livraison.relaisAChoisir)
+      ? `<div style="background:#F9E5E5;border-left:3px solid #B23A3A;border-radius:0 8px 8px 0;padding:12px 14px;margin:0 0 20px;font-size:14px;line-height:1.5;">
+        <b>Point relais non choisi par le client.</b><br>
+        Prenez dans Boxtal le point Mondial Relay le plus proche de l'adresse de livraison (dans Stripe), et dites-le lui en réponse à sa confirmation.</div>`
+      : '';
   res.statusCode = 200;
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.end(`<!doctype html><html lang="fr"><head><meta charset="utf-8">
@@ -105,7 +109,7 @@ async function findSession(stripe, { session, ref }) {
   // Référence courte (8 derniers caractères du PaymentIntent, ou de la session).
   // Volume attendu : quelques dizaines de commandes, une page suffit.
   const wanted = String(ref).toUpperCase();
-  const { data } = await stripe.checkout.sessions.list({ limit: 100 });
+  const { data } = await stripe.checkout.sessions.list({ limit: 100, expand: ['data.payment_intent'] });
   return data.find((s) => {
     const pi = typeof s.payment_intent === 'string' ? s.payment_intent : s.payment_intent?.id;
     return (pi || s.id).slice(-8).toUpperCase() === wanted;
@@ -139,12 +143,17 @@ export default async function handler(req, res) {
     return page(res, 404, 'Commande introuvable', `Aucune commande ne correspond à «&nbsp;${esc(ref || session)}&nbsp;».`, 'err');
   }
   // Mode de livraison choisi à la commande (metadata posées par checkout.js).
+  // Le point relais lui-même est choisi APRÈS le paiement depuis le 06/10/2026
+  // (api/relais.js) : il est alors dans les métadonnées du PaymentIntent.
   const m = s.metadata || {};
+  const pim = (s.payment_intent && typeof s.payment_intent === 'object' && s.payment_intent.metadata) || {};
+  const code = pim.relais_code || m.relais_code;
   const livraison = {
-    relais: m.livraison === 'Point relais' && m.relais_code
-      ? { code: m.relais_code, network: m.relais_reseau || '', name: m.relais_nom || '',
-          address: m.relais_adresse || '' }
+    relais: m.livraison === 'Point relais' && code
+      ? { code, network: pim.relais_reseau || m.relais_reseau || '', name: pim.relais_nom || m.relais_nom || '',
+          address: pim.relais_adresse || m.relais_adresse || '' }
       : null,
+    relaisAChoisir: m.livraison === 'Point relais' && !code,
   };
 
   // Expédition sans numéro de suivi : on demande d'abord — en montrant le

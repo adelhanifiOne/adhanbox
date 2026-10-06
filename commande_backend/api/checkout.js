@@ -96,16 +96,23 @@ export default async function handler(req, res) {
     ? `Châssis ${chassis} · Sans motif`
     : `Châssis ${chassis} · Motif ${m} (${motifColor})`;
 
-  // Livraison : 'relais' exige un point relais valide, sinon on retombe sur le
-  // domicile (jamais de commande bloquee pour un detail de livraison).
-  const relais = body.livraison === 'relais' ? cleanRelais(body.relais) : null;
-  const livraison = relais ? 'relais' : 'domicile';
-  const shippingOption = relais
+  // Livraison : 'relais' = Mondial Relay offert. Depuis le 06/10/2026 le point
+  // n'est plus choisi AVANT le paiement (le bouton de commande restait grise
+  // tant que la carte n'avait pas ete utilisee, et c'etait le principal point
+  // de fuite du tunnel) : le client paie, puis la page merci.html lui propose
+  // le point le plus proche de son adresse (api/relais.js), modifiable jusqu'a
+  // l'expedition. Un point deja choisi reste accepte, pour compatibilite.
+  const modeRelais = body.livraison === 'relais';
+  const relais = modeRelais ? cleanRelais(body.relais) : null;
+  const livraison = modeRelais ? 'relais' : 'domicile';
+  const shippingOption = modeRelais
     ? {
         shipping_rate_data: {
           type: 'fixed_amount',
           fixed_amount: { amount: 0, currency: 'eur' },
-          display_name: `Point relais — ${relais.name}`,
+          display_name: relais
+            ? `Point relais — ${relais.name}`
+            : 'Point relais Mondial Relay — offert (choix du point après paiement)',
           delivery_estimate: {
             minimum: { unit: 'business_day', value: 2 },
             maximum: { unit: 'business_day', value: 4 },
@@ -129,13 +136,13 @@ export default async function handler(req, res) {
     motif: m === 0 ? 'Sans motif' : `Motif ${m}`,
     couleur_motif: m === 0 ? '-' : motifColor,
     config: configLabel,
-    livraison: relais ? 'Point relais' : 'Domicile',
+    livraison: modeRelais ? 'Point relais' : 'Domicile',
     ...(relais ? {
       relais_code: relais.code,
       relais_reseau: relais.network,
       relais_nom: relais.name,
       relais_adresse: `${relais.street} ${relais.zipCode} ${relais.city}`.trim(),
-    } : {}),
+    } : (modeRelais ? { relais_a_choisir: '1' } : {})),
     source: 'adhanbox.fr/personnaliser',
   };
 
@@ -178,8 +185,8 @@ export default async function handler(req, res) {
             'TVA non applicable, article 293 B du CGI (franchise en base de TVA).',
             'Adel Hanifi — AdhanBox, 14 rue du Corps Franc Pommiès, 65500 Vic-en-Bigorre.',
             'SIRET 932 355 589 00023 — contact@adhanbox.fr — adhanbox.fr',
-            relais
-              ? `Livraison offerte en point relais (${relais.network === 'MONR_NETWORK' ? 'Mondial Relay' : relais.network}).`
+            modeRelais
+              ? 'Livraison offerte en point relais (Mondial Relay).'
               : 'Livraison à domicile par Colissimo suivi.',
           ].join('\n'),
           rendering_options: { amount_tax_display: 'exclude_tax' },

@@ -52,7 +52,11 @@ function clientEmailText({ firstName, ref, config, amount, shipToLines, livraiso
     '',
     ...(livraison.relais
       ? ['Retrait en point relais :', livraison.relais.name, livraison.relais.address, '']
-      : (shipToLines.length ? ['Adresse de livraison :', ...shipToLines, ''] : [])),
+      : livraison.aChoisir
+        ? ['Retrait en point relais Mondial Relay (offert).',
+           'Le point le plus proche de votre adresse vous est proposé ici, et vous pouvez en choisir un autre jusqu\'à l\'expédition :',
+           livraison.choixUrl, '']
+        : (shipToLines.length ? ['Adresse de livraison :', ...shipToLines, ''] : [])),
     `Expédition prévue : ${SHIP_DATE}. Vous serez tenu informé à chaque étape : confirmation, assemblage, envoi avec numéro de suivi.`,
     '',
     'Garantie 2 ans · Retour 14 jours · Paiement sécurisé Stripe',
@@ -105,6 +109,13 @@ function clientEmailHtml({ firstName, ref, config, amount, shipTo, livraison }) 
         <div style="font-size:12px;letter-spacing:1px;color:#0C5B45;font-weight:700;margin-bottom:6px;">RETRAIT EN POINT RELAIS</div>
         <div style="font-size:14px;color:#444;line-height:1.5;"><b>${escHtml(livraison.relais.name)}</b><br>${escHtml(livraison.relais.address)}</div>
         <div style="font-size:12px;color:#777;margin-top:6px;">Vous recevrez un message dès que le colis sera disponible. Pensez à une pièce d'identité pour le retrait.</div>
+      </div>` : livraison.aChoisir ? `
+      <div style="margin-top:18px;">
+        <div style="font-size:12px;letter-spacing:1px;color:#0C5B45;font-weight:700;margin-bottom:6px;">RETRAIT EN POINT RELAIS MONDIAL RELAY</div>
+        <div style="font-size:14px;color:#444;line-height:1.5;">Le point le plus proche de votre adresse vous est proposé sur la page de confirmation. Vous pouvez en choisir un autre jusqu'à l'expédition&nbsp;:</div>
+        <p style="margin:12px 0 0;text-align:center;">
+          <a href="${livraison.choixUrl}" style="display:inline-block;background:#0C5B45;color:#fff;text-decoration:none;font-weight:600;font-size:15px;padding:12px 22px;border-radius:999px;">Voir ou changer mon point relais</a>
+        </p>
       </div>` : (shipTo ? `
       <div style="margin-top:18px;">
         <div style="font-size:12px;letter-spacing:1px;color:#0C5B45;font-weight:700;margin-bottom:6px;">ADRESSE DE LIVRAISON</div>
@@ -147,7 +158,9 @@ function sellerEmailHtml({ ref, config, amount, name, email, phone, shipTo, piId
     ${li('🚚 Livraison', livraison.relais
       ? '<b style="color:#B4791A;">Point relais</b> — ' + escHtml(livraison.relais.name) + ', ' + escHtml(livraison.relais.address)
         + ' <span style="background:#FBF3E3;padding:1px 6px;border-radius:6px;font-family:monospace;">code ' + escHtml(livraison.relais.code) + '</span>'
-      : 'Domicile — Colissimo suivi')}
+      : livraison.aChoisir
+        ? '<b style="color:#B4791A;">Point relais</b> — le client le choisit sur la page de confirmation (le plus proche de son adresse lui est proposé). Un email « Point relais choisi » suivra avec le code.'
+        : 'Domicile — Colissimo suivi')}
     ${li('Client', name)}
     ${li('Email', email)}
     ${li('Téléphone', phone)}
@@ -245,12 +258,19 @@ export default async function handler(req, res) {
   const amount = euros(session.amount_total ?? 0);
   // Mode de livraison choisi sur le site (voir api/checkout.js) : le relais
   // porte son code, indispensable pour creer l'expedition chez Boxtal.
+  // Depuis le 06/10/2026 le point relais se choisit APRES le paiement
+  // (api/relais.js) : `aChoisir` dit au client ou le faire, et au vendeur
+  // d'attendre l'email « Point relais choisi ».
   const md = session.metadata || {};
   const shippingCents = session.shipping_cost?.amount_total ?? 0;
-  const livraison = md.livraison === 'Point relais' && md.relais_code
-    ? { label: 'Point relais — offerte',
+  const modeRelais = md.livraison === 'Point relais';
+  const livraison = modeRelais && md.relais_code
+    ? { label: 'Point relais — offerte', aChoisir: false,
         relais: { code: md.relais_code, network: md.relais_reseau || '', name: md.relais_nom || '', address: md.relais_adresse || '' } }
-    : { label: shippingCents > 0 ? `Domicile — ${euros(shippingCents)}` : 'Domicile — offerte', relais: null };
+    : modeRelais
+      ? { label: 'Point relais — offerte', aChoisir: true, relais: null,
+          choixUrl: `${SITE}/merci.html?session_id=${encodeURIComponent(session.id)}` }
+      : { label: shippingCents > 0 ? `Domicile — ${euros(shippingCents)}` : 'Domicile — offerte', aChoisir: false, relais: null };
   const firstName = (details.name || '').trim().split(/\s+/)[0] || '';
   const shipToLines = shipping ? addressLines(shipping.name || details.name, shipping.address) : [];
   const shipTo = shipToLines.join('<br>');
@@ -300,7 +320,9 @@ export default async function handler(req, res) {
         `Montant : ${amount}`,
         livraison.relais
           ? `Livraison : POINT RELAIS ${livraison.relais.name} — ${livraison.relais.address} — code ${livraison.relais.code}`
-          : 'Livraison : domicile (Colissimo suivi)',
+          : livraison.aChoisir
+            ? 'Livraison : POINT RELAIS a choisir par le client (email « Point relais choisi » a suivre)'
+            : 'Livraison : domicile (Colissimo suivi)',
         `Client : ${details.name || '-'} · ${details.email || '-'} · ${details.phone || '-'}`,
         ...(shipToLines.length ? [livraison.relais ? 'Destinataire :' : 'Adresse :', ...shipToLines] : []),
         `https://dashboard.stripe.com/payments/${piId}`,
