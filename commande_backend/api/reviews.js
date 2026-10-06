@@ -1,4 +1,4 @@
-// GET /api/reviews  →  { count, average, reviews: [ { note, texte, prenom, ville, verifie, date } ] }
+// GET /api/reviews  →  { count, average, reviews: [ { note, texte, prenom, ville, verifie, date, photo? } ] }
 // Renvoie les avis APPROUVÉS (reviews/approved/*.json dans Vercel Blob), triés
 // du plus récent au plus ancien. Réponse mise en cache au bord (CDN) 5 min pour
 // ne pas relister le Blob à chaque visite.
@@ -39,6 +39,8 @@ export default async function handler(req, res) {
         return {
           note: a.note, texte: a.texte, prenom: a.prenom,
           ville: a.ville, verifie: a.verifie, date: a.date,
+          // Photo du client (reviews/photos/, 06/10/2026) : une URL du store, rien d'autre.
+          ...(typeof a.photo === 'string' && /^https:\/\/[^\s"<>]+\.jpg$/.test(a.photo) ? { photo: a.photo } : {}),
         };
       } catch { return null; }
     }));

@@ -27,7 +27,7 @@
        s'affichent d'abord avec la police de secours (display=swap). -->
   <noscript><link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,500;1,9..144,600&family=Inter:wght@400;500;600;700&family=Amiri:wght@400;700&display=swap" rel="stylesheet"></noscript>
   <link rel="preload" as="image" href="coloris/noir--or.jpg" fetchpriority="high">
-  <link rel="stylesheet" href="styles.css?v=2026100603">
+  <link rel="stylesheet" href="styles.css?v=2026100604">
 </head>
 <body data-page="personnaliser">
   <main>
@@ -91,6 +91,10 @@
             Commander cette configuration — 95 €
           </a>
           <p class="control-note" style="margin-top:.5rem;" id="cta-note">Paiement sécurisé par Stripe · 3× sans frais possible · point relais offert.</p>
+          <!-- Preuve sociale a cote du bouton. Note et nombre d'avis mis a jour
+               par configurator.js depuis /api/reviews ; la citation est mot pour
+               mot celle de l'avis publie sur avis.html. -->
+          <p class="control-note confiance" id="confiance"><span class="etoiles" aria-hidden="true">★★★★★</span> <b id="note-moyenne">5/5</b> · <span id="nb-avis">8 avis</span> — « on croirait que l'appel de la prière se fait dehors ! » <span class="qui">Syrine, Paris</span> · <a href="avis.html">Lire les avis</a></p>
         </div>
       </div>
 
@@ -190,7 +194,7 @@
       polices.rel = 'stylesheet';
       polices.href = 'https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,500;1,9..144,600&family=Inter:wght@400;500;600;700&family=Amiri:wght@400;700&display=swap';
       document.head.appendChild(polices);
-      ['configurator.js?v=20261006h', 'site.js'].forEach(function (src) {
+      ['configurator.js?v=20261006i', 'site.js'].forEach(function (src) {
         var el = document.createElement('script');
         el.src = src;
         el.async = false;   // garde l'ordre : configurateur, puis en-tete et pied de page

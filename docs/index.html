@@ -240,6 +240,16 @@
     .trust span { display:inline-flex; align-items:center; gap:.5rem; opacity:.95; }
     .trust svg { width:16px; height:16px; color:var(--gold); flex-shrink:0; }
 
+    /* ── Deux mots de clients, juste sous le hero ── */
+    .citations { background:var(--paper); border-bottom:1px solid var(--line); padding:20px 0; }
+    .citations-grid { display:grid; grid-template-columns:1fr 1fr auto; gap:16px 32px; align-items:center; }
+    .citations blockquote { margin:0; font-size:.95rem; line-height:1.5; color:var(--ink); }
+    .citations blockquote p { margin:0; font-style:italic; }
+    .citations blockquote footer { margin-top:.3rem; font-size:.82rem; font-weight:600; color:var(--muted); font-style:normal; }
+    .citations-lien { text-decoration:none; color:var(--emerald); font-weight:600; white-space:nowrap; font-size:.92rem; }
+    .citations-lien .stars { color:var(--gold); letter-spacing:1px; }
+    @media (max-width:760px){ .citations-grid{ grid-template-columns:1fr; gap:14px; } .citations-lien{ white-space:normal; } }
+
     /* ── Sections ── */
     section.block { padding:76px 0; }
     section.block.alt { background:var(--paper); border-top:1px solid var(--line); border-bottom:1px solid var(--line); }
@@ -626,6 +636,22 @@
     <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>Fait main · pièces certifiées</span>
   </div>
 </div>
+
+<!-- ── DEUX MOTS DE CLIENTS (preuve sociale avant tout le reste) ──
+     Citations extraites mot pour mot des avis publies sur avis.html. -->
+<section class="citations" aria-label="Avis de clients">
+  <div class="container citations-grid">
+    <blockquote>
+      <p>« Le son de l'Adhan qui résonne dans la maison, on croirait que l'appel de la prière se fait dehors ! »</p>
+      <footer>Syrine · Paris</footer>
+    </blockquote>
+    <blockquote>
+      <p>« Simple, rapide d'installation […] la box est plutôt jolie et pas trop grosse. J'y penserais pour un prochain cadeau. »</p>
+      <footer>Hafid</footer>
+    </blockquote>
+    <a class="citations-lien" href="avis.html"><span class="stars" aria-hidden="true">★★★★★</span> <b id="note-moyenne-2">5/5</b> · <span id="nb-avis-2">8 avis</span> →</a>
+  </div>
+</section>
 
 <!-- ── L'EXPÉRIENCE ── -->
 <section class="block moment" id="experience">
@@ -1016,9 +1042,13 @@ var SHIP_DATE = "sous 1 à 2 semaines";
         var nb = document.getElementById('nb-avis');
         if (note && data.average) note.textContent = String(Math.round(data.average * 10) / 10).replace('.', ',') + '/5';
         if (nb && data.count) nb.textContent = data.count + ' avis';
+        var note2 = document.getElementById('note-moyenne-2'), nb2 = document.getElementById('nb-avis-2');
+        if (note2 && note) note2.textContent = note.textContent;
+        if (nb2 && nb) nb2.textContent = nb.textContent;
         var grid = document.getElementById('temoignages-grid');
         if (!grid) return;
-        reviews.slice(0, 3).forEach(function (rv) {
+        // Les avis avec photo d'abord : une box dans un vrai salon vaut tous les rendus.
+        reviews.slice().sort(function (a, b) { return (b.photo ? 1 : 0) - (a.photo ? 1 : 0); }).slice(0, 3).forEach(function (rv) {
           var stars = '';
           for (var i = 1; i <= 5; i++) stars += i <= Math.round(rv.note) ? '★' : '☆';
           var fig = document.createElement('figure');
@@ -1032,6 +1062,14 @@ var SHIP_DATE = "sous 1 à 2 semaines";
           var who = document.createElement('p');
           who.style.cssText = 'margin:0;font-weight:600;color:#0C5B45;';
           who.textContent = (rv.prenom || 'Anonyme') + (rv.ville ? ' · ' + rv.ville : '') + (rv.verifie ? ' ✔' : '');
+          if (rv.photo && /^https:\/\//.test(rv.photo)) {
+            var ph = document.createElement('img');
+            ph.loading = 'lazy';
+            ph.alt = 'Photo envoyée par ' + (rv.prenom || 'un client');
+            ph.src = rv.photo;
+            ph.style.cssText = 'display:block;width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:12px;margin:0 0 12px;';
+            fig.appendChild(ph);
+          }
           fig.appendChild(s); fig.appendChild(q); fig.appendChild(who);
           grid.appendChild(fig);
         });

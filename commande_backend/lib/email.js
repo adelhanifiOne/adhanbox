@@ -135,7 +135,7 @@ export function stepEmail(step, { firstName, ref, config, tracking, carrier, rel
         ${encadre(`
           <p style="margin:0 0 4px;font-weight:600;color:#0C5B45;">Deux minutes, deux gestes</p>
           ${par(`<b>Un avis</b> sur <a href="${SITE}/avis.html" style="color:#0C5B45;">adhanbox.fr/avis</a>. Quelques mots suffisent&nbsp;: ce que vous avez ressenti, à qui vous la conseilleriez.`)}
-          ${par(`<b>Une photo ou une courte vidéo</b> du boîtier chez vous, en <b>répondant simplement à cet email</b>. Avec votre accord, je la partagerai sur adhanbox.fr ou sur Instagram, avec votre prénom seulement.`)}
+          ${par(`<b>Une photo</b> du boîtier chez vous, à joindre directement à votre avis (bouton « Ajouter une photo »). Elle est réduite sur votre téléphone avant l'envoi, sans les données de position. Avec votre accord, elle sera publiée avec votre avis, avec votre prénom seulement. Une courte vidéo&nbsp;? Répondez simplement à cet email.`)}
           ${bouton}
         `)}
         ${par(`Et si quelque chose ne va pas, même un détail, dites-le-moi d'abord&nbsp;: je le règle.`)}

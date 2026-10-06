@@ -53,6 +53,11 @@ export default async function handler(req, res) {
 
     if (action === 'reject') {
       await del(pending.url);
+      // La photo jointe (reviews/photos/{id}.jpg) n'a plus de raison d'exister.
+      try {
+        const { blobs: photos } = await list({ prefix: `reviews/photos/${id}` });
+        for (const ph of photos) await del(ph.url);
+      } catch (e) { console.error('photo non supprimée:', e && e.message); }
       return page(res, 200, 'Avis rejeté', 'L\'avis a été supprimé. Il ne sera pas publié.', 'warn');
     }
 

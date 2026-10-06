@@ -78,6 +78,9 @@
     .avis-msg.err { display:block; background:#FBEAEA; color:#B23A3A; }
     .avis-legal { text-align:center; color:#9a9a9a; font-size:.8rem; max-width:560px; margin:24px auto 0; line-height:1.6; }
     .avis-form-section { background:var(--emerald-soft); }
+    .avis-photo { display:block; width:100%; aspect-ratio:4/3; object-fit:cover; border-radius:12px; margin:0 0 12px; background:var(--ivory-deep); }
+    #f-photo { display:block; margin-top:6px; font-size:.9rem; }
+    #f-photo-apercu { display:block; max-width:180px; max-height:180px; border-radius:10px; margin-top:10px; border:1px solid var(--line); }
   </style>
   <!-- avis:debut -->
   <script type="application/ld+json">
@@ -300,6 +303,11 @@
           <input type="email" id="f-email" name="email" maxlength="120" placeholder="ex : vous@email.fr" autocomplete="email">
           <div class="hint">Si votre email correspond à une commande, votre avis affichera le badge « Acheteur vérifié ».</div>
 
+          <label for="f-photo">Une photo de votre AdhanBox chez vous <span style="font-weight:400;color:#9a9a9a;">(facultatif)</span></label>
+          <input type="file" id="f-photo" name="photo" accept="image/*">
+          <img id="f-photo-apercu" alt="Aperçu de votre photo" hidden>
+          <div class="hint">Publiée avec votre avis. La photo est réduite sur votre appareil avant l'envoi, sans les données de position.</div>
+
           <!-- Piège à bots : ne pas remplir -->
           <div class="hp" aria-hidden="true">
             <label for="f-hp">Ne pas remplir</label>
@@ -352,6 +360,14 @@
         var card = document.createElement('article');
         card.className = 'avis-card';
 
+        if (rv.photo && /^https:\/\//.test(rv.photo)) {
+          var ph = document.createElement('img');
+          ph.className = 'avis-photo';
+          ph.loading = 'lazy';
+          ph.alt = 'Photo envoyée par ' + (rv.prenom || 'un client');
+          ph.src = rv.photo;
+          card.appendChild(ph);
+        }
         var stars = document.createElement('div');
         stars.className = 'stars';
         stars.innerHTML = starsHtml(rv.note);
@@ -394,6 +410,45 @@
     });
   });
 
+  // ── Photo facultative : reduite ICI, sur l'appareil du visiteur, avant l'envoi.
+  //    Le passage par un canvas retire les metadonnees, dont la position GPS :
+  //    rien de tout cela ne part vers le store public. Les photos de telephone
+  //    sortent orientees par le navigateur (image-orientation: from-image).
+  var photoInput = document.getElementById('f-photo');
+  var photoApercu = document.getElementById('f-photo-apercu');
+  var photoData = '';
+  function reduirePhoto(file) {
+    return new Promise(function (ok, ko) {
+      var url = URL.createObjectURL(file);
+      var im = new Image();
+      im.onload = function () {
+        try {
+          var MAX = 1400, w = im.naturalWidth, h = im.naturalHeight, k = Math.min(1, MAX / Math.max(w, h));
+          var c = document.createElement('canvas');
+          c.width = Math.round(w * k); c.height = Math.round(h * k);
+          c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
+          var data = c.toDataURL('image/jpeg', 0.82);
+          if (data.length > 880 * 1024) data = c.toDataURL('image/jpeg', 0.6);   // plafond du serveur : 900 Ko
+          URL.revokeObjectURL(url);
+          ok(data);
+        } catch (err) { ko(err); }
+      };
+      im.onerror = ko;
+      im.src = url;
+    });
+  }
+  if (photoInput) {
+    photoInput.addEventListener('change', function () {
+      photoData = ''; photoApercu.hidden = true;
+      var f = photoInput.files && photoInput.files[0];
+      if (!f) return;
+      if (!/^image\//.test(f.type)) { show('err', 'Choisissez une image (une photo).'); photoInput.value = ''; return; }
+      reduirePhoto(f)
+        .then(function (d) { photoData = d; photoApercu.src = d; photoApercu.hidden = false; })
+        .catch(function () { show('err', 'Cette photo n\'a pas pu être lue. Essayez-en une autre.'); photoInput.value = ''; });
+    });
+  }
+
   form.addEventListener('submit', function (e) {
     e.preventDefault();
     msg.className = 'avis-msg';
@@ -423,6 +478,7 @@
         email: form.email.value.trim(),
         source: srcEl.value,
         source_autre: autreInput.value.trim(),
+        photo: photoData,
         hp: form.hp.value
       })
     })
@@ -432,6 +488,7 @@
         if (res.ok && res.j.ok) {
           form.reset();
           autreInput.hidden = true; autreInput.value = '';
+          photoData = ''; if (photoApercu) photoApercu.hidden = true;
           show('ok', 'Merci ! 🌙 Votre avis a bien été reçu. Il apparaîtra après validation.');
         } else {
           show('err', (res.j && res.j.error) || 'Une erreur est survenue. Réessayez.');

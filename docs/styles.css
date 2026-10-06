@@ -920,6 +920,12 @@
       transition: all 0.2s ease;
     }
     .pill-btn:hover { border-color: var(--emerald); color: var(--emerald); }
+    /* Note et citation sous le bouton de commande */
+    .confiance { color: var(--ink); }
+    .confiance .etoiles { color: var(--gold); letter-spacing: 1px; }
+    .confiance .qui { color: var(--muted); }
+    .confiance a { color: var(--emerald); }
+
     /* Motifs : une image du motif (rendu 3D) et son nom */
     .motif-btn { display: inline-flex; align-items: center; gap: 0.55rem; padding: 0.3rem 1rem 0.3rem 0.35rem; }
     .motif-btn img {

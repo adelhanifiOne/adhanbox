@@ -1,4 +1,9 @@
-// POST /api/review  { note, texte, prenom, ville, email?, source, source_autre?, hp? }
+// POST /api/review  { note, texte, prenom, ville, email?, source, source_autre?, photo?, hp? }
+//
+// `photo` (06/10/2026) : JPEG en data URL, reduit par le navigateur (1400 px,
+// sans EXIF donc sans position GPS), 900 Ko au plus une fois encode. Stocke
+// dans reviews/photos/{id}.jpg (store public, comme l'avis) ; l'URL part
+// dans l'avis, et reviews.js la publie avec lui une fois approuve.
 // Dépôt d'un avis client (ou testeur) depuis adhanbox.fr/avis.html.
 //
 // L'avis est stocké EN ATTENTE dans Vercel Blob (reviews/pending/{id}.json),
@@ -78,6 +83,17 @@ export default async function handler(req, res) {
   const prenom = clean(body.prenom, 40);
   const ville = clean(body.ville, 60);
   const email = clean(body.email, 120);
+  // Photo : on n'accepte qu'un JPEG en data URL, borne en taille. Tout le reste
+  // est ignore sans bloquer l'avis.
+  const PHOTO_MAX = 900 * 1024;
+  let photoBuf = null;
+  if (typeof body.photo === 'string' && body.photo.startsWith('data:image/jpeg;base64,') && body.photo.length <= PHOTO_MAX) {
+    try {
+      const buf = Buffer.from(body.photo.slice('data:image/jpeg;base64,'.length), 'base64');
+      // Signature JPEG (FF D8 FF) : pas de fichier deguise dans un store public.
+      if (buf.length > 1000 && buf[0] === 0xFF && buf[1] === 0xD8 && buf[2] === 0xFF) photoBuf = buf;
+    } catch { photoBuf = null; }
+  }
 
   // « Comment nous avez-vous connus ». Vocabulaire ferme : on n'enregistre que
   // l'une de ces six valeurs, jamais ce que le visiteur a pu taper. Le store
@@ -100,6 +116,17 @@ export default async function handler(req, res) {
   const verifie = await isVerifiedBuyer(email);
 
   const id = randomUUID();
+  let photo = '';
+  if (photoBuf) {
+    try {
+      const p = await put(`reviews/photos/${id}.jpg`, photoBuf, {
+        access: 'public', addRandomSuffix: false, contentType: 'image/jpeg',
+      });
+      photo = p.url;
+    } catch (err) {
+      console.error('stockage photo échoué:', err && err.message);   // l'avis part quand meme, sans photo
+    }
+  }
   const review = {
     id,
     note,
@@ -108,6 +135,7 @@ export default async function handler(req, res) {
     ville,
     verifie,
     source,
+    ...(photo ? { photo } : {}),
     date: new Date().toISOString(),
   };
 
@@ -144,6 +172,7 @@ export default async function handler(req, res) {
   <h2 style="color:#0C5B45;">📝 Nouvel avis en attente de modération</h2>
   <p style="font-size:20px;color:#C9A227;margin:0;">${stars} <span style="color:#666;font-size:14px;">(${note}/5)</span></p>
   <p style="background:#F6F4EF;border-radius:10px;padding:16px 18px;font-style:italic;">« ${esc(texte)} »</p>
+  ${photo ? `<p><img src="${esc(photo)}" alt="Photo jointe" style="max-width:100%;border-radius:10px;"></p>` : ''}
   <p><b>${esc(prenom)}</b>${ville ? ' · ' + esc(ville) : ''}${verifie ? ' · <span style="color:#0C5B45;">✔ acheteur vérifié</span>' : ' · <span style="color:#999;">non vérifié</span>'}</p>
   <p style="color:#555;">Nous a connus par : <b>${esc(commentConnu)}</b></p>
   <p style="margin-top:24px;">
@@ -155,6 +184,7 @@ export default async function handler(req, res) {
           `Nouvel avis en attente (${note}/5)`,
           `« ${texte} »`,
           `${prenom}${ville ? ' · ' + ville : ''}${verifie ? ' · acheteur vérifié' : ''}`,
+          ...(photo ? [`Photo : ${photo}`] : []),
           `Nous a connus par : ${commentConnu}`,
           '',
           `Approuver : ${link('approve')}`,

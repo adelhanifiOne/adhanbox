@@ -590,6 +590,17 @@
 
     montrer3D();
 
+    // Note et nombre d'avis sous le bouton, depuis le backend (cache CDN 5 min).
+    fetch(CHECKOUT_BACKEND + '/api/reviews')
+      .then((r) => r.json())
+      .then((d) => {
+        if (!d || !d.count) return;
+        const note = document.getElementById('note-moyenne'), nb = document.getElementById('nb-avis');
+        if (note && d.average) note.textContent = String(Math.round(d.average * 10) / 10).replace('.', ',') + '/5';
+        if (nb) nb.textContent = d.count + ' avis';
+      })
+      .catch(() => {});
+
     // Barre d'achat fixe (mobile) : masquee des que le vrai bouton de
     // commande est a l'ecran, pour ne pas le doubler.
     const barreAchat = document.getElementById('barre-achat');
