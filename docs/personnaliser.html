@@ -67,8 +67,8 @@
             <div class="pill-options" role="group" aria-label="Motif de mandala">
               <button class="pill-btn" data-mandala="0">Aucun</button>
               <button class="pill-btn" data-mandala="1">Motif 1</button>
-              <button class="pill-btn active" data-mandala="2">Motif 2</button>
-              <button class="pill-btn" data-mandala="3">Motif 3</button>
+              <button class="pill-btn" data-mandala="2">Motif 2</button>
+              <button class="pill-btn active" data-mandala="3">Motif 3</button>
             </div>
           </div>
 
@@ -186,7 +186,7 @@
     function charger() {
       if (fait) return;
       fait = true;
-      ['configurator.js?v=20261006d', 'site.js'].forEach(function (src) {
+      ['configurator.js?v=20261006e', 'site.js'].forEach(function (src) {
         var el = document.createElement('script');
         el.src = src;
         el.async = false;   // garde l'ordre : configurateur, puis en-tete et pied de page

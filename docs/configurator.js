@@ -34,7 +34,7 @@
 
     // Motif photographie sur toutes les photos de coloris : c'est le choix par
     // defaut, pour que la photo affichee soit exactement ce qui est commande.
-    const MOTIF_PHOTO = 2;
+    const MOTIF_PHOTO = 3;   // confirme par Adel le 06/10/2026
     const state = { finish: 'noir', mandala: MOTIF_PHOTO, mandalaColor: 'or' };
     let scene, camera, renderer, controls, boxGroup, boxMesh = null, mandalaMesh = null, lidMesh = null;
     let boxSize = null, boxCenter = null;
