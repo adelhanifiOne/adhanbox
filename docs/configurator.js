@@ -110,7 +110,7 @@
         applyFinish();
         if (!boucleActive) animate3D();
         loadLid();
-        if (state.mandala) loadMandala(state.mandala);
+        if (state.mandala) { loadMandala(state.mandala); focusMotifFace(); }   // montrer la face choisie, pas le dos
         legende3D();
       }, undefined, (err) => console.error('Erreur de chargement du modèle 3D :', err));
 
@@ -392,6 +392,7 @@
           applyFinish();
           loadMandala(state.mandala);
           if (!boucleActive) animate3D();
+          if (state.mandala) focusMotifFace();
           legende3D();
         }
       }).catch(() => {
