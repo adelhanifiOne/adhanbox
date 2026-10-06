@@ -37,6 +37,13 @@ export function shell(bodyHtml) {
 </div>`;
 }
 
+// L'application est publique sur les deux stores (Google Play depuis le
+// 25/09/2026) : plus d'adresse Gmail a demander aux clients Android.
+const APP_STORE = 'https://apps.apple.com/fr/app/adhanbox/id6775413812';
+const GOOGLE_PLAY = 'https://play.google.com/store/apps/details?id=com.adhanbox.app';
+const boutonStore = (href, texte) => `<a href="${href}"
+  style="display:inline-block;background:#0C5B45;color:#fff;text-decoration:none;font-weight:600;font-size:15px;padding:12px 22px;border-radius:999px;margin:8px 4px 0;">${texte}</a>`;
+
 const salut = (p) => `<div style="font-size:20px;color:#0C5B45;font-family:Georgia,serif;font-weight:700;">As-salāmu ʿalaykum${p ? ' ' + esc(p) : ''} 🌙</div>`;
 const par = (t) => `<p style="color:#444;font-size:15px;line-height:1.6;margin:14px 0 0;">${t}</p>`;
 
@@ -107,10 +114,11 @@ export function stepEmail(step, { firstName, ref, config, tracking, carrier, rel
         ${conf}
         ${par(`Il ne reste plus qu'à l'emballer. Vous recevrez votre numéro de suivi dès qu'elle partira.`)}
         ${encadre(`
-          <p style="margin:0 0 10px;font-weight:600;color:#0C5B45;">Une question pour préparer votre application</p>
-          ${par(`Avez-vous un téléphone ou une tablette <b>Android</b> à la maison&nbsp;? Si oui, <b>répondez simplement à cet email</b> avec l'adresse Gmail utilisée sur cet appareil — celle qui apparaît sous votre nom quand vous ouvrez le Play Store et touchez votre photo de profil.`)}
-          ${par(`Google m'impose d'inscrire chaque utilisateur avant de rendre l'application publique. Votre adresse me permet donc de la publier sur le Play Store, et à vous de l'installer dès qu'elle y sera.`)}
-          ${par(`Sur <b>iPhone ou iPad</b>, rien à faire&nbsp;: l'application AdhanBox est déjà sur l'App Store, il suffira de la télécharger.`)}
+          <p style="margin:0 0 4px;font-weight:600;color:#0C5B45;">Préparez votre téléphone</p>
+          ${par(`L'application AdhanBox est gratuite, sur iPhone comme sur Android. Installez-la dès maintenant&nbsp;: à l'arrivée de votre box, il ne restera qu'à la brancher, l'application vous guidera pour la connecter.`)}
+          <p style="margin:10px 0 0;text-align:center;">
+            ${boutonStore(APP_STORE, 'App Store →')}${boutonStore(GOOGLE_PLAY, 'Google Play →')}
+          </p>
         `)}
         ${etapes(3)}
         ${num}`),

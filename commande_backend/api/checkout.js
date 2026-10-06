@@ -197,15 +197,29 @@ export default async function handler(req, res) {
           metadata,
         },
       },
-      // Cadeau : message facultatif, recopie a la main sur la carte signee.
-      // Lu par le webhook (session.custom_fields) et transmis au vendeur.
+      // Un seul champ en plus du formulaire Stripe : le message pour la carte.
+      // Du 21/09 au 06/10/2026, deux champs obligatoires redemandaient prenom et
+      // nom apres l'adresse (des etiquettes partaient avec un prenom seul) :
+      // c'etait de la friction au pire moment (audit du 06/10). Le webhook
+      // complete un nom incomplet avec celui porte par la carte, et signale au
+      // vendeur les cas douteux ; le reste se regle par email, c'est rare.
+      // Stripe plafonne custom_fields a 3 entrees.
       custom_fields: [{
+        // Cadeau : message facultatif, recopie a la main sur la carte signee.
+        // Lu par le webhook (session.custom_fields) et transmis au vendeur.
         key: 'message_carte',
         label: { type: 'custom', custom: 'Message pour la carte (facultatif)' },
         type: 'text',
         optional: true,
         text: { maximum_length: 120 },
       }],
+      // Textes affiches par Stripe : sous le formulaire de livraison, pour
+      // obtenir un nom complet sans champ supplementaire ; sous le bouton, la
+      // promesse de fabrication. (Limites Stripe : 1 200 caracteres chacun.)
+      custom_text: {
+        shipping_address: { message: 'Prénom et nom complets, s\'il vous plaît : ils figurent sur l\'étiquette du colis.' },
+        submit: { message: 'Fabriquée à la main à la commande, expédiée sous 1 à 2 semaines avec numéro de suivi. Retour 14 jours, garantie 2 ans.' },
+      },
       // Champ « code promo » sur la page de paiement. Les codes eux-memes
       // (FAMILLE, ADHAN5...) se creent dans le dashboard Stripe : on peut
       // les creer, suspendre ou limiter sans retoucher au code.
