@@ -582,6 +582,15 @@
     }
     updateQuoteLink();
 
+    // Barre d'achat fixe (mobile) : masquee des que le vrai bouton de
+    // commande est a l'ecran, pour ne pas le doubler.
+    const barreAchat = document.getElementById('barre-achat');
+    if (barreAchat && 'IntersectionObserver' in window) {
+      new IntersectionObserver((entries) => {
+        barreAchat.classList.toggle('cachee', entries[0].isIntersecting);
+      }, { threshold: 0.3 }).observe(document.getElementById('config-cta'));
+    }
+
     // Paiement via le backend : on intercepte le clic, on crée la session
     // Checkout (config incluse) puis on redirige. En cas d'échec (backend
     // down, réseau), on laisse suivre le lien Stripe de secours (cta.href).

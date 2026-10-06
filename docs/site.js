@@ -8,10 +8,14 @@
   var LOGO_SVG =
     '<img class="logo-mark" src="logo-app.png" alt="" aria-hidden="true" width="38" height="38">';
 
+  // Bouton « Commander » dans l'en-tete de toutes les pages. Sur la page de
+  // commande elle-meme, il descend au panneau des choix (#commande).
+  var CTA_HREF = page === 'personnaliser' ? '#commande' : 'personnaliser.html';
   var HEADER =
     '<header id="header">' +
       '<div class="container nav-bar">' +
         '<a href="index.html" class="logo" aria-label="AdhanBox — Accueil">' + LOGO_SVG + 'Adhan<span>Box</span></a>' +
+        '<a href="' + CTA_HREF + '" class="btn btn-gold nav-cta">Commander<span class="nav-cta-prix"> · 95 €</span></a>' +
       '</div>' +
     '</header>' +
     '<button class="burger" id="burger" aria-label="Ouvrir le menu" aria-expanded="false" aria-controls="menu-overlay">' +
@@ -76,6 +80,12 @@
 
   document.body.insertAdjacentHTML('afterbegin', HEADER);
   document.body.insertAdjacentHTML('beforeend', FOOTER);
+
+  // Mesure d'audience (sans cookie), meme fichier que sur l'accueil.
+  var mesure = document.createElement('script');
+  mesure.defer = true;
+  mesure.src = 'mesure.js?v=20261006';
+  document.head.appendChild(mesure);
 
   // Le plan du site en dur (<!-- plan:debut -->) existe pour les robots qui
   // n'executent pas JavaScript : sans lui, le HTML servi ne relie pas les

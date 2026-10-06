@@ -176,6 +176,32 @@
     /* Première section : dégage le header fixe */
     .first-section { padding-top: 9.5rem; }
 
+    /* Bouton « Commander » de l'en-tête (site.js), à gauche du burger fixe */
+    .nav-cta { margin-right: 66px; padding: 0.6rem 1.15rem; font-size: 0.85rem; }
+    @media (max-width: 420px) { .nav-cta-prix { display: none; } }
+
+    /* Barre d'achat fixe en bas, mobile seulement (page Personnaliser) */
+    .barre-achat {
+      position: fixed; left: 0; right: 0; bottom: 0; z-index: 180;
+      display: none; align-items: center; justify-content: space-between; gap: 12px;
+      padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px));
+      background: rgba(250, 246, 239, 0.96);
+      backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+      border-top: 1px solid var(--line);
+      box-shadow: 0 -8px 24px rgba(21, 37, 31, 0.08);
+      transition: transform 0.25s ease;
+    }
+    .barre-achat.cachee { transform: translateY(110%); }
+    .barre-achat .prix { display: flex; flex-direction: column; line-height: 1.25; min-width: 0; }
+    .barre-achat .prix b { font-family: var(--font-display); font-size: 1.3rem; color: var(--emerald); }
+    .barre-achat .prix s { color: var(--faint); font-size: 0.85rem; margin-left: 0.45rem; }
+    .barre-achat .detail { font-size: 0.76rem; color: var(--muted); }
+    .barre-achat .btn { padding: 0.8rem 1.5rem; font-size: 0.95rem; flex-shrink: 0; }
+    @media (max-width: 760px) {
+      .barre-achat { display: flex; }
+      body[data-page="personnaliser"] { padding-bottom: 86px; }
+    }
+
     /* Bouton « Commander » flottant, visible partout */
     .order-fab {
       position: fixed;
