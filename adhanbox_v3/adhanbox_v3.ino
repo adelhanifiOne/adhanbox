@@ -2,7 +2,7 @@
 // - Starts an AP when a long-press is detected on CONFIG_BUTTON_PIN
 // - Serves a small webpage that requests navigator.geolocation and POSTs lat/lon
 // - Stores lat/lon/accuracy/timestamp in Preferences (NVS)
-//Version: 3.0.54 (AdhanBox V3 / HW v3)
+//Version: 3.0.55 (AdhanBox V3 / HW v3)
 #include <Arduino.h>
 #include <esp_mac.h>   // esp_read_mac() : MAC eFuse, lisible sans Wi-Fi
 #include <Wire.h>
@@ -666,7 +666,47 @@ class I2SAudio {
   bool _flux = false;              // [FLUX] la lecture en cours vient d'Internet
   char _repli[65] = {0};           // [FLUX] copie SD a jouer si le flux lache
                                    // [RITUELS] 64 octets + fin : un repli de rituel en fait jusqu'a 64
+  SemaphoreHandle_t _verrou = nullptr;   // [POMPE] recursif : pump() et les commandes partagent le decodeur
+  TaskHandle_t _tache = nullptr;         // [POMPE] la tache qui alimente le DMA
  public:
+  // ── [POMPE 3.0.55] La pompe audio tourne dans SA tache, plus dans loop() ──
+  // Avant, loop() appelait pump() entre deux requetes HTTP. Une requete un peu
+  // longue (l'app qui s'ouvre en envoie huit d'un coup) laissait le DMA I2S a
+  // sec, et le peripherique rebouclait son dernier tampon : « disque raye »
+  // pendant une a deux secondes. Signale par un client le 07/10/2026 sur le
+  // Coran en flux, vu par Adel a l'ouverture de l'app. Desormais une tache de
+  // priorite 2, sur le coeur de loop(), alimente le DMA quoi que fasse loop().
+  // Le decodeur n'est pas reentrant : pump() et les commandes (lecture, arret,
+  // pause, etat) prennent le meme verrou recursif. Les ecarts entre deux
+  // pompages (audio_ecart_max_ms, audio_sup_dma) se mesurent ici.
+  struct Garde {
+    I2SAudio *a;
+    explicit Garde(I2SAudio *x) : a(x) { if (a->_verrou) xSemaphoreTakeRecursive(a->_verrou, portMAX_DELAY); }
+    ~Garde() { if (a->_verrou) xSemaphoreGiveRecursive(a->_verrou); }
+  };
+  void demarrerPompe() {
+    if (_tache) return;
+    _verrou = xSemaphoreCreateRecursiveMutex();
+    xTaskCreatePinnedToCore([](void *moi) {
+      I2SAudio *a = (I2SAudio *)moi;
+      uint32_t precedent = 0;
+      for (;;) {
+        const uint32_t t0 = micros();
+        const bool joue = a->isRunning() && g_blocage.actif();
+        if (joue && precedent) {
+          const uint32_t ecart = t0 - precedent;
+          _plusHaut(g_blocage.ecartMaxUs, ecart);
+          g_blocage.classer(ecart);
+          g_blocage.tours++;
+        }
+        precedent = joue ? t0 : 0;
+        a->pump();
+        if (joue) _plusHaut(g_blocage.pumpMaxUs, micros() - t0);
+        vTaskDelay(1);
+      }
+    }, "pompe", 20480, this, 2, &_tache, 1);
+    Serial.println("[Audio] pompe lancee dans sa tache");
+  }
   uint32_t sdClock() const { return _sdClock; }
   // Bench debit SD : lit `bytes` octets d'un fichier existant et renvoie ko/s.
   // Mesure de la derniere campagne : sert a distinguer DEUX pannes que le
@@ -754,6 +794,7 @@ class I2SAudio {
     noterCoupure(cause, _curPath, g_blocage.debutMs, posBytes(), sizeBytes());
   }
   void stop(const char *cause = nullptr) {
+    Garde g(this);
     if (cause) noterAvantStop(cause);
     if (mp3) { mp3->stop(); delete mp3; mp3 = nullptr; }
     if (wav) { wav->stop(); delete wav; wav = nullptr; }
@@ -773,14 +814,14 @@ class I2SAudio {
   // silence, le peripherique I2S rebouclait le dernier tampon -> son de "disque
   // raye". Le flux de silence garde aussi l'ampli synchronise (BCLK continue),
   // donc la reprise est immediate et propre, sans warm-up ni clic.
-  void pause()  { if (isRunning()) _paused = true; }
-  void resume() { _paused = false; }
+  void pause()  { Garde g(this); if (isRunning()) _paused = true; }
+  void resume() { Garde g(this); _paused = false; }
   bool isPaused() const { return _paused; }
   const char* currentPath() const { return _curPath; }
   // Position/taille en octets du fichier source (progression approximative,
   // suffisante pour une barre de lecture ; MP3 CBR -> quasi lineaire).
-  uint32_t posBytes()  { return src ? (uint32_t)src->getPos()  : 0; }
-  uint32_t sizeBytes() { return src ? (uint32_t)src->getSize() : 0; }
+  uint32_t posBytes()  { Garde g(this); return src ? (uint32_t)src->getPos()  : 0; }
+  uint32_t sizeBytes() { Garde g(this); return src ? (uint32_t)src->getSize() : 0; }
   // ── [CREPITEMENT] Coussin DMA dimensionne a chaque lecture ─────────────────
   // Le canal I2S et ses tampons DMA sont crees a CHAQUE lecture
   // (AudioGeneratorMP3::begin -> AudioOutputI2S::begin -> i2s_new_channel puis
@@ -852,6 +893,7 @@ class I2SAudio {
   }
 
   bool playPath(const char *path) {
+    Garde g(this);
     if (mp3 || wav) {
       char c[40]; snprintf(c, sizeof(c), "nouvelle lecture %.24s", path);
       stop(c);
@@ -930,6 +972,7 @@ class I2SAudio {
   // ne demarre pas (pas de Wi-Fi, serveur absent, refus), et s'il se coupe en
   // route (voir pump()).
   int playUrl(const char *url, const char *repli) {
+    Garde g(this);
     char repliCopie[sizeof(_repli)] = {0};
     if (repli && *repli) strncpy(repliCopie, repli, sizeof(repliCopie) - 1);
     if (mp3 || wav) stop("nouvelle lecture flux"); else stop();
@@ -988,8 +1031,9 @@ class I2SAudio {
     snprintf(path, sizeof(path), "/MP3/%04d.mp3", track);
     return playPath(path);
   }
-  bool isRunning() { return (mp3 && mp3->isRunning()) || (wav && wav->isRunning()); }
+  bool isRunning() { Garde g(this); return (mp3 && mp3->isRunning()) || (wav && wav->isRunning()); }
   void pump() {
+    Garde g(this);
     if (_paused) {
       // [PLAYER] En pause : on ne decode plus (position conservee), mais on
       // REMPLIT le DMA I2S de silence pour eviter que le peripherique reboucle
@@ -2242,7 +2286,7 @@ void handleOtaUploadComplete() {
 // GET /api/firmware/version
 void handleFirmwareVersion() {
   server.send(200, "application/json",
-              "{\"version\":\"3.0.54\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
+              "{\"version\":\"3.0.55\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
 }
 
 // Returns true if the request carries the correct API key (or if token not yet set).
@@ -2356,11 +2400,11 @@ void handleDeviceInfo() {
   char buf[512];
   if (pairingWindow || hasValidToken) {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.54\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
+             "{\"version\":\"3.0.55\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
              OTA_HOSTNAME, deviceIdHex().c_str(), _apiToken.c_str(), _otaPass.c_str());
   } else {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.54\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
+             "{\"version\":\"3.0.55\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
              OTA_HOSTNAME, deviceIdHex().c_str());
   }
   server.send(200, "application/json", buf);
@@ -5196,6 +5240,7 @@ bool tryReinitSD(int retries = 2) {
   for (int i = 0; i < retries; i++) {
     Serial.printf("[SD] Tentative reinit (%d/%d)\n", i + 1, retries);
     if (audio.begin()) {
+      audio.demarrerPompe();
       prefs.begin("adhancfg", true);
       int storedVol = constrain(prefs.getInt("volume", 20), 0, 30);
       prefs.end();
@@ -5224,12 +5269,9 @@ bool playTrack(int track) {
   }
   isPlaying = true;
 
-  // Pompe audio 800ms pour eviter de couper le debut de l'adhan
-  unsigned long start = millis();
-  while (millis() - start < 800) {
-    audio.pump();
-    delay(2);
-  }
+  // [POMPE 3.0.55] 800 ms pour ne pas couper le debut de l'adhan : la tache de
+  // pompe remplit le DMA pendant ce temps, loop() n'a qu'a attendre.
+  delay(800);
   return true;
 }
 
@@ -7037,6 +7079,7 @@ void setup() {
 
   // Initialise audio I2S + microSD
   if (audio.begin()) {
+    audio.demarrerPompe();
     storedVol = constrain(storedVol, 0, 30);
     audio.volume(storedVol);
     Serial.printf("[Audio] Volume initial : %d\n", storedVol);
@@ -7606,7 +7649,7 @@ static void bancCommande(String c) {
 
   if (verbe == "info") {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.54\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
+             "{\"version\":\"3.0.55\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
              deviceIdHex().c_str());
     bancRep(buf);
 
@@ -7833,18 +7876,9 @@ void loop() {
 
   // [CREPITEMENT] chronometrage du tour de boucle, pendant la lecture et passe
   // les 3 premieres secondes (voir BlocageAudio)
+  // [POMPE 3.0.55] La pompe audio a sa propre tache (I2SAudio::demarrerPompe) :
+  // loop() ne l'appelle plus, les ecarts entre pompages se mesurent la-bas.
   const bool _joue = audio.isRunning() && g_blocage.actif();
-  static uint32_t _tourPrecedent = 0;
-  const uint32_t _t0 = micros();
-  if (_joue && _tourPrecedent) {
-    const uint32_t ecart = _t0 - _tourPrecedent;
-    _plusHaut(g_blocage.ecartMaxUs, ecart);
-    g_blocage.classer(ecart);
-    g_blocage.tours++;
-  }
-  _tourPrecedent = _joue ? _t0 : 0;
-
-  audio.pump();
   // [HEURE] NTP automatique : 5 min apres un echec, 24 h apres un succes. Jamais
   // pendant une lecture (l'attente bloque loop() jusqu'a 8 s), ni pendant la
   // synchro de contenu, qui tient deja la memoire TLS.
@@ -7854,7 +7888,6 @@ void loop() {
     if (syncTimeFromNtp(8000) && rtcPresent) scheduleNextPrayerAlarm();
   }
   const uint32_t _t1 = micros();
-  if (_joue) _plusHaut(g_blocage.pumpMaxUs, _t1 - _t0);
   v2Tick();          // [V2] azkar/coran + sync contenu
   if (_joue) _plusHaut(g_blocage.tickMaxUs, micros() - _t1);
 
@@ -8058,8 +8091,7 @@ void loop() {
       stopPlay("console serie");
     }
   }
-  // Pompe audio I2S + detection fin de lecture
-  audio.pump();
+  // Detection de fin de lecture (la pompe I2S est dans sa tache)
   if (isPlaying && !audio.isRunning()) {
     onPlaybackFinished();
   }
@@ -8683,8 +8715,12 @@ void loop() {
     }
   }
 
+  // [3.0.55] Jamais pendant un son : performMawaqitSync() fait deux GET HTTPS
+  // (jusqu'a 4-6 s chacun) dans loop(). Mesure sur la box de la maison le
+  // 07/10/2026 : boucle figee 4,3 s pendant la douaa, et 2-3 accrocs « disque
+  // raye » sur le meme adhan (un essai par minute tant que la synchro echoue).
   static unsigned long lastAutoSyncCheck = 0;
-  if (millis() - lastAutoSyncCheck > 60000) {  // Check once per minute
+  if (millis() - lastAutoSyncCheck > 60000 && !audio.isRunning() && !isPlaying) {  // Check once per minute
     lastAutoSyncCheck = millis();
     if (WiFi.status() == WL_CONNECTED && rtcPresent) {
       unsigned long now_epoch = rtc.now().unixtime();
