@@ -24,6 +24,7 @@ Aucune dependance : uniquement la bibliotheque standard Python.
 """
 
 import argparse
+import errno
 import json
 import os
 import re
@@ -351,7 +352,26 @@ def compiler(recompiler=False, sortie=info):
                % (version_binaire(BINAIRE) or '?', attendue))
         recompiler = True
     if recompiler or not os.path.exists(BINAIRE):
-        sortie('Compilation du firmware…')
+        # [SD] Le pilote SD du core a un defaut (07/10/2026) : il n'attend pas
+        # la fin de programmation apres une ecriture multi-blocs et declare en
+        # echec des ecritures pourtant faites, selon le modele de carte. Le
+        # correctif vit dans le core installe (pas dans le depot) : on
+        # s'assure qu'il est en place AVANT chaque compilation, sinon un
+        # binaire sans correctif partirait au parc.
+        try:
+            import sd_diskio_diag as sdd
+            if not os.path.exists(sdd.CHEMIN):
+                return False, 'pilote SD du core introuvable : %s' % sdd.CHEMIN
+            src = open(sdd.CHEMIN, encoding='utf-8').read()
+            if sdd.MARQUE not in src or sdd.MARQUE_FIX not in src:
+                sortie('Correctif du pilote SD absent du core : application…')
+                sdd.appliquer(); sdd.corriger()
+                src = open(sdd.CHEMIN, encoding='utf-8').read()
+                if sdd.MARQUE_FIX not in src:
+                    return False, 'correctif du pilote SD non applique'
+        except Exception as e:
+            return False, 'correctif du pilote SD : %s' % e
+        sortie('Compilation du firmware (pilote SD corrige)…')
         lib = os.path.expanduser('~/Documents/Arduino/libraries')
         if _courir([cli, 'compile', '--fqbn', FQBN, '--libraries', lib,
                     '--output-dir', BUILD, SKETCH], sortie) != 0:
@@ -476,7 +496,8 @@ def flasher(port=None, recompiler=False, sortie=info):
     if _courir([cli, 'upload', '--fqbn', FQBN, '--port', port,
                 '--input-dir', build, SKETCH], tracer) != 0:
         texte = '\n'.join(trace).lower()
-        if 'busy' in texte or 'resource busy' in texte or 'could not open' in texte:
+        if ('busy' in texte or 'resource busy' in texte or 'could not open' in texte
+                or 'multiple access' in texte or 'returned no data' in texte):
             occupant = qui_occupe_port(port)
             if occupant:
                 return False, 'Televersement impossible : %s' % occupant
@@ -552,7 +573,8 @@ def preparer_envoi(port=None, sortie=info):
     if _courir([cli, 'upload', '--fqbn', FQBN_SORTIE, '--port', port,
                 '--input-dir', BUILD_SORTIE, SKETCH], tracer) != 0:
         texte = '\n'.join(trace).lower()
-        if 'busy' in texte or 'could not open' in texte:
+        if ('busy' in texte or 'could not open' in texte
+                or 'multiple access' in texte or 'returned no data' in texte):
             occupant = qui_occupe_port(port)
             return False, ('Televersement impossible : %s'
                            % (occupant or 'le port est pris par un autre programme.'))
@@ -714,6 +736,78 @@ def nettoyer_volume(volume):
     return n
 
 
+MANIFESTE = os.path.join(RACINE, 'audio_content.txt')
+MANIFESTE_URL = ('https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/'
+                 'audio_content.txt')
+
+
+def completer_reference(source=None, sortie=info):
+    """Telecharge dans sd_preload/ ce que le manifeste liste et qui y manque.
+
+    Le catalogue grandit (pistes 7 a 12 le 24/09/2026 : Doha, La Mecque) et le
+    manifeste audio_content.txt en est la liste de reference, celle que la
+    synchro des boitiers suit deja. Sans cette etape, sd_preload/ restait fige
+    sur les six pistes d'origine : chaque carte neuve partait incomplete, et le
+    boitier devait telecharger le reste chez le client, sur une SD a 1 MHz.
+
+    Memes regles que la synchro du firmware : un fichier present n'est jamais
+    retouche, on ecrit dans .part et on ne renomme qu'une taille verifiee.
+    Retourne (succes, message).
+    """
+    source = source or SD_SOURCE
+    try:
+        with open(MANIFESTE, encoding='utf-8') as f:
+            texte = f.read()
+    except OSError:
+        try:
+            with urllib.request.urlopen(MANIFESTE_URL, timeout=20) as r:
+                texte = r.read().decode('utf-8')
+        except Exception as e:
+            return False, 'Manifeste introuvable (%s) : %s' % (MANIFESTE, e)
+
+    entrees = []
+    for ligne in texte.splitlines():
+        ligne = ligne.strip()
+        if not ligne or ligne.startswith('#') or '|' not in ligne:
+            continue
+        chemin, _, url = ligne.partition('|')
+        entrees.append((chemin.strip(), url.strip()))
+
+    ajoutes = 0
+    for chemin, url in entrees:
+        cible = os.path.join(source, chemin.lstrip('/'))
+        if os.path.exists(cible) and os.path.getsize(cible) > 0:
+            continue
+        os.makedirs(os.path.dirname(cible), exist_ok=True)
+        part = cible + '.part'
+        sortie('Reference : telechargement de %s…' % chemin)
+        try:
+            req = urllib.request.Request(url, headers={'User-Agent': 'AdhanBox-banc'})
+            with urllib.request.urlopen(req, timeout=60) as r, open(part, 'wb') as f:
+                attendu = int(r.headers.get('Content-Length') or -1)
+                ecrits = 0
+                while True:
+                    bloc = r.read(65536)
+                    if not bloc:
+                        break
+                    f.write(bloc)
+                    ecrits += len(bloc)
+            if ecrits == 0 or (attendu > 0 and ecrits != attendu):
+                raise IOError('%d octets recus sur %d' % (ecrits, attendu))
+            os.replace(part, cible)
+            ajoutes += 1
+        except Exception as e:
+            try:
+                os.remove(part)
+            except OSError:
+                pass
+            return False, ('Reference incomplete : %s n\'a pas pu etre telecharge (%s). '
+                           'Verifie la connexion Internet du Mac et relance.' % (chemin, e))
+    if ajoutes:
+        return True, '%d fichier(s) ajoute(s) a la reference' % ajoutes
+    return True, 'reference a jour (%d entrees du manifeste)' % len(entrees)
+
+
 def preparer_carte(volume, source=None, sortie=info, avancement=None, arret=None):
     """Copie le contenu de reference sur la carte. Retourne (succes, message).
 
@@ -727,6 +821,10 @@ def preparer_carte(volume, source=None, sortie=info, avancement=None, arret=None
 
     if not os.path.isdir(source):
         return False, 'Contenu de reference introuvable : %s' % source
+    fait, message = completer_reference(source, sortie)
+    if not fait:
+        return False, message
+    sortie(message)
     fichiers = contenu_source(source)
     if not fichiers:
         return False, 'Aucun fichier dans %s' % source
@@ -973,19 +1071,33 @@ def trouver_box_serie(port=None):
                            'ouverture de %s impossible (%s)' % (port, e))
     # Ouvrir le port peut faire redemarrer la carte, et elle passe alors par
     # ~15 s de demarrage avant de repondre. On insiste plutot que d'abandonner.
-    fin = time.time() + 40
+    #
+    # Au premier demarrage (et apres une remise a zero), la carte QUITTE le bus
+    # USB puis y revient : l'ancien descripteur est mort pour de bon (« Device
+    # not configured », errno 6). Le 24/09/2026, la sortie d'une carte a echoue
+    # ainsi : 40 s a interroger un descripteur mort. On rouvre donc le port des
+    # que la liaison est perdue.
+    fin = time.time() + 60
     derniere = None
     try:
         while time.time() < fin:
             try:
+                if b is None:
+                    b = BoxSerie(port)
                 return b, b.get('/api/device/info')
             except Exception as e:
                 derniere = e
+                if isinstance(e, OSError) and e.errno in (errno.ENXIO, errno.ENODEV, errno.EBADF, errno.EIO):
+                    if b is not None:
+                        b.fermer()
+                    b = None                    # la carte revient : on rouvrira
                 time.sleep(1.5)
     except BaseException:
-        b.fermer()
+        if b is not None:
+            b.fermer()
         raise
-    b.fermer()      # sans ca, le port resterait pris pour le flash suivant
+    if b is not None:
+        b.fermer()  # sans ca, le port resterait pris pour le flash suivant
     raise RuntimeError(
         'la carte ne repond pas sur %s. Porte-t-elle bien un firmware V3 '
         'recent ? Televerse-le, puis reessaie. (%s)' % (port, derniere))
@@ -1654,7 +1766,7 @@ TESTS = [
     Test('heap', 'Mémoire libre', 'auto', t_heap,
          'Une marge trop courte fait redémarrer la carte au bout de quelques jours.'),
     Test('adhans', 'Pistes d\'adhan', 'auto', t_adhans,
-         'Les 6 pistes jouees par numero, comparees a la reference — '
+         'Les pistes jouees par numero (celles de sd_preload/mp3), comparees a la reference — '
          'un fichier vide ne fait aucun bruit et aucune erreur.'),
     Test('contenu', 'Contenu audio', 'auto', t_contenu,
          'Les 4 fichiers des automatismes s\'ouvrent et démarrent vraiment.'),

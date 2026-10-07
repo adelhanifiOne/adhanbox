@@ -271,7 +271,13 @@ class Session:
             with self.verrou:
                 self.flash_actif = True
             try:
-                succes, message = bt.preparer_envoi(port or None, sortie=self.noter)
+                try:
+                    succes, message = bt.preparer_envoi(port or None, sortie=self.noter)
+                except Exception as e:
+                    # Sans ce filet, l'erreur partait dans la console et l'ecran
+                    # restait sur « Effacement… » : on pouvait croire la carte
+                    # prete alors qu'elle portait encore l'image de banc.
+                    succes, message = False, '%s — NE PAS EXPEDIER cette carte, relancer la sortie.' % e
                 self.noter(('OK  ' if succes else 'ECHEC ') + message)
                 if succes:
                     # La carte ne repond plus par le cable : tout ce que le banc

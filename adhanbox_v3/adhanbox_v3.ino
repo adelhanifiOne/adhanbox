@@ -2,7 +2,7 @@
 // - Starts an AP when a long-press is detected on CONFIG_BUTTON_PIN
 // - Serves a small webpage that requests navigator.geolocation and POSTs lat/lon
 // - Stores lat/lon/accuracy/timestamp in Preferences (NVS)
-//Version: 3.0.52 (AdhanBox V3 / HW v3)
+//Version: 3.0.54 (AdhanBox V3 / HW v3)
 #include <Arduino.h>
 #include <esp_mac.h>   // esp_read_mac() : MAC eFuse, lisible sans Wi-Fi
 #include <Wire.h>
@@ -69,6 +69,15 @@ static inline void securiser(WiFiClientSecure &c) {
 #include "esp_task_wdt.h"   // [SECU] watchdog materiel : reboot si le firmware freeze
 #include "esp_ota_ops.h"    // [SECU] rollback OTA : revient a la version precedente si le firmware boot-loop
 #include "mbedtls/sha256.h"  // [DIRECT] mot de passe du Wi-Fi de la box, tire du jeton
+
+// [MESURE] Firmware de mesure du tactile integre de l'ESP32 (jamais publie) :
+// compiler avec -DMESURE_TACTILE=1. A 0, rien de ce qui le concerne n'est compile.
+#ifndef MESURE_TACTILE
+#define MESURE_TACTILE 0
+#endif
+#if MESURE_TACTILE
+#include "driver/touch_sens.h"
+#endif
 static volatile bool _wdtArmed = false;  // WDT arme seulement une fois loop() lance
 // BLE provisioning (first-boot WiFi setup without leaving the app)
 #define ENABLE_BLE 1
@@ -368,6 +377,7 @@ volatile bool g_enchainement = false;
 // ── [SYNCHRO] Etat partage entre la tache de synchro, loop() et playPath ────
 volatile bool _syncRunning  = false;    // la tache de synchro tourne
 volatile bool _syncAbandon  = false;    // playPath lui demande de tout lacher
+volatile bool _sdTestRunning = false;   // [SD TEST] le banc d'ecriture de la carte tourne (3.0.54)
 bool          _syncAFaire   = true;     // une synchro est due (boot, ou reprise)
 unsigned long _syncPasAvant = 0;        // millis() avant lequel on ne relance pas
 
@@ -872,9 +882,9 @@ class I2SAudio {
   // attend qu'il ait rendu sa memoire (TLS + pile de 32 Ko) : c'est cette
   // memoire-la qui decide de la taille du coussin, juste en dessous.
   void abandonnerSynchro() {
-    if (_syncRunning) {
+    if (_syncRunning || _sdTestRunning) {
       _syncAbandon = true;
-      for (int i = 0; i < 80 && _syncRunning; i++) delay(10);   // au plus 800 ms
+      for (int i = 0; i < 80 && (_syncRunning || _sdTestRunning); i++) delay(10);   // au plus 800 ms
       _syncAbandon = false;
     }
   }
@@ -1084,6 +1094,7 @@ void handleGetRituels();      // [RITUELS] liste + horaires du jour
 void handleSetRituels();      // [RITUELS] remplace toute la liste
 void handleContentSync();
 void handleContentStatus();
+void handleSdTest();        // [SD TEST] banc d'ecriture de la carte SD, par le reseau (3.0.54)
 void handleAudioDelete();
 void handleAudioList();
 void handleAudioStatus();
@@ -2231,7 +2242,7 @@ void handleOtaUploadComplete() {
 // GET /api/firmware/version
 void handleFirmwareVersion() {
   server.send(200, "application/json",
-              "{\"version\":\"3.0.52\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
+              "{\"version\":\"3.0.54\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
 }
 
 // Returns true if the request carries the correct API key (or if token not yet set).
@@ -2345,11 +2356,11 @@ void handleDeviceInfo() {
   char buf[512];
   if (pairingWindow || hasValidToken) {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.52\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
+             "{\"version\":\"3.0.54\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
              OTA_HOSTNAME, deviceIdHex().c_str(), _apiToken.c_str(), _otaPass.c_str());
   } else {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.52\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
+             "{\"version\":\"3.0.54\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
              OTA_HOSTNAME, deviceIdHex().c_str());
   }
   server.send(200, "application/json", buf);
@@ -3708,6 +3719,434 @@ void startConfigAP() {
   Serial.printf("Config AP started: %s\n", ssid);
 }
 
+#if MESURE_TACTILE
+// ── [MESURE] Tactile integre de l'ESP32 : firmware de MESURE, jamais publie ──
+// Le module TTP223 repond « appuye » ou non, et un parasite du son y passe
+// pour un doigt : des adhans se coupent tout seuls chez des clients. Or GPIO6
+// est aussi le canal tactile 6 de l'ESP32-S3 : avec une simple pastille de
+// cuivre sur la broche du milieu de J4 (IO6 y arrive en direct, sans aucun
+// composant), la puce mesure elle-meme un NOMBRE, qui monte quand un doigt
+// approche. Avant d'ecrire le vrai detecteur, on mesure sur une box montee :
+// repos, doigt pose, adhan fort sans toucher. Si le doigt ressort nettement
+// au-dessus des parasites de l'adhan, la piste est bonne ; sinon, poussoir.
+//   Page : http://<ip de la box>/mesure      Donnees : /api/mesure
+// Dans ce firmware le bouton n'agit plus (checkConfigButton sort tout de
+// suite) : la broche est en mesure. Les routes de mesure sont sans jeton :
+// c'est un firmware d'atelier. Compiler avec -DMESURE_TACTILE=1.
+#define MT_CANAL        6       // GPIO6 = canal tactile 6
+#define MT_PERIODE_MS   5       // 200 mesures par seconde
+#define MT_TAMPON       1024    // ~5 s de courbe pour la page
+#define MT_MOY          20      // moyenne glissante de 100 ms : ce qu'un detecteur regarderait
+#define MT_PHASE_MS     10000UL                    // repos et doigt : 10 s
+#define MT_ADHAN_MAX_MS (10UL * 60UL * 1000UL)     // garde-fou de la phase adhan
+
+struct MtStat {
+  uint32_t n;
+  uint64_t somme, somme2;
+  uint32_t mini, maxi;          // mesures brutes
+  uint32_t moyMin, moyMax;      // moyenne glissante de 100 ms
+  uint32_t faux;                // phase adhan : passages au-dessus du seuil d'essai
+};
+static const MtStat MT_VIDE = {0, 0, 0, UINT32_MAX, 0, UINT32_MAX, 0, 0};
+static MtStat mt_stat[4] = {MT_VIDE, MT_VIDE, MT_VIDE, MT_VIDE};   // [1] repos, [2] doigt, [3] adhan
+static volatile uint8_t mt_phase = 0;                // phase en cours, 0 = aucune
+static uint32_t mt_phaseDebut = 0, mt_phaseFin = 0;
+static uint32_t *mt_tampon = nullptr;                // anneau des mesures brutes
+static volatile uint32_t mt_seq = 0;                 // nombre total de mesures prises
+static volatile uint32_t mt_brut = 0, mt_lisse = 0, mt_base = 0;
+static volatile uint32_t mt_seuil = 0, mt_rearme = 0;   // detecteur d'essai de la phase adhan
+static int mt_vol = 0, mt_piste = 0;
+static bool mt_pret = false;
+static touch_sensor_handle_t mt_capteur = nullptr;
+static touch_channel_handle_t mt_canal = nullptr;
+static portMUX_TYPE mt_verrou = portMUX_INITIALIZER_UNLOCKED;
+
+// Tache de mesure, sur le coeur 0 et en priorite basse : la boucle (coeur 1)
+// et le son ne la sentent pas. Lire la mesure ne coute rien, le materiel
+// balaie la pastille en continu.
+static void mtTache(void *) {
+  uint32_t fen[MT_MOY] = {0};
+  uint64_t fenSomme = 0;
+  int fenN = 0, fenI = 0;
+  bool auDessus = false;
+  TickType_t reveil = xTaskGetTickCount();
+  for (;;) {
+    vTaskDelayUntil(&reveil, pdMS_TO_TICKS(MT_PERIODE_MS));
+    uint32_t brut = 0, lisse = 0, base = 0;
+    if (touch_channel_read_data(mt_canal, TOUCH_CHAN_DATA_TYPE_RAW, &brut) != ESP_OK) continue;
+    touch_channel_read_data(mt_canal, TOUCH_CHAN_DATA_TYPE_SMOOTH, &lisse);
+    touch_channel_read_data(mt_canal, TOUCH_CHAN_DATA_TYPE_BENCHMARK, &base);
+    fenSomme += brut;
+    fenSomme -= fen[fenI];
+    fen[fenI] = brut;
+    fenI = (fenI + 1) % MT_MOY;
+    if (fenN < MT_MOY) fenN++;
+    const uint32_t moy = (uint32_t)(fenSomme / fenN);
+    portENTER_CRITICAL(&mt_verrou);
+    mt_tampon[mt_seq % MT_TAMPON] = brut;
+    mt_seq = mt_seq + 1;
+    mt_brut = brut; mt_lisse = lisse; mt_base = base;
+    const uint8_t ph = mt_phase;
+    if (ph >= 1 && ph <= 3) {
+      MtStat &s = mt_stat[ph];
+      s.n++;
+      s.somme += brut;
+      s.somme2 += (uint64_t)brut * brut;
+      if (brut < s.mini) s.mini = brut;
+      if (brut > s.maxi) s.maxi = brut;
+      // La moyenne glissante ne compte qu'une fois remplie de mesures de CETTE
+      // phase : sinon son minimum garderait la trace de ce qui precedait.
+      if (fenN == MT_MOY && s.n >= MT_MOY) {
+        if (moy < s.moyMin) s.moyMin = moy;
+        if (moy > s.moyMax) s.moyMax = moy;
+      }
+      // Detecteur d'essai : aurait-il vu un doigt pendant l'adhan ? Seuil a
+      // mi-chemin entre le repos et le doigt, sur la moyenne de 100 ms.
+      if (ph == 3 && mt_seuil) {
+        if (!auDessus && moy > mt_seuil) { auDessus = true; s.faux++; }
+        else if (auDessus && moy < mt_rearme) auDessus = false;
+      }
+    } else {
+      auDessus = false;
+    }
+    portEXIT_CRITICAL(&mt_verrou);
+  }
+}
+
+// Met la broche du bouton en mesure tactile et lance la tache. Appele a la fin
+// de setup() : jusque-la la broche reste en entree tiree au 3V3, pour que la
+// fenetre d'appairage du demarrage ne voie pas d'appui.
+bool mtDemarrer() {
+  mt_tampon = (uint32_t *)heap_caps_calloc(MT_TAMPON, sizeof(uint32_t), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+  if (!mt_tampon) mt_tampon = (uint32_t *)calloc(MT_TAMPON, sizeof(uint32_t));
+  if (!mt_tampon) { Serial.println("[MESURE] plus de memoire pour la courbe"); return false; }
+  // Memes reglages que le coeur Arduino (touchRead) : 500 cycles, 0,5 a 2,2 V.
+  touch_sensor_sample_config_t ech = {};
+  ech.charge_times = 500;
+  ech.charge_volt_lim_h = TOUCH_VOLT_LIM_H_2V2;
+  ech.charge_volt_lim_l = TOUCH_VOLT_LIM_L_0V5;
+  ech.idle_conn = TOUCH_IDLE_CONN_GND;
+  ech.bias_type = TOUCH_BIAS_TYPE_SELF;
+  touch_sensor_config_t cfg = {};
+  cfg.power_on_wait_us = 256;
+  cfg.meas_interval_us = 32.0f;
+  cfg.max_meas_time_us = 0;
+  cfg.sample_cfg_num = 1;
+  cfg.sample_cfg = &ech;
+  if (touch_sensor_new_controller(&cfg, &mt_capteur) != ESP_OK) { Serial.println("[MESURE] controleur tactile refuse"); return false; }
+  touch_sensor_filter_config_t filtre = {};
+  filtre.benchmark.filter_mode = TOUCH_BM_IIR_FILTER_4;
+  filtre.benchmark.jitter_step = 4;
+  filtre.benchmark.denoise_lvl = 1;
+  filtre.data.smooth_filter = TOUCH_SMOOTH_IIR_FILTER_2;
+  filtre.data.active_hysteresis = 2;
+  filtre.data.debounce_cnt = 2;
+  touch_sensor_config_filter(mt_capteur, &filtre);
+  touch_channel_config_t canal = {};
+  canal.active_thresh[0] = 2000;
+  canal.charge_speed = TOUCH_CHARGE_SPEED_7;
+  canal.init_charge_volt = TOUCH_INIT_CHARGE_VOLT_DEFAULT;
+  if (touch_sensor_new_channel(mt_capteur, MT_CANAL, &canal, &mt_canal) != ESP_OK) { Serial.println("[MESURE] canal tactile refuse"); return false; }
+  if (touch_sensor_enable(mt_capteur) != ESP_OK) { Serial.println("[MESURE] activation refusee"); return false; }
+  if (touch_sensor_start_continuous_scanning(mt_capteur) != ESP_OK) { Serial.println("[MESURE] balayage refuse"); return false; }
+  xTaskCreatePinnedToCore(mtTache, "mesure", 3072, nullptr, 1, nullptr, 0);
+  mt_pret = true;
+  Serial.println("[MESURE] tactile integre sur GPIO6 : page /mesure, le bouton n'agit plus dans ce firmware");
+  return true;
+}
+
+static void mtDebut(uint8_t ph, uint32_t dureeMs) {
+  // Phase adhan : seuil d'essai a mi-chemin entre le repos et le doigt, s'ils
+  // ont ete mesures (rearmement au quart).
+  uint32_t seuil = 0, rearme = 0;
+  if (ph == 3 && mt_stat[1].n && mt_stat[2].n) {
+    const double repos = (double)mt_stat[1].somme / mt_stat[1].n;
+    const double doigt = (double)mt_stat[2].somme / mt_stat[2].n;
+    if (doigt > repos + 2) {
+      seuil = (uint32_t)(repos + (doigt - repos) * 0.5);
+      rearme = (uint32_t)(repos + (doigt - repos) * 0.25);
+    }
+  }
+  portENTER_CRITICAL(&mt_verrou);
+  mt_stat[ph] = MT_VIDE;
+  if (ph == 3) { mt_seuil = seuil; mt_rearme = rearme; }
+  mt_phase = ph;
+  portEXIT_CRITICAL(&mt_verrou);
+  mt_phaseDebut = millis();
+  mt_phaseFin = mt_phaseDebut + dureeMs;
+}
+
+// Appele par loop() : fin des phases (10 s pour le repos et le doigt ; fin de
+// la piste, ou garde-fou de 10 min, pour l'adhan).
+void mtTick() {
+  if (!mt_pret || !mt_phase) return;
+  const bool finTemps = (long)(millis() - mt_phaseFin) >= 0;
+  const bool finAdhan = (mt_phase == 3) && !audio.isRunning() && (millis() - mt_phaseDebut > 2500);
+  if (finTemps || finAdhan) {
+    if (mt_phase == 3 && audio.isRunning()) stopPlay("mesure");
+    mt_phase = 0;
+  }
+}
+
+void handleMesureJson() {
+  MtStat c[4];
+  portENTER_CRITICAL(&mt_verrou);
+  for (int i = 0; i < 4; i++) c[i] = mt_stat[i];
+  const uint32_t seq = mt_seq, brut = mt_brut, lisse = mt_lisse, base = mt_base;
+  const uint8_t ph = mt_phase;
+  portEXIT_CRITICAL(&mt_verrou);
+  uint32_t depuis = server.hasArg("depuis") ? (uint32_t)strtoul(server.arg("depuis").c_str(), nullptr, 10) : seq;
+  if (depuis > seq) depuis = seq;              // la box a redemarre : la page repart de zero
+  if (seq - depuis > 240) depuis = seq - 240;  // au plus 1,2 s de courbe par reponse
+  long reste = ph ? (long)(mt_phaseFin - millis()) : 0;
+  if (reste < 0) reste = 0;
+  String s;
+  s.reserve(3600);
+  char b[260];
+  snprintf(b, sizeof(b),
+           "{\"pret\":%s,\"hz\":%d,\"seq\":%lu,\"brut\":%lu,\"lisse\":%lu,\"base\":%lu,\"phase\":%u,\"reste_ms\":%ld,"
+           "\"joue\":%s,\"vol\":%d,\"piste\":%d,\"seuil\":%lu",
+           mt_pret ? "true" : "false", 1000 / MT_PERIODE_MS, (unsigned long)seq, (unsigned long)brut,
+           (unsigned long)lisse, (unsigned long)base, (unsigned)ph, reste,
+           audio.isRunning() ? "true" : "false", mt_vol, mt_piste, (unsigned long)mt_seuil);
+  s += b;
+  auto stat = [&](const char *nom, const MtStat &t) {
+    const double moy = t.n ? (double)t.somme / t.n : 0;
+    double var = t.n ? (double)t.somme2 / t.n - moy * moy : 0;
+    if (var < 0) var = 0;
+    const bool fen = t.n && t.moyMin != UINT32_MAX;
+    snprintf(b, sizeof(b),
+             ",\"%s\":{\"n\":%lu,\"moy\":%.1f,\"ect\":%.1f,\"min\":%lu,\"max\":%lu,\"moy_min\":%lu,\"moy_max\":%lu,\"faux\":%lu}",
+             nom, (unsigned long)t.n, moy, sqrt(var), (unsigned long)(t.n ? t.mini : 0), (unsigned long)t.maxi,
+             (unsigned long)(fen ? t.moyMin : 0), (unsigned long)(fen ? t.moyMax : 0), (unsigned long)t.faux);
+    s += b;
+  };
+  stat("repos", c[1]);
+  stat("doigt", c[2]);
+  stat("adhan", c[3]);
+  s += ",\"pts\":[";
+  char t[12];
+  for (uint32_t i = depuis; i < seq; i++) {
+    if (i > depuis) s += ',';
+    ultoa(mt_tampon ? mt_tampon[i % MT_TAMPON] : 0, t, 10);
+    s += t;
+  }
+  s += "]}";
+  server.sendHeader("Cache-Control", "no-store");
+  server.send(200, "application/json", s);
+}
+
+void handleMesurePhase() {
+  if (!mt_pret) { server.send(503, "application/json", "{\"erreur\":\"capteur non demarre\"}"); return; }
+  const int p = server.arg("p").toInt();
+  if (p == 1 || p == 2) mtDebut((uint8_t)p, MT_PHASE_MS);
+  else mt_phase = 0;
+  handleMesureJson();
+}
+
+// La box joue la piste au volume demande et mesure jusqu'a la fin. La phase
+// commence AVANT la lecture : le demarrage de l'ampli fait partie des parasites.
+void handleMesureAdhan() {
+  if (!mt_pret) { server.send(503, "application/json", "{\"erreur\":\"capteur non demarre\"}"); return; }
+  if (!audio.sdOk()) { server.send(503, "application/json", "{\"erreur\":\"carte SD absente\"}"); return; }
+  mt_piste = constrain(server.arg("piste").toInt(), 1, PISTE_MAX);
+  mt_vol = constrain(server.arg("vol").toInt(), 0, 30);
+  mtDebut(3, MT_ADHAN_MAX_MS);
+  audio.volume(mt_vol);
+  if (!playTrack(mt_piste)) {
+    mt_phase = 0;
+    server.send(404, "application/json", "{\"erreur\":\"piste introuvable sur la carte\"}");
+    return;
+  }
+  handleMesureJson();
+}
+
+void handleMesureStop() {
+  if (audio.isRunning()) stopPlay("mesure");
+  mt_phase = 0;
+  handleMesureJson();
+}
+
+// NB : comme pour index_html, que des fonctions ANONYMES dans le script (le
+// generateur de prototypes d'Arduino ramasse « function nom(){ » en debut de
+// ligne, meme dans une chaine).
+const char mesure_html[] PROGMEM = R"MESURE(<!DOCTYPE html>
+<html lang="fr"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AdhanBox — Mesure du tactile</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,system-ui,sans-serif;background:#0f1512;color:#eaf2ed;padding:16px;max-width:560px;margin:0 auto;line-height:1.45}
+  h1{font-size:19px;margin:6px 0 2px}
+  .sous{font-size:13px;color:#9fb0a7;margin-bottom:14px}
+  .card{background:#16201b;border:1px solid #26332c;border-radius:14px;padding:14px;margin-bottom:12px}
+  .card h2{font-size:15px;margin-bottom:4px}
+  .hint{font-size:13px;color:#9fb0a7;margin-bottom:6px}
+  .gros{font-size:34px;font-weight:700;font-variant-numeric:tabular-nums}
+  .petit{font-size:12.5px;color:#9fb0a7}
+  canvas{width:100%;height:150px;display:block;margin-top:8px;background:#0f1512;border-radius:10px}
+  button{display:block;width:100%;border:none;border-radius:11px;padding:13px;font-size:15px;font-weight:600;color:#fff;background:#12A67B;margin-top:8px}
+  button:disabled{opacity:.45}
+  button.rouge{background:#EF4444}
+  .res{font-size:13.5px;margin-top:8px;font-variant-numeric:tabular-nums}
+  .ligne{display:flex;gap:10px;align-items:center;margin-top:8px;font-size:14px}
+  .ligne input[type=number]{width:70px;padding:9px;border-radius:9px;border:1px solid #26332c;background:#0f1512;color:#fff;font-size:15px}
+  .ligne input[type=range]{flex:1}
+  .verdict{font-size:15px;font-weight:600;margin-top:4px}
+  .ok{color:#34d399}
+  .moyen{color:#fbbf24}
+  .mauvais{color:#f87171}
+  table{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:10px;font-variant-numeric:tabular-nums}
+  td,th{padding:5px 3px;border-bottom:1px solid #26332c;text-align:right;font-weight:400}
+  th{color:#9fb0a7}
+  td:first-child,th:first-child{text-align:left}
+</style></head><body>
+<h1>Mesure du tactile intégré</h1>
+<p class="sous">Pastille de cuivre sur la broche du milieu de J4, boîte fermée. Fais les trois mesures dans l'ordre.</p>
+
+<div class="card">
+  <div class="gros" id="brut">…</div>
+  <div class="petit" id="etat">connexion…</div>
+  <canvas id="courbe" width="1040" height="300"></canvas>
+</div>
+
+<div class="card">
+  <h2>1. Repos</h2>
+  <p class="hint">Ne touche à rien, aucun son. Dure 10 secondes.</p>
+  <button id="b1">Mesurer le repos</button>
+  <div class="res" id="r1">—</div>
+</div>
+
+<div class="card">
+  <h2>2. Doigt posé</h2>
+  <p class="hint">Pose le doigt sur le motif et garde-le posé, puis lance. Dure 10 secondes.</p>
+  <button id="b2">Mesurer avec le doigt</button>
+  <div class="res" id="r2">—</div>
+</div>
+
+<div class="card">
+  <h2>3. Adhan fort, sans toucher</h2>
+  <p class="hint">La box joue la piste au volume choisi. Ne la touche pas pendant la lecture.</p>
+  <div class="ligne"><span>Piste</span><input type="number" id="piste" min="1" max="99" value="2">
+    <span>Volume</span><input type="range" id="vol" min="1" max="30" value="20"><b id="volTxt">20</b></div>
+  <button id="b3">Jouer l'adhan et mesurer</button>
+  <button id="bStop" class="rouge">Arrêter</button>
+  <div class="res" id="r3">—</div>
+</div>
+
+<div class="card">
+  <h2>Résultat</h2>
+  <div class="verdict" id="verdict">Fais les trois mesures.</div>
+  <table id="tab"></table>
+</div>
+
+<script>
+  var $ = function(id){ return document.getElementById(id); };
+  var seq = 0, pts = [], dernier = null, MAXPTS = 1200;
+  var fmt = function(v){ return Math.round(v).toLocaleString('fr-FR'); };
+  var signe = function(v){ return (v >= 0 ? '+' : '−') + fmt(Math.abs(v)); };
+  var pct = function(v, ref){ return ref ? (v / ref * 100).toFixed(2).replace('.', ',') + ' %' : ''; };
+
+  var tracer = function(){
+    var c = $('courbe'), g = c.getContext('2d'), W = c.width, H = c.height;
+    g.clearRect(0, 0, W, H);
+    if (pts.length < 2) return;
+    var mn = Infinity, mx = -Infinity, i;
+    for (i = 0; i < pts.length; i++) { if (pts[i] < mn) mn = pts[i]; if (pts[i] > mx) mx = pts[i]; }
+    var repos = dernier && dernier.repos.n ? dernier.repos.moy : null;
+    var seuil = dernier && dernier.seuil ? dernier.seuil : null;
+    if (repos !== null) { mn = Math.min(mn, repos); mx = Math.max(mx, repos); }
+    if (seuil !== null) { mn = Math.min(mn, seuil); mx = Math.max(mx, seuil); }
+    var marge = Math.max((mx - mn) * 0.08, 4);
+    mn -= marge; mx += marge;
+    var y = function(v){ return H - (v - mn) / (mx - mn) * H; };
+    var trait = function(v, couleur){
+      g.strokeStyle = couleur; g.lineWidth = 2; g.setLineDash([10, 8]);
+      g.beginPath(); g.moveTo(0, y(v)); g.lineTo(W, y(v)); g.stroke(); g.setLineDash([]);
+    };
+    if (repos !== null) trait(repos, '#5b6b63');
+    if (seuil !== null) trait(seuil, '#EBD9A8');
+    g.strokeStyle = '#34d399'; g.lineWidth = 2.5; g.beginPath();
+    for (i = 0; i < pts.length; i++) {
+      var x = i / (MAXPTS - 1) * W;
+      if (i === 0) g.moveTo(x, y(pts[i])); else g.lineTo(x, y(pts[i]));
+    }
+    g.stroke();
+  };
+
+  var resultat = function(j){
+    var R = j.repos, D = j.doigt, A = j.adhan;
+    var ecart = function(t){ return Math.max(t.moy_max - t.moy, t.moy - t.moy_min, 0); };
+    $('r1').textContent = R.n ? 'moyenne ' + fmt(R.moy) + ' · parasites ±' + fmt(ecart(R)) + ' (' + pct(ecart(R), R.moy) + ')' : '—';
+    $('r2').textContent = !D.n ? '—' : !R.n ? 'moyenne ' + fmt(D.moy) + ' (mesure aussi le repos)'
+      : 'moyenne ' + fmt(D.moy) + ' · signal du doigt ' + signe(D.moy - R.moy) + ' (' + pct(D.moy - R.moy, R.moy) + ')';
+    var ref = R.n ? R.moy : A.moy;
+    $('r3').textContent = !A.n ? '—'
+      : 'pire écart vers le haut ' + signe(A.moy_max - ref) + ' · vers le bas ' + signe(A.moy_min - ref)
+        + (j.seuil ? ' · faux appuis : ' + A.faux : '') + ' · ' + Math.round(A.n / j.hz) + ' s mesurées';
+    var v = $('verdict'), txt = 'Fais les trois mesures.', cls = '';
+    if (R.n && D.n) {
+      var signal = D.moy - R.moy;
+      if (signal <= 0) { txt = 'Le doigt ne fait pas monter la mesure : pastille ou fil mal branché ?'; cls = 'mauvais'; }
+      else if (!A.n) { txt = 'Signal du doigt : ' + signe(signal) + '. Lance maintenant la mesure pendant l\'adhan.'; }
+      else {
+        var haut = Math.max(A.moy_max - R.moy, 1);
+        var m = signal / haut;
+        txt = 'Le doigt est ' + m.toFixed(1).replace('.', ',') + ' fois plus fort que le pire parasite de l\'adhan';
+        if (m >= 3) { txt += ' : confortable.'; cls = 'ok'; }
+        else if (m >= 1.5) { txt += ' : jouable, avec une protection quand le son parasite.'; cls = 'moyen'; }
+        else { txt += ' : insuffisant.'; cls = 'mauvais'; }
+        if (j.seuil) txt += ' Un détecteur simple aurait vu ' + A.faux + ' faux appui' + (A.faux > 1 ? 's' : '') + '.';
+      }
+    }
+    v.textContent = txt; v.className = 'verdict ' + cls;
+    var rang = function(nom, t){
+      return '<tr><td>' + nom + '</td><td>' + (t.n ? fmt(t.moy) : '—') + '</td><td>' + (t.n ? fmt(t.min) + ' – ' + fmt(t.max) : '—')
+        + '</td><td>' + (t.n ? fmt(t.moy_min) + ' – ' + fmt(t.moy_max) : '—') + '</td></tr>';
+    };
+    $('tab').innerHTML = '<tr><th></th><th>moyenne</th><th>brut, min – max</th><th>lissé 0,1 s, min – max</th></tr>'
+      + rang('Repos', R) + rang('Doigt', D) + rang('Adhan', A);
+  };
+
+  var peindre = function(j){
+    if (j.erreur) { $('etat').textContent = j.erreur; return; }
+    dernier = j;
+    if (j.seq < seq) pts = [];
+    if (j.pts) { for (var i = 0; i < j.pts.length; i++) pts.push(j.pts[i]); }
+    if (pts.length > MAXPTS) pts = pts.slice(pts.length - MAXPTS);
+    seq = j.seq;
+    $('brut').textContent = fmt(j.brut);
+    var noms = ['', 'mesure du repos', 'mesure avec le doigt', 'mesure pendant l\'adhan'];
+    $('etat').textContent = !j.pret ? 'capteur non démarré'
+      : (j.phase ? noms[j.phase] + ' en cours' + (j.phase < 3 ? ' — encore ' + Math.ceil(j.reste_ms / 1000) + ' s' : '') : 'en attente')
+        + (j.joue ? ' · son en cours' : '') + ' · lissé ' + fmt(j.lisse) + ' · base ' + fmt(j.base);
+    $('b1').disabled = $('b2').disabled = $('b3').disabled = (j.phase !== 0);
+    resultat(j);
+    tracer();
+  };
+
+  var appel = function(url){
+    return fetch(url).then(function(r){ return r.json(); }).then(peindre)
+      .catch(function(){ $('etat').textContent = 'la box ne répond pas'; });
+  };
+
+  $('vol').oninput = function(){ $('volTxt').textContent = $('vol').value; };
+  $('b1').onclick = function(){ appel('/api/mesure/phase?p=1'); };
+  $('b2').onclick = function(){ appel('/api/mesure/phase?p=2'); };
+  $('b3').onclick = function(){ appel('/api/mesure/adhan?piste=' + $('piste').value + '&vol=' + $('vol').value); };
+  $('bStop').onclick = function(){ appel('/api/mesure/stop'); };
+  setInterval(function(){ appel('/api/mesure?depuis=' + seq); }, 400);
+  appel('/api/mesure');
+</script>
+</body></html>
+)MESURE";
+
+void handleMesurePage() {
+  server.sendHeader("Cache-Control", "no-store");
+  server.send_P(200, "text/html", mesure_html);
+}
+#endif   // MESURE_TACTILE
+
 /// Enregistre toutes les routes du serveur HTTP
 void setupServerRoutes() {
   // Déclarer les headers HTTP personnalisés à conserver (obligatoire pour server.header())
@@ -3779,6 +4218,8 @@ void setupServerRoutes() {
   server.on("/api/rituels", HTTP_POST, handleSetRituels);         // [RITUELS]
   server.on("/api/content/sync", HTTP_POST, handleContentSync);
   server.on("/api/content/status", HTTP_GET, handleContentStatus);
+  server.on("/api/sd/test", HTTP_POST, handleSdTest);            // [SD TEST] lancer (cle API)
+  server.on("/api/sd/test", HTTP_GET, handleSdTest);             // [SD TEST] resultat
   server.on("/api/audio/list", HTTP_GET, handleAudioList);
   server.on("/api/audio/status", HTTP_GET, handleAudioStatus);   // [PLAYER] etat de lecture
   server.on("/api/audio/pause", HTTP_GET, handleAudioPause);     // [PLAYER] pause
@@ -3789,6 +4230,13 @@ void setupServerRoutes() {
   server.on("/api/mosquee", HTTP_POST, handleMosqueeSet);    // [MOSQUEE] activer / regler
   server.on("/api/direct", HTTP_GET, handleDirect);          // [DIRECT] Wi-Fi de la box
   server.on("/api/direct", HTTP_POST, handleDirect);         // [DIRECT] ouvrir / fermer / permanent
+#if MESURE_TACTILE
+  server.on("/mesure", HTTP_GET, handleMesurePage);          // [MESURE] firmware d'atelier, sans jeton
+  server.on("/api/mesure", HTTP_GET, handleMesureJson);
+  server.on("/api/mesure/phase", HTTP_GET, handleMesurePhase);
+  server.on("/api/mesure/adhan", HTTP_GET, handleMesureAdhan);
+  server.on("/api/mesure/stop", HTTP_GET, handleMesureStop);
+#endif
 #if ENABLE_BLE
   // Depuis la page web de la box : demande l'appairage BLE. Demarrer le BLE A CHAUD
   // (WiFi+web+audio en RAM) manque de memoire -> crash. On memorise la demande et on
@@ -3891,6 +4339,9 @@ void checkConfigButton(){
   // la polarite. Un "appui" = niveau oppose au repos.
   if(!inited){ idleLevel = digitalRead(CONFIG_BUTTON_PIN); lastState = idleLevel; inited = true; return; }
   if(!boutonActif) return;          // [BOUTON] capteur coupe pour ce boitier
+#if MESURE_TACTILE
+  return;                           // [MESURE] la broche est en mesure tactile, plus de lecture numerique
+#endif
 
   // [COUPURE] Avant : la PREMIERE lecture d'un niveau « appuye » declenchait,
   // une impulsion de quelques ms suffisait. Une nappe de haut-parleur qui passe
@@ -6077,7 +6528,7 @@ int v2SyncContent() {
   //     joue : la SD n'est pas partageable, chaque ecriture de la synchro gelait
   //     les lectures du decodeur (gels de 100 a 300 ms mesures).
   static uint8_t morceau[4096];            // statique : pas sur la pile de la tache
-  int added = 0, start = 0;
+  int added = 0, start = 0, echecs = 0;
   while (start < (int)man.length()) {
     int nl = man.indexOf('\n', start);
     String line = (nl < 0) ? man.substring(start) : man.substring(start, nl);
@@ -6091,8 +6542,27 @@ int v2SyncContent() {
 
     if (SD.exists(path)) { _syncMsg += " " + path + "=present"; continue; }   // regle 1
 
+    // ── [SYNCHRO 3.0.53] Reprise par morceaux ─────────────────────────────
+    // Mesure le 06/10/2026 sur une box reelle : CHAQUE telechargement HTTPS
+    // s'arretait apres ~80 Ko (cinq enregistrements TLS), quel que soit
+    // l'hebergeur (GitHub, puis Vercel), suivi de 60 s d'attente et d'un
+    // abandon : aucune des 23 voix du 24/09 n'est jamais arrivee sur une box.
+    // En attendant la cause exacte (journal serie), la synchro devient robuste
+    // a une coupure : le .part est GARDE, chaque nouvelle connexion reprend la
+    // ou la precedente s'est arretee (en-tete Range, reponse 206), et la
+    // raison de la premiere coupure est notee dans _syncMsg, que l'on peut
+    // lire sur toute box avec /api/content/status.
+    // VERDICT du 06/10 au soir, grace a ce motif : « sd@81048 » sur chaque
+    // fichier. Ce n'est pas le reseau : la CARTE SD refuse une ecriture apres
+    // ~80 Ko d'affilee. Le pilote SPI du noyau n'attend que 500 ms qu'elle
+    // soit prete (sdWait), et certaines cartes mettent plus longtemps a
+    // programmer leur memoire apres une rafale. D'ou : f.flush() tous les
+    // 32 Ko pour que la taille enregistree suive, et sur ecriture refusee on
+    // ferme, on laisse la carte souffler, on relit la taille reelle du .part
+    // et on reprend la ou elle en est vraiment (Range), au lieu d'abandonner.
     const String part = path + ".part";
-    if (SD.exists(part)) SD.remove(part);    // reste d'une tentative precedente
+    int written = 0;
+    { File p = SD.open(part, FILE_READ); if (p) { written = p.size(); p.close(); } }
     // creer les dossiers parents un par un (/a puis /a/b etc.)
     for (int i = 1; i < (int)path.length(); i++) {
       if (path[i] == '/') {
@@ -6103,56 +6573,101 @@ int v2SyncContent() {
       }
     }
 
-    WiFiClientSecure c2; securiser(c2);   // [TLS] idem pour chaque fichier
-    HTTPClient h2;
-    if (!h2.begin(c2, url)) { _syncMsg += " " + path + "=beginFail"; continue; }
-    h2.setConnectTimeout(15000);
-    h2.setTimeout(60000);
-    h2.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
-    int gc = h2.GET();
-    int expected = h2.getSize();             // Content-Length (-1 si inconnu)
-    if (gc != 200) { _syncMsg += " " + path + "=" + String(gc); h2.end(); continue; }
-
-    File f = SD.open(part, FILE_WRITE);
-    if (!f) { _syncMsg += " " + path + "=openFail"; h2.end(); continue; }
-    WiFiClient *flux = h2.getStreamPtr();
-    int written = 0; bool ok = true;
-    unsigned long dernierOctet = millis();
-    while (expected < 0 || written < expected) {
-      if (_syncAbandon || audio.isRunning()) {   // regle 3 : l'adhan d'abord, on rend TOUT
-        ok = false; _syncMsg += " " + path + "=abandon(adhan)"; break;
+    int total = -1, tentatives = 0, sansProgres = 0;
+    bool ok = false;
+    String motif;
+    while (tentatives < 60 && !ok) {
+      if (_syncAbandon || audio.isRunning()) break;
+      tentatives++;
+      WiFiClientSecure c2; securiser(c2);   // [TLS] idem pour chaque fichier
+      HTTPClient h2;
+      if (!h2.begin(c2, url)) { motif = "beginFail"; break; }
+      h2.setConnectTimeout(15000);
+      h2.setTimeout(15000);
+      h2.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
+      if (written > 0) h2.addHeader("Range", "bytes=" + String(written) + "-");
+      int gc = h2.GET();
+      if (gc == 200 && written > 0) { written = 0; SD.remove(part); }   // serveur sans Range : on repart de zero
+      if (gc != 200 && gc != 206) { motif = "http" + String(gc); h2.end(); break; }
+      const int taille = h2.getSize();         // 200 : tout ; 206 : ce qui reste
+      if (taille > 0) total = written + taille;
+      File f = SD.open(part, written > 0 ? FILE_APPEND : FILE_WRITE);
+      if (!f) { motif = "openFail"; h2.end(); break; }
+      WiFiClient *flux = h2.getStreamPtr();
+      const int depart = written;
+      bool sdRefuse = false, silence = false;
+      unsigned long dernierOctet = millis();
+      while (total < 0 || written < total) {
+        if (_syncAbandon || audio.isRunning()) break;             // regle 3 : l'adhan d'abord
+        if (!h2.connected() && !flux->available()) break;        // connexion fermee
+        size_t dispo = flux->available();
+        if (!dispo) {
+          if (millis() - dernierOctet > 15000UL) { silence = true; break; }   // 15 s sans un octet : connexion morte
+          vTaskDelay(pdMS_TO_TICKS(20));
+          continue;
+        }
+        int n = flux->read(morceau, dispo > sizeof(morceau) ? sizeof(morceau) : dispo);
+        if (n <= 0) { vTaskDelay(pdMS_TO_TICKS(20)); continue; }
+        if ((int)f.write(morceau, n) != n) { sdRefuse = true; break; }   // la SD a refuse
+        written += n; dernierOctet = millis();
+        if ((written & 0x7FFF) < n) f.flush();   // tous les 32 Ko : la taille sur la carte suit
+        vTaskDelay(1);                          // laisse respirer loop() et l'audio
       }
-      if (!h2.connected() && !flux->available()) break;
-      size_t dispo = flux->available();
-      if (!dispo) {
-        if (millis() - dernierOctet > 60000UL) { ok = false; break; }   // 60 s sans un octet
-        vTaskDelay(pdMS_TO_TICKS(20));
-        continue;
+      f.close();
+      char err[80] = "";
+      c2.lastError(err, sizeof(err));
+      h2.end();
+      if (total > 0 && written >= total && !sdRefuse) { ok = true; break; }
+      if (_syncAbandon || audio.isRunning()) break;
+      if (sdRefuse) {
+        // La carte a refuse : elle finit d'ecrire. On la laisse souffler, de plus
+        // en plus longtemps (0,8 s puis 1,6, 3,2, 6,4 s : mesure le 06/10, 9 fichiers
+        // sur 23 echouaient encore avec 0,8 s fixe), puis on repart de ce qu'elle a
+        // REELLEMENT enregistre (taille du .part).
+        vTaskDelay(pdMS_TO_TICKS(800UL << (sansProgres < 3 ? sansProgres : 3)));
+        int reel = 0;
+        { File p = SD.open(part, FILE_READ); if (p) { reel = p.size(); p.close(); } }
+        if (motif.length() == 0) motif = "sd@" + String(written) + "->" + String(reel);
+        written = reel;
+      } else if (motif.length() == 0) {       // la premiere coupure dit pourquoi
+        motif = String(silence ? "silence15s@" : "coupure@") + String(written);
+        if (err[0]) motif += String("[") + err + "]";
       }
-      int n = flux->read(morceau, dispo > sizeof(morceau) ? sizeof(morceau) : dispo);
-      if (n <= 0) { vTaskDelay(pdMS_TO_TICKS(20)); continue; }
-      if ((int)f.write(morceau, n) != n) { ok = false; break; }   // la SD a refuse
-      written += n; dernierOctet = millis();
-      vTaskDelay(1);                          // laisse respirer loop() et l'audio
+      if (written <= depart) { if (++sansProgres >= 6) break; }   // six connexions sans avancer : inutile d'insister
+      else sansProgres = 0;
+      vTaskDelay(pdMS_TO_TICKS(300));
     }
-    f.close(); h2.end();
 
-    if (!ok || (expected > 0 && written != expected)) {          // regle 2
-      SD.remove(part);
-      if (_syncAbandon || audio.isRunning()) {
-        _syncAFaire = true; _syncPasAvant = millis() + 120000UL;   // on reviendra
-        Serial.printf("[sync] %s abandonne pour laisser jouer l'adhan, reprise dans 2 min\n", path.c_str());
-        return added;
-      }
-      _syncMsg += " " + path + "=TRUNC(" + String(written) + "/" + String(expected) + ")";
-      Serial.printf("[sync] TRONQUE %s (%d/%d octets) -> .part supprime, rien touche\n", path.c_str(), written, expected);
+    if (ok) {
+      if (!SD.rename(part, path)) { SD.remove(part); _syncMsg += " " + path + "=renameFail"; continue; }
+      added++;
+      _syncMsg += " " + path + "=ok(" + String(written) + ")";
+      if (tentatives > 1) _syncMsg += "/" + String(tentatives) + "cx" + (motif.length() ? ":" + motif : String(""));
+      Serial.printf("[sync] + %s (%d octets, %d connexion(s))\n", path.c_str(), written, tentatives);
       continue;
     }
-    if (!SD.rename(part, path)) { SD.remove(part); _syncMsg += " " + path + "=renameFail"; continue; }
-    added++; _syncMsg += " " + path + "=ok(" + String(written) + ")";
-    Serial.printf("[sync] + %s (%d octets)\n", path.c_str(), written);
+    // Echec : le .part reste en place, la prochaine synchro reprendra au meme octet.
+    if (_syncAbandon || audio.isRunning()) {
+      _syncAFaire = true; _syncPasAvant = millis() + 120000UL;   // on reviendra
+      Serial.printf("[sync] %s suspendu a %d octets pour laisser jouer l'adhan, reprise dans 2 min\n", path.c_str(), written);
+      return added;
+    }
+    echecs++;
+    _syncMsg += " " + path + "=ECHEC(" + String(written) + "/" + String(total) + ")" + (motif.length() ? ":" + motif : String(""));
+    Serial.printf("[sync] ECHEC %s a %d/%d octets : %s (le .part est garde)\n", path.c_str(), written, total, motif.c_str());
   }
-  Serial.printf("[sync] %d fichier(s) ajoute(s)\n", added);
+  Serial.printf("[sync] %d fichier(s) ajoute(s), %d en echec\n", added, echecs);
+  // Des fichiers manquent encore : on repasse dans 2 min, au plus six passes
+  // par demarrage. Avant, il fallait rebrancher la box pour qu'elle reessaie
+  // (mesure le 06/10 : 14 voix sur 23 en une passe, les .part gardes font
+  // repartir les autres de la ou elles en sont).
+  static int passes = 0;
+  passes++;
+  if (echecs > 0 && passes < 6) {
+    _syncAFaire = true; _syncPasAvant = millis() + 120000UL;
+    _syncMsg += " (nouvelle passe dans 2 min, " + String(passes) + "/6)";
+    Serial.printf("[sync] %d fichier(s) en echec : nouvelle passe dans 2 min (%d/6)\n", echecs, passes);
+  }
   return added;
 }
 // Synchro lancee en TACHE DE FOND (sinon le download bloque le serveur HTTP
@@ -6180,6 +6695,192 @@ void handleContentStatus() {
              ",\"added\":" + String(_syncAdded) +
              ",\"msg\":\"" + _syncMsg + "\"}";
   server.send(200, "application/json", j);
+}
+
+// ── [SD TEST] Banc d'ecriture de la carte SD, par le reseau (3.0.54) ────────
+// POST /api/sd/test?ko=2048 (cle API) : ecrit N Ko dans /sdtest.bin par
+// morceaux de 4 Ko, compte les REFUS de la carte (ecriture partielle : la carte
+// est restee occupee plus de 500 ms, la limite du pilote du core), note le
+// morceau le plus lent et les positions des refus, relit tout en verifiant
+// chaque octet, puis supprime le fichier. GET /api/sd/test : le resultat.
+// POST /api/sd/test?url=https://... : meme chose mais avec un VRAI
+// telechargement TLS comme source, pour reproduire la synchro a la demande
+// (Wi-Fi + TLS + carte en meme temps) ; la relecture rend un CRC32 a comparer
+// a l'original. Ecrit le 07/10/2026 pour departager carte SD et carte-mere
+// sans ouvrir le boitier : sur DCFE77F61B44, une voix de 2,8 Mo avait demande
+// 8 connexions avec une carte neuve, alors que 512 Ko generes passaient sans
+// un refus. Sert aussi au banc avant livraison.
+String _sdTestMsg = "null";
+String _sdTestUrl;              // vide : contenu genere ; sinon : telechargement reel
+// Compteurs du pilote SD instrumente (outils_production/sd_diskio_diag.py) :
+// symboles faibles, le firmware se compile et tourne aussi sur un core non
+// patche (le test rend alors "diag":null).
+extern "C" {
+  extern volatile uint32_t sd_diag_echecs __attribute__((weak));
+  extern volatile uint32_t sd_diag_secteur __attribute__((weak));
+  extern volatile uint32_t sd_diag_busy_max_ms __attribute__((weak));
+  extern volatile uint8_t  sd_diag_etape __attribute__((weak));
+  extern volatile uint8_t  sd_diag_token __attribute__((weak));
+}
+static inline bool sdDiagDispo() { return &sd_diag_echecs != nullptr; }
+static String sdDiagJson() {
+  if (!sdDiagDispo()) return "null";
+  char b[120];
+  snprintf(b, sizeof(b), "{\"echecs\":%lu,\"etape\":%u,\"token\":\"0x%02x\",\"secteur\":%lu,\"busy_max_ms\":%lu}",
+           (unsigned long)sd_diag_echecs, (unsigned)sd_diag_etape, (unsigned)sd_diag_token,
+           (unsigned long)sd_diag_secteur, (unsigned long)sd_diag_busy_max_ms);
+  return String(b);
+}
+int _sdTestKo = 2048;
+static inline uint8_t sdTestOctet(uint32_t i) {   // contenu fonction de la position : reprise facile
+  uint32_t x = i * 2654435761UL; x ^= x >> 15;
+  return (uint8_t)(x ^ (x >> 8));
+}
+static inline uint32_t sdTestCrc(uint32_t crc, uint8_t o) {
+  crc ^= o;
+  for (int k = 0; k < 8; k++) crc = (crc >> 1) ^ (0xEDB88320UL & (0UL - (crc & 1UL)));
+  return crc;
+}
+void _sdTestTask(void*) {
+  _sdTestRunning = true;
+  static uint8_t buf[4096];
+  const char *chemin = "/sdtest.bin";
+  const bool enLigne = _sdTestUrl.length() > 0;
+  uint32_t total = enLigne ? 0 : (uint32_t)_sdTestKo * 1024UL;
+  uint32_t ecrit = 0, refus = 0, pireMs = 0, lu = 0, erreurs = 0, perdus = 0, crc = 0xFFFFFFFFUL;
+  int http = 0;
+  String positions, motif;
+  WiFiClientSecure *c2 = nullptr; HTTPClient *h2 = nullptr; WiFiClient *flux = nullptr;
+  unsigned long dernierOctet = millis();
+  if (sdDiagDispo()) { sd_diag_echecs = 0; sd_diag_etape = 0; sd_diag_token = 0; sd_diag_secteur = 0; sd_diag_busy_max_ms = 0; }
+  if (enLigne) {
+    c2 = new WiFiClientSecure(); securiser(*c2); h2 = new HTTPClient();
+    if (!h2->begin(*c2, _sdTestUrl)) motif = "beginFail";
+    else {
+      h2->setConnectTimeout(15000); h2->setTimeout(15000);
+      h2->setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
+      http = h2->GET();
+      if (http != 200) motif = "http" + String(http);
+      else { total = h2->getSize() > 0 ? (uint32_t)h2->getSize() : 0; flux = h2->getStreamPtr(); }
+    }
+  }
+  SD.remove(chemin);
+  unsigned long t0 = millis();
+  File f;
+  if (motif.length() == 0) { f = SD.open(chemin, FILE_WRITE); if (!f) motif = "openFail"; }
+  bool rejouer = false; uint32_t n = 0;
+  while (f && (enLigne ? (total == 0 || ecrit + perdus < total) : ecrit < total)) {
+    if (_syncAbandon || audio.isRunning()) { motif = "interrompu(lecture)"; break; }
+    if (!rejouer) {
+      if (enLigne) {
+        if (!h2->connected() && !flux->available()) { if (total == 0) total = ecrit + perdus; break; }   // fin du flux
+        const size_t dispo = flux->available();
+        if (!dispo) {
+          if (millis() - dernierOctet > 15000UL) { motif = "silence15s"; break; }
+          vTaskDelay(pdMS_TO_TICKS(20)); continue;
+        }
+        const int lus = flux->read(buf, dispo > sizeof(buf) ? sizeof(buf) : dispo);
+        if (lus <= 0) { vTaskDelay(pdMS_TO_TICKS(20)); continue; }
+        n = (uint32_t)lus; dernierOctet = millis();
+      } else {
+        n = (total - ecrit) < sizeof(buf) ? (total - ecrit) : sizeof(buf);
+        for (uint32_t i = 0; i < n; i++) buf[i] = sdTestOctet(ecrit + i);
+      }
+    }
+    rejouer = false;
+    const unsigned long a = millis();
+    const size_t w = f.write(buf, n);
+    const unsigned long d = millis() - a;
+    if (d > pireMs) pireMs = d;
+    if (w == n) {
+      ecrit += n;
+      if ((ecrit & 0x7FFF) < n) f.flush();   // tous les 32 Ko, comme la synchro
+      vTaskDelay(1);
+      continue;
+    }
+    // Refus : la carte est restee occupee au-dela des 500 ms du pilote. On la
+    // laisse finir, on relit ce qu'elle a vraiment garde, on repart de la.
+    refus++;
+    f.close();
+    vTaskDelay(pdMS_TO_TICKS(800));
+    uint32_t reel = 0;
+    { File p = SD.open(chemin, FILE_READ); if (p) { reel = p.size(); p.close(); } }
+    if (positions.length() < 400) {
+      positions += String(positions.length() ? "," : "") + String(ecrit) + ">" + String(reel);
+      if (sdDiagDispo()) {   // etape et reponse de la carte pour CE refus
+        char e[16]; snprintf(e, sizeof(e), "@e%u:%02x", (unsigned)sd_diag_etape, (unsigned)sd_diag_token);
+        positions += e;
+      }
+    }
+    if (enLigne) {
+      // Le flux ne revient pas en arriere : ce que la carte a laisse tomber
+      // AVANT ce morceau est perdu pour le fichier ; le morceau, lui, est rejoue.
+      perdus += (ecrit > reel) ? (ecrit - reel) : 0;
+      rejouer = true;
+    }
+    ecrit = reel;
+    if (refus >= 50) { motif = "tropDeRefus"; break; }
+    f = SD.open(chemin, FILE_APPEND);
+    if (!f) { motif = "reopenFail"; break; }
+  }
+  if (f) f.close();
+  if (h2) { h2->end(); delete h2; }
+  if (c2) delete c2;
+  const unsigned long dureeEcr = millis() - t0;
+  // Relecture : chaque octet compare a ce qu'on a voulu ecrire (contenu
+  // genere), CRC32 dans tous les cas.
+  t0 = millis();
+  File r = SD.open(chemin, FILE_READ);
+  if (r) {
+    const uint32_t taille = r.size();
+    while (lu < taille) {
+      const int m = r.read(buf, sizeof(buf));
+      if (m <= 0) break;
+      for (int i = 0; i < m; i++) {
+        if (!enLigne && buf[i] != sdTestOctet(lu + i)) erreurs++;
+        crc = sdTestCrc(crc, buf[i]);
+      }
+      lu += m;
+      vTaskDelay(1);
+    }
+    r.close();
+  } else if (motif.length() == 0) motif = "relectureFail";
+  crc ^= 0xFFFFFFFFUL;
+  const unsigned long dureeLec = millis() - t0;
+  SD.remove(chemin);
+  char crcTxt[12]; snprintf(crcTxt, sizeof(crcTxt), "%08lx", (unsigned long)crc);
+  _sdTestMsg = String("{\"mode\":\"") + (enLigne ? "ligne" : "genere") + "\",\"ko\":" + String(_sdTestKo) +
+               ",\"total\":" + String(total) + ",\"http\":" + String(http) +
+               ",\"ecrit\":" + String(ecrit) + ",\"perdus\":" + String(perdus) + ",\"refus\":" + String(refus) +
+               ",\"pire_ms\":" + String(pireMs) + ",\"ecriture_s\":" + String(dureeEcr / 1000.0, 1) +
+               ",\"ko_par_s\":" + String(dureeEcr ? (ecrit / 1024.0) / (dureeEcr / 1000.0) : 0.0, 1) +
+               ",\"lu\":" + String(lu) + ",\"erreurs\":" + String(erreurs) + ",\"crc32\":\"" + crcTxt +
+               "\",\"lecture_s\":" + String(dureeLec / 1000.0, 1) +
+               ",\"positions\":\"" + positions + "\",\"motif\":\"" + motif + "\",\"diag\":" + sdDiagJson() + "}";
+  Serial.printf("[sdtest] %s\n", _sdTestMsg.c_str());
+  _sdTestRunning = false;
+  vTaskDelete(nullptr);
+}
+void handleSdTest() {
+  if (server.method() == HTTP_POST) {
+    if (!requireApiKey()) return;  // [SECU] auth requise
+    if (_sdTestRunning) { server.send(409, "application/json", "{\"erreur\":\"test deja en cours\"}"); return; }
+    if (_syncRunning || audio.isRunning()) { server.send(409, "application/json", "{\"erreur\":\"synchro ou lecture en cours\"}"); return; }
+    int ko = server.hasArg("ko") ? server.arg("ko").toInt() : 2048;
+    if (ko < 64) ko = 64;
+    if (ko > 16384) ko = 16384;
+    _sdTestKo = ko; _sdTestMsg = "null";
+    _sdTestUrl = server.hasArg("url") ? server.arg("url") : String();
+    // En ligne : pile large pour TLS, comme la synchro
+    if (xTaskCreate(_sdTestTask, "sdtest", _sdTestUrl.length() ? 32768 : 8192, nullptr, 1, nullptr) != pdPASS) {
+      _sdTestMsg = "{\"erreur\":\"tache non creee\"}";
+      server.send(500, "application/json", _sdTestMsg);
+      return;
+    }
+    server.send(200, "application/json", "{\"status\":\"started\",\"ko\":" + String(ko) + ",\"mode\":\"" + (_sdTestUrl.length() ? "ligne" : "genere") + "\"}");
+    return;
+  }
+  server.send(200, "application/json", "{\"running\":" + String(_sdTestRunning ? "true" : "false") + ",\"resultat\":" + _sdTestMsg + "}");
 }
 
 // ── [RITUELS] Planificateur ─────────────────────────────────────────────────
@@ -6770,6 +7471,9 @@ void setup() {
     Serial.println("Mode hors-ligne — horaires locaux (calcul/RTC) actifs.");
   }
   if (directPerm) demarrerDirect("maison sans Wi-Fi (reglage permanent)", false, false);
+#if MESURE_TACTILE
+  mtDemarrer();     // [MESURE] la broche du bouton passe en mesure tactile
+#endif
 
   Serial.println("Commandes serie: startap, stopap, startble, stopble, showloc");
 }
@@ -6902,9 +7606,29 @@ static void bancCommande(String c) {
 
   if (verbe == "info") {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.52\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
+             "{\"version\":\"3.0.54\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
              deviceIdHex().c_str());
     bancRep(buf);
+
+#if MESURE_TACTILE
+  } else if (verbe == "tactile") {
+    // [MESURE] La derniere seconde de mesures (200) : moyenne, mini, maxi.
+    const uint32_t seq = mt_seq, n = seq < 200 ? seq : 200;
+    uint32_t mini = UINT32_MAX, maxi = 0;
+    uint64_t somme = 0;
+    for (uint32_t i = seq - n; i < seq; i++) {
+      const uint32_t v = mt_tampon ? mt_tampon[i % MT_TAMPON] : 0;
+      somme += v;
+      if (v < mini) mini = v;
+      if (v > maxi) maxi = v;
+    }
+    snprintf(buf, sizeof(buf),
+             "{\"pret\":%s,\"seq\":%lu,\"brut\":%lu,\"lisse\":%lu,\"base\":%lu,\"n\":%lu,\"moy\":%lu,\"min\":%lu,\"max\":%lu}",
+             mt_pret ? "true" : "false", (unsigned long)seq, (unsigned long)mt_brut, (unsigned long)mt_lisse,
+             (unsigned long)mt_base, (unsigned long)n, (unsigned long)(n ? somme / n : 0),
+             (unsigned long)(n ? mini : 0), (unsigned long)maxi);
+    bancRep(buf);
+#endif
 
   } else if (verbe == "diag") {
     const Coupure coupureAvant = g_coupure;
@@ -7203,6 +7927,9 @@ void loop() {
   checkConfigButton();
   ledFlushSave();   // [V2] sauvegarde differee de la couleur libre (anti-flash)
   directTick();     // [DIRECT] referme le Wi-Fi de la box quand plus personne ne s'en sert
+#if MESURE_TACTILE
+  mtTick();         // [MESURE] fin des phases de mesure
+#endif
 
   // Simple serial command interface for testing without a button
   if (Serial.available()) {
