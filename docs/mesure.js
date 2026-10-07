@@ -15,7 +15,7 @@
    (categorie « Religion ») : voir commande_backend/README.md.
    ════════════════════════════════════════════════════════════ */
 (function () {
-  var JETON = '';
+  var JETON = '7c75268acad44f42a0f69ab98a2640b4';   // site « adhanbox.fr » cree le 07/10/2026 sur le compte Cloudflare d'Adel
   if (!JETON) return;
   var s = document.createElement('script');
   s.defer = true;
