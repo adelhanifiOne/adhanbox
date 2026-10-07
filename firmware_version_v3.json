@@ -1,6 +1,6 @@
 {
-  "version": "3.0.54",
+  "version": "3.0.55",
   "hardware": "v3",
   "url": "https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/build_temp_v3/adhanbox_v3.ino.bin",
-  "changelog": "Les voix de muezzin se téléchargent maintenant sur tous les boîtiers : le téléchargement reprend là où il s'était arrêté et n'abandonne plus. Si une voix restait sur « Téléchargement sur le boîtier… », elle arrivera d'elle-même après cette mise à jour."
+  "changelog": "Fini les petits accrocs du son : l'adhan et la récitation du Coran ne « bégaient » plus quand l'application s'ouvre ou quand le boîtier met à jour les horaires de votre mosquée."
 }
