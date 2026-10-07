@@ -184,3 +184,14 @@
     });
   }
 })();
+
+// [OFFRE] La mention « jusqu'au 31 octobre » s'efface seule apres la date :
+// pas de site qui promet une offre finie. Le prix, lui, reste ce qu'il est
+// dans le HTML tant qu'Adel n'a pas decide la suite.
+(function () {
+  var els = document.querySelectorAll('[data-fin-offre]');
+  for (var i = 0; i < els.length; i++) {
+    var fin = new Date(els[i].getAttribute('data-fin-offre') + 'T23:59:59');
+    if (!isNaN(fin) && Date.now() > fin.getTime()) els[i].hidden = true;
+  }
+})();

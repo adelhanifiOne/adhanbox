@@ -37,7 +37,7 @@
     const MOTIF_PHOTO = 3;   // confirme par Adel le 06/10/2026
     // Noms des motifs (06/10/2026). Le numero reste la reference de l'atelier
     // (fichiers mandalaN) ; les deux voyagent ensemble jusqu'a la commande Stripe.
-    const MOTIF_NOMS = { 1: 'Arabesque', 2: 'Lotus', 3: 'Rosace' };
+    const MOTIF_NOMS = { 1: 'Rosace', 2: 'Lotus', 3: 'Arabesque' };   // inverses le 07/10 a la demande d'Adel : la photo (motif 3) est l'Arabesque
     const state = { finish: 'noir', mandala: MOTIF_PHOTO, mandalaColor: 'or' };
     let scene, camera, renderer, controls, boxGroup, boxMesh = null, mandalaMesh = null, lidMesh = null;
     let boxSize = null, boxCenter = null;

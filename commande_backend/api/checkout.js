@@ -30,7 +30,7 @@ const CHASSIS = {
 };
 // Noms des trois motifs de facade (06/10/2026), alignes sur docs/configurator.js.
 // Le numero reste la reference de l'atelier : les deux figurent dans la commande.
-const MOTIF_NOMS = { 1: 'Arabesque', 2: 'Lotus', 3: 'Rosace' };
+const MOTIF_NOMS = { 1: 'Rosace', 2: 'Lotus', 3: 'Arabesque' };   // inverses le 07/10 a la demande d'Adel : la photo (motif 3) est l'Arabesque
 const MOTIFS = {
   noir: 'Noir', blanc: 'Blanc', rouge: 'Rouge', rose: 'Rose',
   bleu: 'Bleu', 'vert-foret': 'Vert forêt', or: 'Or', marron: 'Marron',
