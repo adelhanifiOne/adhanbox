@@ -527,10 +527,28 @@
       aspect-ratio:auto; height:100%;
       object-fit:cover; object-position:center 46%;
     }
-    /* Pas de legende dans le hero : le badge « Photo reelle » occupe deja ce
-       coin, les deux se chevauchaient. Le texte du nom de fichier reste utile,
-       il sert d'alternative textuelle sur l'image. */
-    .hero-photo .carrousel-piste figcaption { display:none; }
+    /* Texte pose sur chaque photo (08/10/2026) : sur-titre dore en petites
+       capitales + phrase en Fraunces, sur un degrade sombre en bas de l'image.
+       Le badge « Mises en scene » remonte en haut a droite pour lui laisser la
+       place. Une photo sans .titre (la vue eclatee, deja legendee) n'a rien. */
+    .hero-photo .carrousel-piste figure { position:relative; }
+    .hero-photo .carrousel-piste figcaption {
+      position:absolute; left:0; right:0; bottom:0; z-index:1;
+      padding:70px 26px 30px;
+      background:linear-gradient(to top, rgba(6,22,17,.82) 0%, rgba(6,22,17,.45) 55%, rgba(6,22,17,0) 100%);
+      color:#fff; font-family:var(--font-display); font-weight:600;
+      font-size:clamp(1.15rem, 2.2vw, 1.55rem); line-height:1.22; letter-spacing:-.005em;
+      text-shadow:0 1px 12px rgba(0,0,0,.35); text-wrap:balance;
+    }
+    .hero-photo .carrousel-piste figcaption .sur {
+      display:block; margin-bottom:.45rem;
+      font-family:var(--font-body); font-weight:600; font-size:.68rem;
+      letter-spacing:.2em; text-transform:uppercase; color:#E9C46A;
+    }
+    .hero-visual .tag {
+      top:14px; right:14px; left:auto; bottom:auto; z-index:2;
+      font-size:.68rem; padding:.32rem .75rem;
+    }
     .hero-visual .carrousel-points { margin-top:14px; }
   </style>
 </head>
@@ -605,44 +623,43 @@
 <!-- carrousel:debut -->
           <figure>
             <video src="photos/01-le-boitier-allume.mp4" autoplay muted loop playsinline poster="photos/01-le-boitier-allume-poster.jpg"
-                   width="548" height="630" aria-label="Le boîtier allumé"></video>
-            <figcaption>Le boîtier allumé</figcaption>
+                   width="548" height="630" aria-label="Le boîtier AdhanBox allumé, la lumière passe par les arches."></video>
+            <figcaption><span class="sur">À chaque prière</span>La lumière s’éveille, l’adhan s’élève</figcaption>
           </figure>
           <figure>
             <img src="photos/02-vitrine.jpg" width="548" height="630"
-                 alt="Un objet de foyer, fait main"
+                 alt="Fait main en France Un objet de foyer, pas un gadget"
                  loading="lazy" decoding="async">
-            <figcaption>Un objet de foyer, fait main</figcaption>
+            <figcaption><span class="sur">Fait main en France</span>Un objet de foyer, pas un gadget</figcaption>
           </figure>
           <figure>
             <img src="photos/03-lumiere-du-soir.jpg" width="548" height="630"
-                 alt="La lumière s’éveille à chaque prière"
+                 alt="À la tombée de la nuit Une lumière douce, comme une veilleuse"
                  loading="lazy" decoding="async">
-            <figcaption>La lumière s’éveille à chaque prière</figcaption>
+            <figcaption><span class="sur">À la tombée de la nuit</span>Une lumière douce, comme une veilleuse</figcaption>
           </figure>
           <figure>
             <img src="photos/04-ce-qu-il-y-a-dedans.jpg" width="548" height="630"
                  alt="Vue éclatée de l’AdhanBox : couvercle ajouré, 25 LED, motif au choix, deux haut-parleurs et carte électronique avec horloge de précision."
                  loading="lazy" decoding="async">
-            <figcaption>Ce qu’il y a dedans</figcaption>
           </figure>
           <figure>
             <img src="photos/05-dans-votre-salon.jpg" width="548" height="630"
-                 alt="Dans votre salon"
+                 alt="Dans votre salon L’appel à la prière, cinq fois par jour"
                  loading="lazy" decoding="async">
-            <figcaption>Dans votre salon</figcaption>
+            <figcaption><span class="sur">Dans votre salon</span>L’appel à la prière, cinq fois par jour</figcaption>
           </figure>
           <figure>
             <img src="photos/06-dans-le-salon.jpg" width="548" height="630"
-                 alt="Chez un client"
+                 alt="Chez un client Fabriquée à la commande, livrée chez vous"
                  loading="lazy" decoding="async">
-            <figcaption>Chez un client</figcaption>
+            <figcaption><span class="sur">Chez un client</span>Fabriquée à la commande, livrée chez vous</figcaption>
           </figure>
           <figure>
             <img src="photos/07-pret-a-offrir.jpg" width="548" height="630"
-                 alt="Prête à offrir"
+                 alt="Prête à offrir Mariage, naissance, Omra : un cadeau qui dure"
                  loading="lazy" decoding="async">
-            <figcaption>Prête à offrir</figcaption>
+            <figcaption><span class="sur">Prête à offrir</span>Mariage, naissance, Omra : un cadeau qui dure</figcaption>
           </figure>
 <!-- carrousel:fin -->
         </div>

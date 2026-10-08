@@ -90,7 +90,7 @@ def legende(nom):
     (accents, apostrophes) quand le nom de fichier ne suffit pas."""
     titre = os.path.join(DOSSIER, os.path.splitext(nom)[0] + '.titre')
     if os.path.exists(titre):
-        return io.open(titre, encoding='utf-8').read().strip()
+        return io.open(titre, encoding='utf-8').read().strip()   # vide = pas de texte sur la photo
     base = os.path.splitext(nom)[0]
     base = re.sub(r'^\d+[-_ ]*', '', base)          # le numero ne sert qu'a trier
     base = base.replace('-', ' ').replace('_', ' ').strip()
@@ -120,7 +120,7 @@ def figures(noms):
     for rang, n in enumerate(noms):
         leg = legende(n)
         # Texte alternatif : le .txt voisin s'il existe, la legende sinon.
-        alt = leg
+        alt = ' '.join(l.strip() for l in leg.splitlines() if l.strip())
         txt = os.path.join(DOSSIER, os.path.splitext(n)[0] + '.txt')
         if os.path.exists(txt):
             alt = io.open(txt, encoding='utf-8').read().strip() or leg
@@ -150,7 +150,14 @@ def figures(noms):
             bloc.append('                 %s decoding="async">'
                         % ('fetchpriority="high"' if premiere else 'loading="lazy"'))
         if leg:
-            bloc.append('            <figcaption>%s</figcaption>' % echapper(leg))
+            # Deux lignes dans le .titre : la premiere est un sur-titre (petites
+            # capitales dorees), la seconde le texte pose sur la photo.
+            lignes = [l.strip() for l in leg.splitlines() if l.strip()]
+            if len(lignes) >= 2:
+                bloc.append('            <figcaption><span class="sur">%s</span>%s</figcaption>'
+                            % (echapper(lignes[0]), echapper(' '.join(lignes[1:]))))
+            else:
+                bloc.append('            <figcaption>%s</figcaption>' % echapper(leg))
         bloc.append('          </figure>')
         out.append('\n'.join(bloc))
     return '\n'.join(out)
