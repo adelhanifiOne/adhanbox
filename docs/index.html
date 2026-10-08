@@ -545,10 +545,10 @@
       font-family:var(--font-body); font-weight:600; font-size:.68rem;
       letter-spacing:.2em; text-transform:uppercase; color:#E9C46A;
     }
-    .hero-visual .tag {
-      top:14px; right:14px; left:auto; bottom:auto; z-index:2;
-      font-size:.68rem; padding:.32rem .75rem;
-    }
+    /* La mention « mises en scene » sort de la photo (08/10/2026 : la bulle
+       gachait les images et pouvait couvrir le texte) : une ligne discrete
+       sous les points du carrousel. */
+    .mention-visuels { margin:.45rem 0 0; text-align:center; font-size:.7rem; color:var(--faint, #9a9a9a); letter-spacing:.01em; }
     .hero-visual .carrousel-points { margin-top:14px; }
   </style>
 </head>
@@ -670,8 +670,8 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
         </button>
       </div>
-      <span class="tag">Mises en scène et vue 3D · chaque boîtier est fait main</span>
       <div class="carrousel-points" aria-label="Choisir une photo"></div>
+      <p class="mention-visuels">Mises en scène et vue 3D · chaque boîtier est fait main</p>
     </div>
   </div>
 </section>
