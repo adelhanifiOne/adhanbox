@@ -84,7 +84,13 @@ def est_video(nom):
 
 
 def legende(nom):
-    """« 03-couvercle-ajoure.jpg » -> « Couvercle ajoure »."""
+    """« 03-couvercle-ajoure.jpg » -> « Couvercle ajoure ».
+
+    Un fichier « 03-couvercle-ajoure.titre » a cote donne la legende exacte
+    (accents, apostrophes) quand le nom de fichier ne suffit pas."""
+    titre = os.path.join(DOSSIER, os.path.splitext(nom)[0] + '.titre')
+    if os.path.exists(titre):
+        return io.open(titre, encoding='utf-8').read().strip()
     base = os.path.splitext(nom)[0]
     base = re.sub(r'^\d+[-_ ]*', '', base)          # le numero ne sert qu'a trier
     base = base.replace('-', ' ').replace('_', ' ').strip()
