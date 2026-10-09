@@ -546,9 +546,23 @@
       letter-spacing:.2em; text-transform:uppercase; color:#E9C46A;
     }
     .hero-visual .carrousel-points { margin-top:14px; }
+
+/* ── Bandeau defilant en haut de page (09/10/2026) ── */
+.bandeau{background:#06281f;color:#F2E3BF;overflow:hidden;height:34px;display:flex;align-items:center;font-family:var(--font-body);font-size:.78rem;font-weight:500;letter-spacing:.02em}
+.bandeau-piste{display:flex;width:max-content;animation:bandeau-defile 42s linear infinite}
+.bandeau:hover .bandeau-piste{animation-play-state:paused}
+.bandeau-groupe{display:flex;white-space:nowrap}
+.bandeau-groupe span{display:inline-flex;align-items:center}
+.bandeau-groupe span::after{content:"✦";color:#E9C46A;margin:0 1.6rem;font-size:.7rem}
+.bandeau-groupe span[hidden]{display:none}
+@keyframes bandeau-defile{to{transform:translateX(-50%)}}
+@media (prefers-reduced-motion:reduce){.bandeau-piste{animation:none}}
   </style>
 </head>
 <body>
+<!-- Bandeau defilant (09/10/2026). Contenu identique sur toutes les pages commerciales :
+     le modifier ici ET dans les autres pages (meme bloc). -->
+<div class="bandeau" role="region" aria-label="Nos engagements"><div class="bandeau-piste"><div class="bandeau-groupe"><span data-fin-offre="2026-10-31">Offre de lancement : 95 € au lieu de 119 €, jusqu'au 31 octobre</span><span>Livraison offerte en point relais</span><span>Accès à vie, sans abonnement</span><span>Retour offert 14 jours</span><span>Paiement en 3× sans frais</span><span>Fait main en France, à la commande</span></div><div class="bandeau-groupe" aria-hidden="true"><span data-fin-offre="2026-10-31">Offre de lancement : 95 € au lieu de 119 €, jusqu'au 31 octobre</span><span>Livraison offerte en point relais</span><span>Accès à vie, sans abonnement</span><span>Retour offert 14 jours</span><span>Paiement en 3× sans frais</span><span>Fait main en France, à la commande</span></div></div></div>
 
 <header class="site">
   <div class="container nav">

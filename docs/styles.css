@@ -1926,3 +1926,19 @@
     .relay-picked { color: var(--emerald); background: rgba(12, 91, 69, 0.07); border-radius: 10px; padding: 0.55rem 0.8rem; margin-top: 0 !important; }
     .btn-disabled { opacity: 0.55; cursor: not-allowed; }
     @media (max-width: 600px) { #parcel-point-map { height: 460px; } }
+
+/* ── Bandeau defilant en haut de page (09/10/2026) ── */
+.bandeau{background:#06281f;color:#F2E3BF;overflow:hidden;height:34px;display:flex;align-items:center;font-family:var(--font-body);font-size:.78rem;font-weight:500;letter-spacing:.02em}
+.bandeau-piste{display:flex;width:max-content;animation:bandeau-defile 42s linear infinite}
+.bandeau:hover .bandeau-piste{animation-play-state:paused}
+.bandeau-groupe{display:flex;white-space:nowrap}
+.bandeau-groupe span{display:inline-flex;align-items:center}
+.bandeau-groupe span::after{content:"✦";color:#E9C46A;margin:0 1.6rem;font-size:.7rem}
+.bandeau-groupe span[hidden]{display:none}
+@keyframes bandeau-defile{to{transform:translateX(-50%)}}
+@media (prefers-reduced-motion:reduce){.bandeau-piste{animation:none}}
+/* Pages a en-tete FIXE (toutes sauf l'accueil) : le bandeau se fixe au-dessus
+   et l'en-tete descend d'autant, sinon il le recouvrait. */
+body:has(> .bandeau){padding-top:34px}
+body > .bandeau{position:fixed;top:0;left:0;right:0;z-index:210}
+body:has(> .bandeau) > header,body:has(> .bandeau) header#header{top:34px}
