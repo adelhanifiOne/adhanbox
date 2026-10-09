@@ -17,6 +17,8 @@
 (function () {
   var JETON = '7c75268acad44f42a0f69ab98a2640b4';   // site « adhanbox.fr » cree le 07/10/2026 sur le compte Cloudflare d'Adel
   if (!JETON) return;
+  // Seulement le vrai site : les essais en local (localhost) faussaient les chiffres.
+  if (!/(^|\.)adhanbox\.fr$/.test(location.hostname)) return;
   var s = document.createElement('script');
   s.defer = true;
   s.src = 'https://static.cloudflareinsights.com/beacon.min.js';
