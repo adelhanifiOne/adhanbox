@@ -1,6 +1,6 @@
 {
-  "version": "3.0.55",
+  "version": "3.0.56",
   "hardware": "v3",
   "url": "https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/build_temp_v3/adhanbox_v3.ino.bin",
-  "changelog": "Fini les petits accrocs du son : l'adhan et la récitation du Coran ne « bégaient » plus quand l'application s'ouvre ou quand le boîtier met à jour les horaires de votre mosquée."
+  "changelog": "Heure corrigée hors d'Europe : en Algérie, en Tunisie, au Maroc et partout où l'on ne change pas d'heure, votre boîtier ne passe plus à l'heure d'été européenne et sonne à la bonne heure."
 }
