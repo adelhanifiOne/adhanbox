@@ -1,6 +1,6 @@
 {
-  "version": "2.3.32",
+  "version": "2.3.33",
   "hardware": "v2",
   "url": "https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/build_temp_v2/adhanbox_v2.ino.bin",
-  "changelog": "Grande mise à jour : passage automatique à l'heure d'été et d'hiver, heure vérifiée chaque jour sur Internet, 27 voix de muezzin au choix, écoute en ligne de plus de 170 récitateurs, et un appel à la prière qui ne reste jamais silencieux. Les adhans enregistrés ne sont plus retéléchargés à chaque démarrage."
+  "changelog": "Heure corrigée hors d'Europe (Algérie, Tunisie, Maroc…) : votre boîtier ne passe plus à l'heure d'été européenne. Et fini les petits accrocs du son pendant l'adhan et la récitation du Coran."
 }
