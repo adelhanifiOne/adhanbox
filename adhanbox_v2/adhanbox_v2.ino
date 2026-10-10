@@ -470,7 +470,31 @@ class I2SAudio {
   uint8_t *_tamponFlux = nullptr;  // [FLUX] anneau PSRAM, libere par stop()
   bool _flux = false;              // [FLUX] la lecture en cours vient d'Internet
   char _repli[64] = {0};           // [FLUX] copie SD a jouer si le flux lache
+  SemaphoreHandle_t _verrou = nullptr;   // [POMPE] recursif : pump() et les commandes partagent le decodeur
+  TaskHandle_t _tache = nullptr;         // [POMPE] la tache qui alimente le DMA
  public:
+  // ── [POMPE 2.3.33] La pompe audio tourne dans SA tache, plus dans loop() ──
+  // Porte de la V3 3.0.55 (validee le 07/10/2026 : trou maximal 4,3 s et
+  // 2 accrocs « disque raye » par adhan avant, 63 ms et aucun apres). Une
+  // requete HTTP ou une synchro un peu longue dans loop() laissait le DMA I2S
+  // a sec et le peripherique rebouclait son dernier tampon. Une tache de
+  // priorite 2, sur le coeur de loop(), alimente maintenant le DMA quoi que
+  // fasse loop(). Le decodeur n'est pas reentrant : pump() et les commandes
+  // (lecture, arret, pause, etat) prennent le meme verrou recursif.
+  struct Garde {
+    I2SAudio *a;
+    explicit Garde(I2SAudio *x) : a(x) { if (a->_verrou) xSemaphoreTakeRecursive(a->_verrou, portMAX_DELAY); }
+    ~Garde() { if (a->_verrou) xSemaphoreGiveRecursive(a->_verrou); }
+  };
+  void demarrerPompe() {
+    if (_tache) return;
+    _verrou = xSemaphoreCreateRecursiveMutex();
+    xTaskCreatePinnedToCore([](void *moi) {
+      I2SAudio *a = (I2SAudio *)moi;
+      for (;;) { a->pump(); vTaskDelay(1); }
+    }, "pompe", 20480, this, 2, &_tache, 1);
+    Serial.println("[Audio] pompe lancee dans sa tache");
+  }
   uint32_t sdClock() const { return _sdClock; }
   // Bench debit SD : lit `bytes` octets d'un fichier existant et renvoie ko/s.
   int sdBenchKBs(const char* path, uint32_t bytes) {
@@ -525,6 +549,7 @@ class I2SAudio {
     if (out) out->SetGain(gain);
   }
   void stop() {
+    Garde g(this);
     if (mp3) { mp3->stop(); delete mp3; mp3 = nullptr; }
     if (wav) { wav->stop(); delete wav; wav = nullptr; }
     if (buf) { delete buf; buf = nullptr; }
@@ -542,15 +567,16 @@ class I2SAudio {
   // silence, le peripherique I2S rebouclait le dernier tampon -> son de "disque
   // raye". Le flux de silence garde aussi l'ampli synchronise (BCLK continue),
   // donc la reprise est immediate et propre, sans warm-up ni clic.
-  void pause()  { if (isRunning()) _paused = true; }
-  void resume() { _paused = false; }
+  void pause()  { Garde g(this); if (isRunning()) _paused = true; }
+  void resume() { Garde g(this); _paused = false; }
   bool isPaused() const { return _paused; }
   const char* currentPath() const { return _curPath; }
   // Position/taille en octets du fichier source (progression approximative,
   // suffisante pour une barre de lecture ; MP3 CBR -> quasi lineaire).
-  uint32_t posBytes()  { return src ? (uint32_t)src->getPos()  : 0; }
-  uint32_t sizeBytes() { return src ? (uint32_t)src->getSize() : 0; }
+  uint32_t posBytes()  { Garde g(this); return src ? (uint32_t)src->getPos()  : 0; }
+  uint32_t sizeBytes() { Garde g(this); return src ? (uint32_t)src->getSize() : 0; }
   bool playPath(const char *path) {
+    Garde g(this);
     stop();
     abandonnerSynchro();
     if (!_sdOk || !SD.exists(path)) return false;
@@ -614,6 +640,7 @@ class I2SAudio {
   // ne demarre pas (pas de Wi-Fi, serveur absent, refus), et s'il se coupe en
   // route (voir pump()).
   int playUrl(const char *url, const char *repli) {
+    Garde g(this);
     char repliCopie[64] = {0};
     if (repli && *repli) strncpy(repliCopie, repli, sizeof(repliCopie) - 1);
     stop();
@@ -675,8 +702,9 @@ class I2SAudio {
     snprintf(path, sizeof(path), "/MP3/%04d.mp3", track);
     return playPath(path);
   }
-  bool isRunning() { return (mp3 && mp3->isRunning()) || (wav && wav->isRunning()); }
+  bool isRunning() { Garde g(this); return (mp3 && mp3->isRunning()) || (wav && wav->isRunning()); }
   void pump() {
+    Garde g(this);
     if (_paused) {
       // [PLAYER] En pause : on ne decode plus (position conservee), mais on
       // REMPLIT le DMA I2S de silence pour eviter que le peripherique reboucle
@@ -1151,6 +1179,9 @@ void handleSetLocation() {
   prefs.end();
   server.send(200, "text/plain", "Position enregistrée");
   Serial.printf("Stored location: %f , %f (acc=%f)\n", lat, lon, acc);
+  // [2.3.33] La position decide de l'heure d'ete europeenne : on la relit.
+  chargerFuseau();
+  if (rtcPresent) scheduleNextPrayerAlarm();
 }
 
 void handleSetTZ() {
@@ -3673,6 +3704,22 @@ DateTime localNow() {
   return heureLocale(utc);
 }
 
+// [2.3.33] L'application ne pousse qu'un offset (+60 a Alger comme a Paris en
+// hiver) : on en deduisait « France, heure d'ete europeenne ». En Algerie, en
+// Tunisie, au Maroc ou en Afrique UTC+1 sans heure d'ete, le boitier avancait
+// d'une heure de fin mars a fin octobre (signale par Adel depuis l'Algerie le
+// 10/10/2026, sur une V2). La position enregistree tranche ; sans position,
+// ancien comportement. Meme regle que la V3 3.0.56.
+bool regleEuropeenneIci() {
+  double lat, lon, acc;
+  if (!loadStoredLocation(lat, lon, acc)) return true;
+  if (lat >= 27.0 && lat <= 33.5 && lon >= -18.5 && lon <= -13.0) return true;   // Canaries, Madere
+  if (lat < 34.4) return false;                                                     // Afrique, sud de la Mediterranee
+  if (lon < -1.0 && lat < 36.0) return false;                                       // Maroc du nord, ouest algerien
+  if (lon >= -1.0 && lon <= 11.9 && lat < 37.4) return false;                       // Algerie, Tunisie
+  return true;
+}
+
 void chargerFuseau() {
   prefs.begin("adhancfg", true);
   int  std = prefs.getInt("tz_std_min", 0x7fffffff);
@@ -3682,6 +3729,10 @@ void chargerFuseau() {
     dst = false;                      // offset fige, comportement d'avant
   }
   prefs.end();
+  if (dst && !regleEuropeenneIci()) {
+    dst = false;
+    Serial.println("[HEURE] position hors d'Europe : pas d'heure d'ete europeenne");
+  }
   g_tzStdMin = std;
   g_tzDstEu  = dst;
   Serial.printf("[HEURE] fuseau : standard %+d min, heure d'ete europeenne %s\n",
@@ -4008,6 +4059,7 @@ bool tryReinitSD(int retries = 2) {
   for (int i = 0; i < retries; i++) {
     Serial.printf("[SD] Tentative reinit (%d/%d)\n", i + 1, retries);
     if (audio.begin()) {
+      audio.demarrerPompe();
       prefs.begin("adhancfg", true);
       int storedVol = constrain(prefs.getInt("volume", 20), 0, 30);
       prefs.end();
@@ -4038,12 +4090,9 @@ bool playTrack(int track) {
   }
   isPlaying = true;
 
-  // Pompe audio 800ms pour eviter de couper le debut de l'adhan
-  unsigned long start = millis();
-  while (millis() - start < 800) {
-    audio.pump();
-    delay(2);
-  }
+  // [POMPE 2.3.33] 800 ms pour ne pas couper le debut de l'adhan : la tache de
+  // pompe remplit le DMA pendant ce temps, loop() n'a qu'a attendre.
+  delay(800);
   return true;
 }
 
@@ -4666,6 +4715,7 @@ void setup() {
 
   // Initialise audio I2S + microSD
   if (audio.begin()) {
+    audio.demarrerPompe();
     storedVol = constrain(storedVol, 0, 30);
     audio.volume(storedVol);
     Serial.printf("[Audio] Volume initial : %d\n", storedVol);
@@ -5072,8 +5122,7 @@ void loop() {
     }
     _lastLoopStamp = nowMs;
   }
-  audio.pump();
-  v2Tick();          // [V2] azkar/coran + sync contenu
+  v2Tick();          // [V2] azkar/coran + sync contenu   (pompe audio : dans sa tache)
 
   // [RESET FOYER] Box allumée > 10 s -> le power-cycle a été "normal", on remet
   // le compteur à zéro. Seuls 3 débranchements rapprochés (chacun < 10 s)
@@ -5251,8 +5300,7 @@ void loop() {
       stopPlay();
     }
   }
-  // Pompe audio I2S + detection fin de lecture
-  audio.pump();
+  // Detection de fin de lecture (la pompe I2S est dans sa tache)
   if (isPlaying && !audio.isRunning()) {
     onPlaybackFinished();
   }
@@ -5823,8 +5871,10 @@ void loop() {
   }
 
   // Auto-sync Mawaqit times every 20 hours when connected to WiFi
+  // [2.3.33] Jamais pendant un son : deux GET HTTPS dans loop() (4-6 s
+  // chacun), retentes chaque minute tant qu'ils echouent.
   static unsigned long lastAutoSyncCheck = 0;
-  if (millis() - lastAutoSyncCheck > 60000) {  // Check once per minute
+  if (millis() - lastAutoSyncCheck > 60000 && !audio.isRunning() && !isPlaying) {  // Check once per minute
     lastAutoSyncCheck = millis();
     if (WiFi.status() == WL_CONNECTED && rtcPresent) {
       unsigned long now_epoch = rtc.now().unixtime();
