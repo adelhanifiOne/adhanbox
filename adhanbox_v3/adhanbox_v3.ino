@@ -2,7 +2,7 @@
 // - Starts an AP when a long-press is detected on CONFIG_BUTTON_PIN
 // - Serves a small webpage that requests navigator.geolocation and POSTs lat/lon
 // - Stores lat/lon/accuracy/timestamp in Preferences (NVS)
-//Version: 3.0.55 (AdhanBox V3 / HW v3)
+//Version: 3.0.56 (AdhanBox V3 / HW v3)
 #include <Arduino.h>
 #include <esp_mac.h>   // esp_read_mac() : MAC eFuse, lisible sans Wi-Fi
 #include <Wire.h>
@@ -1608,6 +1608,9 @@ void handleSetLocation() {
   prefs.end();
   server.send(200, "text/plain", "Position enregistrée");
   Serial.printf("Stored location: %f , %f (acc=%f)\n", lat, lon, acc);
+  // [3.0.56] La position decide de l'heure d'ete europeenne : on la relit.
+  chargerFuseau();
+  if (rtcPresent) scheduleNextPrayerAlarm();
 }
 
 void handleSetTZ() {
@@ -2286,7 +2289,7 @@ void handleOtaUploadComplete() {
 // GET /api/firmware/version
 void handleFirmwareVersion() {
   server.send(200, "application/json",
-              "{\"version\":\"3.0.55\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
+              "{\"version\":\"3.0.56\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
 }
 
 // Returns true if the request carries the correct API key (or if token not yet set).
@@ -2400,11 +2403,11 @@ void handleDeviceInfo() {
   char buf[512];
   if (pairingWindow || hasValidToken) {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.55\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
+             "{\"version\":\"3.0.56\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
              OTA_HOSTNAME, deviceIdHex().c_str(), _apiToken.c_str(), _otaPass.c_str());
   } else {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.55\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
+             "{\"version\":\"3.0.56\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
              OTA_HOSTNAME, deviceIdHex().c_str());
   }
   server.send(200, "application/json", buf);
@@ -4927,6 +4930,26 @@ DateTime localNow() {
   return heureLocale(utc);
 }
 
+// [3.0.56] L'application ne pousse qu'un offset (+60 a Alger comme a Paris en
+// hiver) : on en deduisait « France, heure d'ete europeenne ». En Algerie, en
+// Tunisie, au Maroc ou en Afrique de l'Ouest et centrale (UTC+1 sans heure
+// d'ete), le boitier avancait donc d'une heure de fin mars a fin octobre
+// (signale par Adel depuis l'Algerie le 10/10/2026). La position enregistree
+// tranche : l'heure d'ete europeenne ne s'applique qu'en Europe (et aux
+// Canaries / Madere). Sans position connue, on garde l'ancien comportement.
+bool regleEuropeenneIci() {
+  double lat, lon, acc;
+  if (!loadStoredLocation(lat, lon, acc)) return true;
+  if (lat >= 27.0 && lat <= 33.5 && lon >= -18.5 && lon <= -13.0) return true;   // Canaries, Madere
+  if (lat < 34.4) return false;                                                     // Afrique, sud de la Mediterranee
+  // Rive sud de la Mediterranee au-dessus de 34,4° : Maroc du nord, Algerie,
+  // Tunisie. L'Espagne en face est au-dela de 36° a l'ouest de -1°, au-dela
+  // de 37,4° a l'est (Baleares, Sardaigne, Sicile plus au nord ou plus a l'est).
+  if (lon < -1.0 && lat < 36.0) return false;
+  if (lon >= -1.0 && lon <= 11.9 && lat < 37.4) return false;
+  return true;
+}
+
 void chargerFuseau() {
   prefs.begin("adhancfg", true);
   int  std = prefs.getInt("tz_std_min", 0x7fffffff);
@@ -4936,6 +4959,10 @@ void chargerFuseau() {
     dst = false;                      // offset fige, comportement d'avant
   }
   prefs.end();
+  if (dst && !regleEuropeenneIci()) {
+    dst = false;
+    Serial.println("[HEURE] position hors d'Europe : pas d'heure d'ete europeenne");
+  }
   g_tzStdMin = std;
   g_tzDstEu  = dst;
   Serial.printf("[HEURE] fuseau : standard %+d min, heure d'ete europeenne %s\n",
@@ -7649,7 +7676,7 @@ static void bancCommande(String c) {
 
   if (verbe == "info") {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.55\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
+             "{\"version\":\"3.0.56\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
              deviceIdHex().c_str());
     bancRep(buf);
 
