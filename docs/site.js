@@ -85,7 +85,7 @@
   // Mesure d'audience (sans cookie), meme fichier que sur l'accueil.
   var mesure = document.createElement('script');
   mesure.defer = true;
-  mesure.src = 'mesure.js?v=20261006';
+  mesure.src = 'mesure.js?v=20261011';
   document.head.appendChild(mesure);
 
   // Le plan du site en dur (<!-- plan:debut -->) existe pour les robots qui
