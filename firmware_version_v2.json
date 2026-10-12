@@ -1,6 +1,6 @@
 {
-  "version": "2.3.33",
+  "version": "2.3.34",
   "hardware": "v2",
   "url": "https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/build_temp_v2/adhanbox_v2.ino.bin",
-  "changelog": "Heure corrigée hors d'Europe (Algérie, Tunisie, Maroc…) : votre boîtier ne passe plus à l'heure d'été européenne. Et fini les petits accrocs du son pendant l'adhan et la récitation du Coran."
+  "changelog": "Les sourates s'enchaînent maintenant toutes seules, même téléphone verrouillé. Et le début de chaque récitation (le Bismillah) n'est plus coupé."
 }

@@ -2,7 +2,7 @@
 // - Starts an AP when a long-press is detected on CONFIG_BUTTON_PIN
 // - Serves a small webpage that requests navigator.geolocation and POSTs lat/lon
 // - Stores lat/lon/accuracy/timestamp in Preferences (NVS)
-//Version: 2.3.33 (AdhanBox V2 / HW v2)
+//Version: 2.3.34 (AdhanBox V2 / HW v2)
 #include <Arduino.h>
 #include <esp_mac.h>   // esp_read_mac() : MAC eFuse, lisible sans Wi-Fi
 #include <Wire.h>
@@ -455,6 +455,20 @@ class AudioFileSourceHTTPS : public AudioFileSource {
 // une priere (21 jusqu'a 2.3.31, comme la V3 jusqu'a 3.0.46).
 #define PISTE_MAX 99
 
+// [AMPLI] 2.3.34 — Sortie I2S qui ne ferme JAMAIS son canal.
+// La bibliotheque detruit le canal I2S a la fin de chaque son (stop() du
+// decodeur) et le recree au suivant : l'horloge BCLK s'arrete, et l'ampli
+// MAX98357A met ensuite plus de 2 s a se recaler a froid. Il avalait le debut
+// de chaque lecture (« Bismillahi » des sourates, box V2 en Algerie le
+// 12/10/2026 : 900 ms puis 2 s de silence de calage n'y suffisaient pas a
+// froid). Le canal est ouvert une fois au demarrage, et pump() y verse du
+// silence entre deux sons, comme en pause : l'ampli ne decroche plus.
+class SortieI2SPermanente : public AudioOutputI2S {
+ public:
+  bool begin() override { return i2sOn ? true : AudioOutputI2S::begin(); }
+  bool stop() override { return true; }   // on garde le canal (et l'horloge)
+};
+
 class I2SAudio {
   SPIClass spi{FSPI};
   AudioOutputI2S        *out = nullptr;
@@ -467,6 +481,11 @@ class I2SAudio {
   uint32_t _sdClock = 0;
   bool _paused = false;          // [PLAYER] pause logicielle : pump() suspend le decodage
   char _curPath[64] = {0};       // [PLAYER] fichier en cours (pour /api/audio/status)
+  // [CORAN] 2.3.34 : le fichier qui vient de se terminer, et s'il s'est
+  // termine NATURELLEMENT (fin du fichier, pas une source muette). Note dans
+  // pump() juste avant stop(), qui efface _curPath ; lu par onPlaybackFinished().
+  char _dernierFini[64] = {0};
+  bool _finNaturelle = false;
   uint8_t *_tamponFlux = nullptr;  // [FLUX] anneau PSRAM, libere par stop()
   bool _flux = false;              // [FLUX] la lecture en cours vient d'Internet
   char _repli[64] = {0};           // [FLUX] copie SD a jouer si le flux lache
@@ -530,7 +549,7 @@ class I2SAudio {
     if (_sdOk) _sdClock = 1000000;
     Serial.printf("[SD] %s @ %lu Hz\n", _sdOk ? "OK" : "FAIL", (unsigned long)_sdClock);
     if (!out) {
-      out = new AudioOutputI2S();
+      out = new SortieI2SPermanente();   // [AMPLI] canal jamais ferme
       // DMA I2S = 8x2048 (~16 Ko). ATTENTION : un DMA plus gros (55 Ko) FAIT CRASHER
       // les modules SANS PSRAM (i2s_alloc_dma_desc echoue apres WiFi+BLE -> assert ->
       // reboot en boucle des qu'on joue un son). 16 Ko tient partout ; le grésillement
@@ -538,6 +557,7 @@ class I2SAudio {
       out->SetBuffers(8, 2048);
       out->SetPinout(I2S_BCLK_PIN, I2S_LRC_PIN, I2S_DIN_PIN);
       out->SetGain(gain);
+      out->begin();                       // [AMPLI] horloge des le demarrage
       Serial.println("[I2S] OK");
     }
     return _sdOk;
@@ -571,6 +591,8 @@ class I2SAudio {
   void resume() { Garde g(this); _paused = false; }
   bool isPaused() const { return _paused; }
   const char* currentPath() const { return _curPath; }
+  const char* dernierFini() const { return _dernierFini; }
+  bool finNaturelle() const { return _finNaturelle; }
   // Position/taille en octets du fichier source (progression approximative,
   // suffisante pour une barre de lecture ; MP3 CBR -> quasi lineaire).
   uint32_t posBytes()  { Garde g(this); return src ? (uint32_t)src->getPos()  : 0; }
@@ -579,6 +601,8 @@ class I2SAudio {
     Garde g(this);
     stop();
     abandonnerSynchro();
+    _finNaturelle = false;
+    _dernierFini[0] = 0;
     if (!_sdOk || !SD.exists(path)) return false;
     strncpy(_curPath, path, sizeof(_curPath) - 1);   // [PLAYER] memorise le fichier
     _curPath[sizeof(_curPath) - 1] = 0;
@@ -614,10 +638,16 @@ class I2SAudio {
     // propre AVANT le contenu (rien n'est encore decode) : l'ampli se cale, puis la
     // voix demarre entiere. delay(1) quand le DMA est plein pour NE PAS pegger le CPU
     // (un busy-loop sans yield affamait le watchdog -> crash).
+    // [CORAN] 2.3.34 : 900 ms ne suffisaient pas sur la box V2 d'Algerie : le
+    // « Bismillahi » des sourates d'Al-Afasy (voix a 0,3 s du debut du fichier)
+    // etait avale a chaque lecture, on n'entendait qu'a partir de « ar-Rahman »
+    // (12/10/2026). Les adhans, qui s'ouvrent sur une longue tenue, masquaient
+    // le meme defaut. La vraie cause etait la fermeture du canal entre deux
+    // sons (voir SortieI2SPermanente) : canal toujours ouvert, 300 ms suffisent.
     if (ok && out) {
       int16_t silence[2] = {0, 0};
       unsigned long t0 = millis();
-      while (millis() - t0 < 900) {
+      while (millis() - t0 < 300) {
         if (!out->ConsumeSample(silence)) delay(1);
       }
     }
@@ -705,6 +735,12 @@ class I2SAudio {
   bool isRunning() { Garde g(this); return (mp3 && mp3->isRunning()) || (wav && wav->isRunning()); }
   void pump() {
     Garde g(this);
+    // [AMPLI] Rien a jouer : du silence, pour que le canal (toujours ouvert)
+    // ne reboucle pas son dernier tampon et que l'ampli reste cale.
+    if (!mp3 && !wav) {
+      if (out) { int16_t s[2] = {0, 0}; while (out->ConsumeSample(s)) {} }
+      return;
+    }
     if (_paused) {
       // [PLAYER] En pause : on ne decode plus (position conservee), mais on
       // REMPLIT le DMA I2S de silence pour eviter que le peripherique reboucle
@@ -727,6 +763,11 @@ class I2SAudio {
           if (r[0]) { Serial.printf("[FLUX] coupure -> repli %s\n", r); playPath(r); }
           else Serial.println("[FLUX] coupure, pas de repli");
         } else {
+          // [CORAN] Fin d'un fichier de la carte : on garde son nom pour
+          // l'enchainement (V3 : g_coupure, cause « fin du fichier »).
+          _finNaturelle = fin && !_flux;
+          strncpy(_dernierFini, _curPath, sizeof(_dernierFini) - 1);
+          _dernierFini[sizeof(_dernierFini) - 1] = 0;
           stop();
         }
       }
@@ -1893,7 +1934,7 @@ void handleOtaUploadComplete() {
 // GET /api/firmware/version
 void handleFirmwareVersion() {
   server.send(200, "application/json",
-              "{\"version\":\"2.3.33\",\"hardware\":\"v2\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
+              "{\"version\":\"2.3.34\",\"hardware\":\"v2\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
 }
 
 // Returns true if the request carries the correct API key (or if token not yet set).
@@ -1935,11 +1976,11 @@ void handleDeviceInfo() {
   char buf[512];
   if (pairingWindow || hasValidToken) {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"2.3.33\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
+             "{\"version\":\"2.3.34\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
              OTA_HOSTNAME, deviceIdHex().c_str(), _apiToken.c_str(), _otaPass.c_str());
   } else {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"2.3.33\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
+             "{\"version\":\"2.3.34\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
              OTA_HOSTNAME, deviceIdHex().c_str());
   }
   server.send(200, "application/json", buf);
@@ -4133,8 +4174,41 @@ void stopPlay() {
   Serial.println("[Audio] Lecture stoppee");
 }
 
+// [CORAN] 2.3.34 — La sourate suivante, s'il y en a une (porte de la V3).
+// Les recitations sont rangees en /quran/<recitateur>/001.mp3 a 114.mp3 : on
+// calcule le numero suivant au lieu de lister le dossier. Ne concerne QUE ce
+// classement : /quran/al-kahf.mp3 et les adhans de /mp3/ n'ont pas de suite,
+// et l'adhan a deja son propre enchainement vers la duaa.
+// Avant la 2.3.34, la V2 n'enchainait pas : seule l'application le faisait,
+// et seulement ouverte a l'ecran (cas reel le 12/10/2026, box V2 en Algerie).
+static bool coranSuivante(const char *fini, char *suivant, size_t n) {
+  if (!fini || strncmp(fini, "/quran/", 7) != 0) return false;
+  const char *barre = strrchr(fini, '/');
+  if (!barre || barre == fini + 6) return false;          // pas de sous-dossier
+  const char *nom = barre + 1;
+  if (strlen(nom) != 7 || strcasecmp(nom + 3, ".mp3") != 0) return false;
+  if (!isdigit((unsigned char)nom[0]) || !isdigit((unsigned char)nom[1])
+      || !isdigit((unsigned char)nom[2])) return false;
+  const int num = (nom[0] - '0') * 100 + (nom[1] - '0') * 10 + (nom[2] - '0');
+  if (num < 1 || num >= 114) return false;                // 114 = derniere sourate
+  snprintf(suivant, n, "%.*s%03d.mp3", (int)(barre - fini + 1), fini, num + 1);
+  return SD.exists(suivant);
+}
+
 // Appelee depuis loop() quand la lecture I2S se termine naturellement
 void onPlaybackFinished() {
+  // [CORAN] Enchainer la sourate suivante, seulement sur une VRAIE fin de
+  // fichier : une source SD qui ne repond plus ne doit pas faire sauter a la
+  // suivante en masquant le probleme. Un arret par le bouton ou l'application
+  // ne passe pas ici (stopPlay() a deja mis isPlaying a false).
+  char suivante[64];
+  if (!shouldPlayDuaaAfterAdhan && audio.finNaturelle()
+      && coranSuivante(audio.dernierFini(), suivante, sizeof(suivante))) {
+    Serial.printf("[Coran] %s termine, enchaine sur %s\n", audio.dernierFini(), suivante);
+    delay(300);
+    if (audio.playPath(suivante)) { isPlaying = true; return; }
+    Serial.println("[Coran] enchainement refuse, on s'arrete la");
+  }
   isPlaying = false;
   if (shouldPlayDuaaAfterAdhan && adhanTrackBeforeDuaa > 0) {
     int adhanTrack = adhanTrackBeforeDuaa;
