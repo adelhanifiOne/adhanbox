@@ -2,7 +2,7 @@
 // - Starts an AP when a long-press is detected on CONFIG_BUTTON_PIN
 // - Serves a small webpage that requests navigator.geolocation and POSTs lat/lon
 // - Stores lat/lon/accuracy/timestamp in Preferences (NVS)
-//Version: 2.3.34 (AdhanBox V2 / HW v2)
+//Version: 2.3.35 (AdhanBox V2 / HW v2)
 #include <Arduino.h>
 #include <esp_mac.h>   // esp_read_mac() : MAC eFuse, lisible sans Wi-Fi
 #include <Wire.h>
@@ -1934,7 +1934,7 @@ void handleOtaUploadComplete() {
 // GET /api/firmware/version
 void handleFirmwareVersion() {
   server.send(200, "application/json",
-              "{\"version\":\"2.3.34\",\"hardware\":\"v2\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
+              "{\"version\":\"2.3.35\",\"hardware\":\"v2\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
 }
 
 // Returns true if the request carries the correct API key (or if token not yet set).
@@ -1976,11 +1976,11 @@ void handleDeviceInfo() {
   char buf[512];
   if (pairingWindow || hasValidToken) {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"2.3.34\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
+             "{\"version\":\"2.3.35\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
              OTA_HOSTNAME, deviceIdHex().c_str(), _apiToken.c_str(), _otaPass.c_str());
   } else {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"2.3.34\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
+             "{\"version\":\"2.3.35\",\"hardware\":\"v2\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
              OTA_HOSTNAME, deviceIdHex().c_str());
   }
   server.send(200, "application/json", buf);
@@ -2785,6 +2785,14 @@ void handleDisconnectWifi() {
 }
 
 // Sync time from NTP server. Returns true on success.
+// [HEURE] 2.3.35 — Prochaine tentative NTP automatique (millis), portee de la
+// V3. Sans elle, l'heure n'etait verifiee qu'au demarrage - et seulement si le
+// Wi-Fi repondait en 15 s - ou quand l'app donnait le Wi-Fi. Box V2 en Algerie
+// le 13/10/2026 : debranchee 20 min, redemarree sur l'heure de secours, NTP
+// rate au demarrage (Wi-Fi pas encore pret) : 24 min de retard, jamais
+// corrigees, les adhans auraient sonne 24 min trop tard.
+static unsigned long _ntpProchain = 60000UL;
+
 bool syncTimeFromNtp(unsigned long timeoutMs) {
   if (!WiFi.isConnected()) {
     Serial.println("Cannot sync NTP: no WiFi");
@@ -2808,8 +2816,10 @@ bool syncTimeFromNtp(unsigned long timeoutMs) {
   }
   if (!repondu) {
     Serial.println("NTP : aucune reponse du serveur");
+    _ntpProchain = millis() + 5UL * 60UL * 1000UL;     // on reessaiera dans 5 min
     return false;
   }
+  _ntpProchain = millis() + 24UL * 3600UL * 1000UL;    // puis une fois par jour
   struct tm timeinfo;
   time_t maintenant = time(nullptr);
   gmtime_r(&maintenant, &timeinfo);   // configTime(0,0) : l'horloge systeme est en UTC
@@ -5186,6 +5196,14 @@ void loop() {
   // la nourrit a chaque tour. Ainsi setup() ne peut pas declencher le WDT.
   if (!_wdtArmed) { esp_task_wdt_add(NULL); _wdtArmed = true; }
   esp_task_wdt_reset();
+  // [HEURE] 2.3.35 NTP automatique (comme la V3) : 5 min apres un echec, 24 h
+  // apres un succes. Jamais pendant une lecture (l'attente bloque loop()
+  // jusqu'a 8 s), ni pendant la synchro de contenu, qui tient la memoire TLS.
+  if ((long)(millis() - _ntpProchain) >= 0 && WiFi.status() == WL_CONNECTED
+      && !audio.isRunning() && !_syncRunning) {
+    _ntpProchain = millis() + 5UL * 60UL * 1000UL;
+    if (syncTimeFromNtp(8000) && rtcPresent) scheduleNextPrayerAlarm();
+  }
   // [DIAG] Mesure la duree de la boucle precedente : si une iteration prend
   // plusieurs secondes, c'est un etranglement (appel reseau/SD bloquant).
   {

@@ -1,6 +1,6 @@
 {
-  "version": "2.3.34",
+  "version": "2.3.35",
   "hardware": "v2",
   "url": "https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/build_temp_v2/adhanbox_v2.ino.bin",
-  "changelog": "Les sourates s'enchaînent maintenant toutes seules, même téléphone verrouillé. Et le début de chaque récitation (le Bismillah) n'est plus coupé."
+  "changelog": "Votre boîtier se remet à l'heure tout seul par Internet après une coupure de courant : les adhans restent à l'heure exacte."
 }
