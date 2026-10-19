@@ -85,7 +85,7 @@ Trois places, trois rôles différents.
 | Place | Rôle | Dès aujourd'hui | Dès qu'elle existe |
 | --- | --- | --- | --- |
 | 1 | Preuve | Collab « Extrait 6 : le prix, qu'y a-t-il derrière ? » | Carrousel « 8 avis, 8 fois 5 sur 5 » (29/10) |
-| 2 | Ce qu'on achète | « Découvre AdhanBox » (20/07) | Carrousel « Ce qu'il y a dans une AdhanBox à 95 € » (22/10) |
+| 2 | Ce qu'on achète | « Découvre AdhanBox » (20/07) | Carrousel « 5 questions avant de commander » (22/10) |
 | 3 | Qui la fabrique | Reel atelier du 13/10 (« Élaborée. Fabriquée. Assemblée. ») | Le même, avec une couverture qui porte un texte : « Faite main, une par une » |
 
 La couverture d'un reel déjà publié se change depuis « Modifier ».

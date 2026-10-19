@@ -29,7 +29,7 @@ Trier d'abord, répondre ensuite, dans cet ordre :
 
 | Type | Ce que c'est | Réponse |
 | --- | --- | --- |
-| Mot-clé | « ADHAN » | Une réponse courte en public, puis le message promis (plus bas) |
+| Mot-clé | « ADHAN » ou « CADEAU » | Une réponse courte en public, puis le message promis (plus bas) |
 | Acheteur | Décrit le besoin (« mes parents n'entendent plus l'adhan ») | Vraie réponse en public, puis une phrase qui ouvre la porte |
 | Question | « Ça marche sans Wi-Fi ? » | Répondre dans le commentaire. Si elle revient souvent, en faire un reel en réponse au commentaire |
 | Soutien | « Machaallah 🔥 » | Un « j'aime » et quelques mots |
@@ -91,7 +91,7 @@ Tu choisis la couleur et le motif, et tu mets INSTA5 au paiement (offre à 95 �
 C'est pour chez toi ou pour offrir ?
 ```
 
-Si c'est pour offrir :
+Après le mot CADEAU, ou si c'est pour offrir :
 ```
 Top. Pour un cadeau, regarde cette page : adhanbox.fr/cadeau.html
 Tu peux me laisser un message au moment de payer, je l'écris à la main sur une carte dans le colis.
