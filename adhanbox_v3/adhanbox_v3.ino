@@ -2,7 +2,7 @@
 // - Starts an AP when a long-press is detected on CONFIG_BUTTON_PIN
 // - Serves a small webpage that requests navigator.geolocation and POSTs lat/lon
 // - Stores lat/lon/accuracy/timestamp in Preferences (NVS)
-//Version: 3.0.56 (AdhanBox V3 / HW v3)
+//Version: 3.0.58 (AdhanBox V3 / HW v3)
 #include <Arduino.h>
 #include <esp_mac.h>   // esp_read_mac() : MAC eFuse, lisible sans Wi-Fi
 #include <Wire.h>
@@ -1196,6 +1196,7 @@ static void bancCommande(String c);   // [BANC] pilotage par le cable USB
 void handleBLEProvisioning();
 #endif
 void getCalculationAngles(double &fajrAngle, double &ishaAngle, String &methodName);
+int ecoleAsr();
 void scanI2CBusAndReport();
 void probeIP5306();
 bool getPrayerPlaybackForIndex(int prayerIndex, int &trackToPlay, bool &playDuaaAfter);
@@ -2289,7 +2290,7 @@ void handleOtaUploadComplete() {
 // GET /api/firmware/version
 void handleFirmwareVersion() {
   server.send(200, "application/json",
-              "{\"version\":\"3.0.56\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
+              "{\"version\":\"3.0.58\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
 }
 
 // Returns true if the request carries the correct API key (or if token not yet set).
@@ -2403,11 +2404,11 @@ void handleDeviceInfo() {
   char buf[512];
   if (pairingWindow || hasValidToken) {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.56\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
+             "{\"version\":\"3.0.58\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
              OTA_HOSTNAME, deviceIdHex().c_str(), _apiToken.c_str(), _otaPass.c_str());
   } else {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.56\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
+             "{\"version\":\"3.0.58\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
              OTA_HOSTNAME, deviceIdHex().c_str());
   }
   server.send(200, "application/json", buf);
@@ -2803,8 +2804,24 @@ bool performMawaqitSync(String &errorMsg) {
       return false;
     }
 
+    // [ECOLE] Le repli suit la methode et l'ecole reglees dans l'app. Avant le
+    // 19/10/2026 il forcait method=12&school=1 (UOIF + Asr hanafite) quel que
+    // soit le choix du client : une box reglee MWL chafeite jouait le Fajr et
+    // l'Isha de l'UOIF et l'Asr hanafite des que Mawaqit ne repondait pas.
+    // Numeros Aladhan verifies le 19/10/2026 (meta.method.id de la reponse).
+    double fajrAngle, ishaAngle;
+    String methode;
+    getCalculationAngles(fajrAngle, ishaAngle, methode);
+    String methodeAladhan = "3";                        // mwl
+    if (methode == "isna") methodeAladhan = "2";
+    else if (methode == "uoif") methodeAladhan = "12";
+    else if (methode == "egypt") methodeAladhan = "5";
+    else if (methode == "karachi") methodeAladhan = "1";
+    else if (methode == "custom") methodeAladhan = "99&methodSettings=" + String(fajrAngle, 1) + ",null," + String(ishaAngle, 1);
+
     HTTPClient http;
-    String fallbackUrl = "https://api.aladhan.com/v1/timings?latitude=" + String(flat, 6) + "&longitude=" + String(flon, 6) + "&method=12&school=1";
+    String fallbackUrl = "https://api.aladhan.com/v1/timings?latitude=" + String(flat, 6) + "&longitude=" + String(flon, 6)
+                       + "&method=" + methodeAladhan + "&school=" + String(ecoleAsr());
     Serial.printf("Fallback request: %s\n", fallbackUrl.c_str());
 
     http.begin(fallbackUrl);
@@ -2998,6 +3015,19 @@ void getCalculationAngles(double &fajrAngle, double &ishaAngle, String &methodNa
   }
 }
 
+// [ECOLE] Ecole juridique de l'Asr : 0 = standard (chafeite, malikite,
+// hanbalite : l'ombre d'un objet egale sa hauteur, plus l'ombre de midi),
+// 1 = hanafite (deux fois sa hauteur, Asr plus tardif). Avant le 19/10/2026
+// l'app l'envoyait mais la box l'ignorait : un client hanafite lisait dans
+// l'app un Asr plus tardif que celui que la box jouait (a Paris, 32 min en
+// decembre, 75 min en juin).
+int ecoleAsr() {
+  prefs.begin("adhancfg", true);
+  int ecole = prefs.getInt("calc_school", 0);
+  prefs.end();
+  return ecole == 1 ? 1 : 0;
+}
+
 // Configure calculation method/angles for fallback prayer times
 // GET -> current config, POST -> save config
 void handleCalculationConfig() {
@@ -3005,7 +3035,7 @@ void handleCalculationConfig() {
     double fajrAngle, ishaAngle;
     String methodName;
     getCalculationAngles(fajrAngle, ishaAngle, methodName);
-    String out = "{\"method\":\"" + methodName + "\",\"fajr_angle\":" + String(fajrAngle, 1) + ",\"isha_angle\":" + String(ishaAngle, 1) + "}";
+    String out = "{\"method\":\"" + methodName + "\",\"school\":" + String(ecoleAsr()) + ",\"fajr_angle\":" + String(fajrAngle, 1) + ",\"isha_angle\":" + String(ishaAngle, 1) + "}";
     server.send(200, "application/json", out);
     return;
   }
@@ -3046,15 +3076,44 @@ void handleCalculationConfig() {
   if (customFajr < 10.0 || customFajr > 25.0) customFajr = 18.0;
   if (customIsha < 10.0 || customIsha > 25.0) customIsha = 17.0;
 
+  // [ECOLE] « school » est facultatif (0 standard, 1 hanafite) : l'ecran
+  // Mosquee de l'app n'envoie que la methode, il ne doit pas remettre un
+  // hanafite en standard.
+  double ancienFajr, ancienIsha;
+  String ancienneMethode;
+  getCalculationAngles(ancienFajr, ancienIsha, ancienneMethode);
+  const int ancienneEcole = ecoleAsr();
+  int ecole = ancienneEcole;
+  if (body.indexOf("\"school\"") >= 0) ecole = (extractJsonNumber(body, "school", 0) >= 0.5) ? 1 : 0;
+
   prefs.begin("adhancfg", false);
   prefs.putString("calc_method", method);
   prefs.putFloat("calc_fajr_angle", (float)customFajr);
   prefs.putFloat("calc_isha_angle", (float)customIsha);
+  prefs.putInt("calc_school", ecole);
   prefs.end();
+
+  // [ECOLE] Les horaires « mosquee » en memoire viennent en pratique du repli
+  // Aladhan (Mawaqit refuse tout le monde depuis le 06/10/2026), donc de
+  // l'ANCIENNE methode : gardes, ils resteraient la reference jusqu'a 25 h et
+  // l'apercu de l'app ne bougerait pas. On les perime : la box repasse tout de
+  // suite au calcul, et la synchro automatique repart dans la minute avec le
+  // nouveau reglage (meme mecanisme que la bascule ete/hiver).
+  double nouveauFajr, nouvelIsha;
+  String nouvelleMethode;
+  getCalculationAngles(nouveauFajr, nouvelIsha, nouvelleMethode);
+  if (nouvelleMethode != ancienneMethode || ecole != ancienneEcole
+      || fabs(nouveauFajr - ancienFajr) > 0.01 || fabs(nouvelIsha - ancienIsha) > 0.01) {
+    prefs.begin("adhancfg", false);
+    prefs.putULong("mq_sync_ts", 0);
+    prefs.end();
+    Serial.printf("[ECOLE] Calcul change (%s/%d -> %s/%d) : horaires mosquee perimes\n",
+                  ancienneMethode.c_str(), ancienneEcole, nouvelleMethode.c_str(), ecole);
+  }
 
   if (rtcPresent) scheduleNextPrayerAlarm();
 
-  String out = "{\"ok\":true,\"method\":\"" + method + "\",\"fajr_angle\":" + String(customFajr, 1) + ",\"isha_angle\":" + String(customIsha, 1) + "}";
+  String out = "{\"ok\":true,\"method\":\"" + method + "\",\"school\":" + String(ecole) + ",\"fajr_angle\":" + String(customFajr, 1) + ",\"isha_angle\":" + String(customIsha, 1) + "}";
   server.send(200, "application/json", out);
 }
 
@@ -4562,9 +4621,10 @@ void computeAndPrintPrayerTimes(const DateTime &date) {
   // dhuhr = solar noon (no refraction)
   double dhuhr = solarNoon;
 
-  // asr: compute zenith where sun altitude = arctan(1/(factor + tan(|lat - decl|))) with factor=1
+  // asr: compute zenith where sun altitude = arctan(1/(factor + tan(|lat - decl|))), factor 1 or 2 (hanafi)
   double latRad = deg2rad(lat);
-  double angle = atan(1.0 / (1.0 + fabs(tan(latRad - decl))));  // elevation in radians (approx)
+  double facteurAsr = (ecoleAsr() == 1) ? 2.0 : 1.0;
+  double angle = atan(1.0 / (facteurAsr + fabs(tan(latRad - decl))));  // elevation in radians (approx)
   double asrZenith = 90.0 - rad2deg(angle);
   double Hasr_deg;
   bool okAsr = hourAngleForZenith(asrZenith, latRad, decl, Hasr_deg);
@@ -4627,7 +4687,9 @@ bool computePrayerTimesForDate(const DateTime &date, double outTimes[6], int &tz
   double isha = okI ? (solarNoon + 4.0 * Hisha) : NAN;
   double dhuhr = solarNoon;
   double latRad = deg2rad(lat);
-  double angle = atan(1.0 / (1.0 + fabs(tan(latRad - decl))));
+  // [ECOLE] Facteur d'ombre de l'Asr : 1 standard, 2 hanafite (voir ecoleAsr).
+  double facteurAsr = (ecoleAsr() == 1) ? 2.0 : 1.0;
+  double angle = atan(1.0 / (facteurAsr + fabs(tan(latRad - decl))));
   double asrZenith = 90.0 - rad2deg(angle);
   double Hasr_deg;
   bool okAsr = hourAngleForZenith(asrZenith, latRad, decl, Hasr_deg);
@@ -4787,7 +4849,7 @@ void handlePrayerTimes() {
   double fajrAngle, ishaAngle;
   String methodName;
   getCalculationAngles(fajrAngle, ishaAngle, methodName);
-  json += ",\"calc_method\":\"" + methodName + "\",\"fajr_angle\":" + String(fajrAngle, 1) + ",\"isha_angle\":" + String(ishaAngle, 1);
+  json += ",\"calc_method\":\"" + methodName + "\",\"school\":" + String(ecoleAsr()) + ",\"fajr_angle\":" + String(fajrAngle, 1) + ",\"isha_angle\":" + String(ishaAngle, 1);
   json += "}";
   server.send(200, "application/json", json);
 }
@@ -7676,7 +7738,7 @@ static void bancCommande(String c) {
 
   if (verbe == "info") {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.56\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
+             "{\"version\":\"3.0.58\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
              deviceIdHex().c_str());
     bancRep(buf);
 
