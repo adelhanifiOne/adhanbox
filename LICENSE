@@ -1,0 +1,30 @@
+AdhanBox
+Copyright (c) 2026 Adel Hanifi (AdhanBox, SIRET 932 355 589 00023). Tous droits réservés.
+
+Le contenu de ce dépôt est protégé par le droit d'auteur : code source du
+firmware, de l'application et des outils, modèles 3D, schémas et circuits
+électroniques, site web, textes, images et documents.
+
+Sa publication sur GitHub permet seulement de le consulter. Aucune licence
+n'est accordée. Sauf autorisation écrite préalable d'Adel Hanifi
+(contact@adhanbox.fr), il est interdit, en tout ou en partie :
+- de le reproduire, de le copier ou de le télécharger pour le réutiliser ;
+- de le modifier ou d'en tirer une œuvre dérivée ;
+- de le distribuer, de le publier ou de le céder ;
+- de l'utiliser pour fabriquer, vendre ou faire fonctionner un produit.
+
+Les composants de tiers présents dans ce dépôt (bibliothèques, polices,
+enregistrements audio, etc.) restent soumis à leur propre licence ou aux
+droits de leurs auteurs.
+
+Les clients d'AdhanBox utilisent le logiciel installé sur leur boîtier et
+l'application AdhanBox dans le cadre des conditions générales de vente
+(https://adhanbox.fr/cgv.html).
+
+---
+
+English summary: Copyright (c) 2026 Adel Hanifi. All rights reserved.
+This repository is published for viewing only. No license is granted to use,
+copy, modify, distribute, or manufacture or sell any product based on any part
+of it without prior written permission. Third-party components remain under
+their own licenses.

@@ -77,7 +77,7 @@ AdhanBox est un système automatisé de diffusion de l'adhan (appel à la prièr
 
 ## Licence
 
-Projet open source - libre d'utilisation et modification
+Tous droits réservés © 2026 Adel Hanifi. Le dépôt est consultable, mais aucune licence n'est accordée : toute reproduction, modification, distribution ou fabrication demande une autorisation écrite. Voir [LICENSE](LICENSE).
 
 ## Auteur
 
