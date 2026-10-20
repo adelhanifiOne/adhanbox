@@ -2818,10 +2818,21 @@ bool performMawaqitSync(String &errorMsg) {
     else if (methode == "egypt") methodeAladhan = "5";
     else if (methode == "karachi") methodeAladhan = "1";
     else if (methode == "custom") methodeAladhan = "99&methodSettings=" + String(fajrAngle, 1) + ",null," + String(ishaAngle, 1);
+    // [ECOLE] Garde-fou de publication (20/10/2026) : une box dont le client
+    // n'a JAMAIS regle la methode ni l'ecole garde exactement le repli qu'elle
+    // suit depuis la fermeture de Mawaqit (UOIF + Asr hanafite). Sans cela, la
+    // mise a jour aurait deplace d'office le Fajr (MWL 18 degres par defaut, une
+    // demi-heure plus tot) et l'Asr de toutes les box rattachees a une mosquee.
+    prefs.begin("adhancfg", true);
+    const bool methodeChoisie = prefs.isKey("calc_method");
+    const bool ecoleChoisie = prefs.isKey("calc_school");
+    prefs.end();
+    if (!methodeChoisie) methodeAladhan = "12";
+    const int ecoleRepli = ecoleChoisie ? ecoleAsr() : 1;
 
     HTTPClient http;
     String fallbackUrl = "https://api.aladhan.com/v1/timings?latitude=" + String(flat, 6) + "&longitude=" + String(flon, 6)
-                       + "&method=" + methodeAladhan + "&school=" + String(ecoleAsr());
+                       + "&method=" + methodeAladhan + "&school=" + String(ecoleRepli);
     Serial.printf("Fallback request: %s\n", fallbackUrl.c_str());
 
     http.begin(fallbackUrl);
@@ -3090,7 +3101,7 @@ void handleCalculationConfig() {
   prefs.putString("calc_method", method);
   prefs.putFloat("calc_fajr_angle", (float)customFajr);
   prefs.putFloat("calc_isha_angle", (float)customIsha);
-  prefs.putInt("calc_school", ecole);
+  if (body.indexOf("\"school\"") >= 0) prefs.putInt("calc_school", ecole);   // jamais d'office
   prefs.end();
 
   // [ECOLE] Les horaires « mosquee » en memoire viennent en pratique du repli
