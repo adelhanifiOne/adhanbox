@@ -129,6 +129,20 @@ Trois à cinq images par jour. Un visage ou une main sur la première. La demand
 5. Les 6 couvertures de stories à la une (Avis, Démo, Couleurs, Prix, Envois, Collab) et 4 à 5 images pour « Prix ».
 6. Aligner les légendes du lot sur les décisions d'Adel (montant d'INSTA5, phrase sur l'offre).
 
+## Si l'offre à 95 € continue après le 31/10
+
+La veille concurrentielle du 19/10 recommande de garder 95 € (le rival direct, une horloge adhan française, est à 79,90 €). Si Adel choisit ça, **aucune date de fin ne doit apparaître** :
+
+- pas de compte à rebours en story à partir du 26/10 ; le 31/10 redevient un jour de stories normal ;
+- carrousel du 29/10 : dernière image `Commentez ADHAN.` sans « plus que 2 jours » ;
+- reel du 30/10 : « Une commande de plus qui part », sans date ;
+- relance à 4 jours : le nouveau, c'est la photo de la couleur, pas la fin de l'offre ;
+- bio, ligne 3 : `95 €, relais offert, retour 14 jours 👇` ;
+- légendes du lot d'octobre : retirer « jusqu'au 31 octobre » ;
+- côté site (hors Instagram) : l'accueil affiche encore « 95 € au lieu de 119 €, jusqu'au 31 octobre ».
+
+La prochaine vraie date est alors Ramadan 1448 (vers le 8 février 2027) : commandes conseillées avant le 18 janvier.
+
 ## Décisions à prendre par Adel
 
 1. **Après le 31/10** : le prix passe-t-il vraiment à 119 € ? Si l'offre est prolongée, le carrousel du 29 et le reel du 30 perdent la date et la ligne 3 de la bio change. Une date annoncée et non tenue est une fausse urgence (et une pratique interdite).
