@@ -2,7 +2,7 @@
 
 Le fidèle scanne un QR code posé à côté de la boîte. Son téléphone ouvre
 `adhanbox.fr/mosquee.html`, il touche un bouton, la boîte répond devant lui.
-Puis il voit « commander la mienne », avec le code RENTREE10.
+Puis il voit « commander la mienne », avec le code INSTA5 (5 € de moins).
 
 **Son téléphone reste sur sa propre connexion.** C'est pour cela qu'on ne fait
 pas de point d'accès Wi-Fi sur la boîte : s'il devait se connecter à la boîte,
