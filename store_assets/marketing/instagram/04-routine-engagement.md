@@ -17,7 +17,7 @@ Les jours de publication : rester **la première heure** après la mise en ligne
 
 Je n'ai pas inventé de liste de comptes : sans connexion, je ne peux pas vérifier qu'un compte existe, qu'il est actif et que son audience est la bonne. Les critères, pour qu'Adel les choisisse (ou que la session « Veille concurrentielle » les propose) :
 
-- **Portée (5)** : comptes musulmans francophones de 20 000 abonnés ou plus, avec de vrais commentaires : rappels, vie de famille, maison et déco, recettes, mariage. Aussi les **comptes des mosquées** des villes où il y a déjà des clients (Pau, Le Blanc-Mesnil, Paris, Amiens) et de la région (Tarbes, Toulouse, Bordeaux).
+- **Portée (5)** : comptes musulmans francophones de 20 000 abonnés ou plus, avec de vrais commentaires : rappels, vie de famille, maison et déco, recettes, mariage. Aussi les **comptes des mosquées** des villes où il y a déjà des clients et de ta région (Adel connaît la liste ; aucune ville n'est écrite ici).
 - **Pairs (3)** : créateurs de produits musulmans faits main ou de petites marques (calligraphie, tapis, coffrets, cosmétiques halal), et @_yaquoilabas qui a déjà fait une collab.
 - **Acheteurs (2)** : ceux qui ont voté aux sondages, répondu à une story, commenté « c'est combien », ou aimé plusieurs reels sans commander.
 

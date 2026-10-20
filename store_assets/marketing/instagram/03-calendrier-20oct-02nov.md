@@ -24,6 +24,7 @@ Semaine 1 : faire comprendre la box à ceux qui ne la connaissent pas. Semaine 2
 - **L'heure compte beaucoup moins que les deux premières secondes.** 20 h 30 en semaine (après Isha et le dîner), à ajuster dès qu'Adel envoie « Heures les plus actives ».
 - **La première heure après chaque publication, Adel reste et répond à chaque commentaire.**
 - **Le 1er novembre**, modifier les légendes qui disent « 95 € jusqu'au 31 octobre ».
+- **Aucune ville** dans les textes, les images ni les couvertures : « en France » ou « dans mon atelier » (règle d'Adel du 20/10).
 - Jamais de faux témoignage, de faux chiffre ni de fausse urgence ; pas de promesse de synchronisation Mawaqit.
 
 ## Calendrier
@@ -89,7 +90,7 @@ Si Adel préfère raconter **la box d'Algérie** (décision 3) : « ... et là, 
 
 ### Jeudi 29/10, 20 h 30 : carrousel « 8 avis, 8 fois 5 sur 5 » (à produire)
 
-- Une citation courte par image, mot pour mot, tirée des avis publiés sur adhanbox.fr. Prénom et ville **seulement avec l'accord du client**, sinon « Une cliente » ou « Un client ».
+- Une citation courte par image, mot pour mot, tirée des avis publiés sur adhanbox.fr. Prénom **seulement avec l'accord du client**, jamais de ville, sinon « Une cliente » ou « Un client ».
 - Couverture : `8 avis. 8 fois 5 sur 5.`
 - Dernière image : `Plus que 2 jours à 95 €. Commentez ADHAN.`
 - Dès sa publication, il prend la **1re épingle** (preuve).
