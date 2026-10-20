@@ -54,6 +54,11 @@
 # nouvelles cartes). Seul fichier azkar telecharge : les box deja livrees
 # l'ajoutent, leur masaa.mp3 (present) reste tel quel.
 /azkar/layl.mp3|https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/audio/azkar/layl.mp3
+# Azkar du soir SANS la nuit (20:53). Les box qui ont deja un masaa.mp3 le
+# gardent (regle « present = intouche ») : cette ligne ne sert qu'a une box a
+# qui il manque, ou dont on a supprime l'ancien (/api/audio/delete) pour qu'elle
+# prenne la version courte.
+/azkar/masaa.mp3|https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/audio/azkar/masaa.mp3
 # /quran/al-mulk.mp3|https://server8.mp3quran.net/afs/067.mp3
 # /quran/al-kahf.mp3|https://server8.mp3quran.net/afs/018.mp3
 
