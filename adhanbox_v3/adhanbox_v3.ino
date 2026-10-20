@@ -2753,7 +2753,6 @@ bool performMawaqitSync(String &errorMsg) {
   }
 
   const char *timeNames[6] = { "fajr", "sunrise", "dhuhr", "asr", "maghrib", "isha" };
-  const char *altNames[6] = { "Fajr", "Sunrise", "Dhuhr", "Asr", "Maghrib", "Isha" };
   String times[6] = { "", "", "", "", "", "" };
   bool anyValid = false;
 
@@ -2795,92 +2794,17 @@ bool performMawaqitSync(String &errorMsg) {
 
   bool mawaqitSyncSuccess = anyValid;
 
+  // [3.0.58] Plus de repli Aladhan (20/10/2026). Mawaqit refuse tout le monde
+  // depuis le 06/10/2026 ; la box demandait alors ses horaires a un service
+  // tiers (api.aladhan.com, UOIF + Asr hanafite) alors qu'elle sait faire
+  // exactement ce calcul elle-meme. Sans reponse de Mawaqit, on ne stocke
+  // rien : les horaires « mosquee » perimes, computePrayerTimesForDate prend
+  // le relais, avec la methode, l'ecole et les decalages de la box (une box
+  // rattachee a une mosquee et jamais reglee calcule en UOIF + hanafite, voir
+  // getCalculationAngles et ecoleAsr : memes horaires qu'avec Aladhan).
   if (!anyValid) {
-    Serial.println("No valid times parsed from Mawaqit endpoints, trying coordinate fallback (Aladhan)...");
-
-    double flat = 0.0, flon = 0.0, facc = 0.0;
-    if (!loadStoredLocation(flat, flon, facc)) {
-      errorMsg = "No valid times and no location for fallback";
-      return false;
-    }
-
-    // [ECOLE] Le repli suit la methode et l'ecole reglees dans l'app. Avant le
-    // 19/10/2026 il forcait method=12&school=1 (UOIF + Asr hanafite) quel que
-    // soit le choix du client : une box reglee MWL chafeite jouait le Fajr et
-    // l'Isha de l'UOIF et l'Asr hanafite des que Mawaqit ne repondait pas.
-    // Numeros Aladhan verifies le 19/10/2026 (meta.method.id de la reponse).
-    double fajrAngle, ishaAngle;
-    String methode;
-    getCalculationAngles(fajrAngle, ishaAngle, methode);
-    String methodeAladhan = "3";                        // mwl
-    if (methode == "isna") methodeAladhan = "2";
-    else if (methode == "uoif") methodeAladhan = "12";
-    else if (methode == "egypt") methodeAladhan = "5";
-    else if (methode == "karachi") methodeAladhan = "1";
-    else if (methode == "custom") methodeAladhan = "99&methodSettings=" + String(fajrAngle, 1) + ",null," + String(ishaAngle, 1);
-    // [ECOLE] Garde-fou de publication (20/10/2026) : une box dont le client
-    // n'a JAMAIS regle la methode ni l'ecole garde exactement le repli qu'elle
-    // suit depuis la fermeture de Mawaqit (UOIF + Asr hanafite). Sans cela, la
-    // mise a jour aurait deplace d'office le Fajr (MWL 18 degres par defaut, une
-    // demi-heure plus tot) et l'Asr de toutes les box rattachees a une mosquee.
-    prefs.begin("adhancfg", true);
-    const bool methodeChoisie = prefs.isKey("calc_method");
-    const bool ecoleChoisie = prefs.isKey("calc_school");
-    prefs.end();
-    if (!methodeChoisie) methodeAladhan = "12";
-    const int ecoleRepli = ecoleChoisie ? ecoleAsr() : 1;
-
-    HTTPClient http;
-    String fallbackUrl = "https://api.aladhan.com/v1/timings?latitude=" + String(flat, 6) + "&longitude=" + String(flon, 6)
-                       + "&method=" + methodeAladhan + "&school=" + String(ecoleRepli);
-    Serial.printf("Fallback request: %s\n", fallbackUrl.c_str());
-
-    http.begin(fallbackUrl);
-    http.setConnectTimeout(4000);
-    http.setTimeout(6000);
-    if (_wdtArmed) esp_task_wdt_reset();
-    int httpCode = http.GET();
-    if (_wdtArmed) esp_task_wdt_reset();
-
-    if (httpCode != 200) {
-      Serial.printf("Fallback HTTP error: %d\n", httpCode);
-      http.end();
-      errorMsg = "Fallback request failed";
-      return false;
-    }
-
-    String fallbackBody = http.getString();
-    http.end();
-    Serial.printf("Fallback body (first 300 chars): %.300s\n", fallbackBody.c_str());
-
-    for (int i = 0; i < 6; i++) {
-      int pos = fallbackBody.indexOf(String("\"") + altNames[i] + "\"");
-      if (pos >= 0) {
-        int colonPos = fallbackBody.indexOf(":", pos);
-        int q1 = fallbackBody.indexOf('"', colonPos + 1);
-        int q2 = fallbackBody.indexOf('"', q1 + 1);
-        if (q1 >= 0 && q2 > q1) {
-          times[i] = fallbackBody.substring(q1 + 1, q2);
-          if (times[i].length() > 5 && times[i].charAt(5) == ':') {
-            times[i] = times[i].substring(0, 5);
-          }
-          Serial.printf("  fallback %s = %s\n", altNames[i], times[i].c_str());
-        }
-      }
-    }
-
-    anyValid = false;
-    for (int i = 0; i < 6; i++) {
-      if (times[i].length() >= 5) {
-        anyValid = true;
-        break;
-      }
-    }
-
-    if (!anyValid) {
-      errorMsg = "No valid times in response";
-      return false;
-    }
+    errorMsg = "Mawaqit indisponible : horaires calcules par la box";
+    return false;
   }
 
   // Apply user-configured offsets to times
@@ -2996,7 +2920,11 @@ void getCalculationAngles(double &fajrAngle, double &ishaAngle, String &methodNa
   methodName = "mwl";
 
   prefs.begin("adhancfg", true);
-  String method = prefs.getString("calc_method", "mwl");
+  // [3.0.58] Une box rattachee a une mosquee et jamais reglee calcule en UOIF,
+  // comme le faisait le repli Aladhan depuis la fermeture de Mawaqit : retirer
+  // ce repli ne doit pas avancer son Fajr d'une demi-heure (MWL).
+  const bool mosquee = prefs.getString("mq_uuid", "").length() > 0;
+  String method = prefs.getString("calc_method", mosquee ? "uoif" : "mwl");
   double customFajr = prefs.getFloat("calc_fajr_angle", 18.0f);
   double customIsha = prefs.getFloat("calc_isha_angle", 17.0f);
   prefs.end();
@@ -3034,7 +2962,10 @@ void getCalculationAngles(double &fajrAngle, double &ishaAngle, String &methodNa
 // decembre, 75 min en juin).
 int ecoleAsr() {
   prefs.begin("adhancfg", true);
-  int ecole = prefs.getInt("calc_school", 0);
+  // [3.0.58] Hanafite par defaut pour une box rattachee a une mosquee et jamais
+  // reglee : c'est l'Asr que lui donnait le repli Aladhan (school=1).
+  const bool mosquee = prefs.getString("mq_uuid", "").length() > 0;
+  int ecole = prefs.getInt("calc_school", mosquee ? 1 : 0);
   prefs.end();
   return ecole == 1 ? 1 : 0;
 }
@@ -8831,14 +8762,21 @@ void loop() {
 
       if (uuid.length() > 0) {
         unsigned long age_sec = (mq_sync_ts > 0 && now_epoch >= mq_sync_ts) ? (now_epoch - mq_sync_ts) : 999999UL;
-        if (age_sec > 20UL * 3600UL) {  // More than 20 hours since last sync
+        // [3.0.58] Apres un echec (Mawaqit refuse tout le monde depuis le
+        // 06/10/2026), on ne reessaie que 6 h plus tard : sans le repli Aladhan,
+        // qui reecrivait mq_sync_ts, la box retentait chaque minute (deux GET
+        // HTTPS dans loop(), la cause des accrocs de son corriges en 3.0.55).
+        static unsigned long dernierEchecMawaqit = 0;
+        const bool enAttente = dernierEchecMawaqit != 0 && millis() - dernierEchecMawaqit < 6UL * 3600UL * 1000UL;
+        if (age_sec > 20UL * 3600UL && !enAttente) {  // More than 20 hours since last sync
           Serial.println("Auto-sync: Mawaqit times are older than 20 hours. Starting background sync...");
           String err;
           if (performMawaqitSync(err)) {
             Serial.println("Auto-sync: Background sync successful!");
             scheduleNextPrayerAlarm();
           } else {
-            Serial.printf("Auto-sync: Background sync failed: %s. Will retry later.\n", err.c_str());
+            Serial.printf("Auto-sync: Background sync failed: %s. Nouvel essai dans 6 h.\n", err.c_str());
+            dernierEchecMawaqit = millis();
           }
         }
       }
