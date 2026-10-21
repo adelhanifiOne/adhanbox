@@ -1,6 +1,6 @@
 {
-  "version": "3.0.58",
+  "version": "3.0.59",
   "hardware": "v3",
   "url": "https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/build_temp_v3/adhanbox_v3.ino.bin",
-  "changelog": "École juridique respectée : si vous avez choisi l'Asr hanafite dans l'application, votre boîtier le suit désormais. Et quand le service de votre mosquée ne répond pas, il calcule lui-même ses horaires, sans service extérieur."
+  "changelog": "Adhan plus fiable : si votre boîtier manque de mémoire au moment de l'appel (par exemple pendant un téléchargement), il réessaie et, au besoin, redémarre aussitôt pour jouer l'adhan au lieu de rester silencieux."
 }
