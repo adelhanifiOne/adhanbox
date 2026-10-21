@@ -1205,6 +1205,7 @@ void handleAdhanConfig();
 bool syncTimeFromNtp(unsigned long timeoutMs = 10000);
 void handleDumpStatus();
 void scheduleNextPrayerAlarm();
+bool garderPriereEchue(const DateTime &now);   // [SAUT 3.0.60]
 void rattraperAdhanInterrompu();   // [RATTRAPAGE 3.0.59]
 void handleJournal();              // [JOURNAL 3.0.60] journal des adhans, lecture seule
 bool computeNextPrayer(const DateTime &now, DateTime &nextDt, int &idx);
@@ -5268,6 +5269,7 @@ void scheduleNextPrayerAlarm() {
     Serial.printf("scheduleNextPrayerAlarm: invalid RTC date %04u-%02u-%02u, skipping\n", now.year(), now.month(), now.day());
     return;
   }
+  if (garderPriereEchue(now)) return;   // [SAUT 3.0.60]
   DateTime nextDt;
   int idx;
   if (computeNextPrayer(now, nextDt, idx)) {
@@ -5392,6 +5394,7 @@ enum : uint8_t {
   J_HEURE,          // alarme ignoree : heure non fiable
   J_DOUBLON,        // priere deja jouee aujourd'hui
   J_DESACTIVEE,     // adhan coupe pour cette priere dans l'application
+  J_GARDEE,         // [SAUT 3.0.60] reprogrammation juste apres l'heure : priere gardee
 };
 enum : uint8_t { J_ACT_SYNCHRO = 1, J_ACT_SDTEST = 2, J_ACT_LECTURE = 4 };
 enum : uint8_t { J_C_AUTRE = 0, J_C_APPLI, J_C_BOUTON, J_C_MQTT, J_C_DIAG, J_C_BANC,
@@ -5485,12 +5488,44 @@ static void journalDemarrage() {
   }
 }
 
+// [SAUT 3.0.60] Une priere dont l'heure vient de passer, mais que loop() n'a
+// pas encore declenchee, ne doit pas etre remplacee par la suivante. Sans ce
+// garde-fou, tout ce qui reprogramme l'alarme dans ces quelques secondes la
+// faisait sauter SANS UN SON ni une trace : l'application qui remet la box a
+// l'heure du telephone (toutes les 10 min quand elle est ouverte), le NTP, un
+// changement de position, de fuseau ou d'horaires. Prouve le 21/10/2026 sur la
+// box d'Adel : Maghrib de 19 h 12 saute sans aucune ligne au journal, puis un
+// recalage 5 s apres une alarme de test l'envoie directement a l'Isha.
+// On la garde programmee (dans le passe) : loop() la declenche au tour
+// suivant, et la protection anti-doublon (last_trig_*) empeche de la rejouer.
+bool garderPriereEchue(const DateTime &now) {
+  if (scheduledPrayerIndex <= 0) return false;
+  const uint32_t n = now.unixtime(), p = scheduledPrayerTime.unixtime();
+  if (n < p || n - p > 10UL * 60UL) return false;
+  Preferences c;
+  if (!c.begin("adhancfg", true)) return false;
+  const bool deja = c.getInt("last_trig_idx", 0) == scheduledPrayerIndex
+                 && c.getInt("last_trig_day", 0) == scheduledPrayerTime.day()
+                 && c.getInt("last_trig_mon", 0) == scheduledPrayerTime.month()
+                 && c.getInt("last_trig_yr", 0) == scheduledPrayerTime.year();
+  c.end();
+  if (deja) return false;
+  static uint32_t notee = 0;   // une ligne de journal par priere, pas une par appel
+  if (notee != p) {
+    notee = p;
+    if (scheduledPrayerIndex != 2) journal(J_GARDEE, scheduledPrayerIndex);
+  }
+  Serial.printf("[SAUT] Priere %d de %02d:%02d pas encore jouee : gardee\n",
+                scheduledPrayerIndex, scheduledPrayerTime.hour(), scheduledPrayerTime.minute());
+  return true;
+}
+
 // GET /api/journal : du plus ancien au plus recent. Envoye par morceaux, sans
 // grosse chaine en RAM interne (c'est elle qui manque a l'adhan).
 void handleJournal() {
   static const char *const types[] = {"?", "demarrage", "alarme", "rien joue", "RAM insuffisante",
                                 "rattrapage", "fin", "coupe", "heure non fiable",
-                                "deja jouee", "desactivee"};
+                                "deja jouee", "desactivee", "saut evite"};
   static const char *const prieres[] = {"-", "fajr", "lever", "dhuhr", "asr", "maghrib", "isha"};
   static const char *const coupures[] = {"autre", "application", "bouton tactile", "MQTT", "diagnostic",
                                    "banc", "console serie", "mesure", "autre lecture", "decodeur"};
@@ -5540,7 +5575,7 @@ void handleJournal() {
       snprintf(l, sizeof(l),
                "%s{\"quand\":\"%s\",\"evt\":\"%s\",\"priere\":\"%s\",\"piste\":%u,\"heure\":\"%s\","
                "\"dma\":%lu,\"bloc\":%lu%s}",
-               premier ? "" : ",", quand, types[e.type <= J_DESACTIVEE ? e.type : 0],
+               premier ? "" : ",", quand, types[e.type <= J_GARDEE ? e.type : 0],
                prieres[e.priere <= 6 ? e.priere : 0], (unsigned)e.piste, heures[e.heure <= 2 ? e.heure : 0],
                (unsigned long)e.dma, (unsigned long)e.bloc, extra);
       server.sendContent(l);
