@@ -1204,8 +1204,17 @@ void handleCalculationConfig();
 void handleAdhanConfig();
 bool syncTimeFromNtp(unsigned long timeoutMs = 10000);
 void handleDumpStatus();
-void scheduleNextPrayerAlarm();
-bool garderPriereEchue(const DateTime &now);   // [SAUT 3.0.60]
+// [SAUT 3.0.60] Qui reprogramme l'alarme : compte par origine depuis le
+// demarrage, rendu par /api/journal. Deux prieres sautees le meme soir
+// (21/10/2026) : il faut savoir QUI reprogramme, et a quelle frequence.
+static const char *const kAppelants[] = {"?", "appli (heure)", "NTP auto", "connexion Wi-Fi",
+  "Wi-Fi revenu", "position", "fuseau", "calcul", "Mawaqit", "heure d'ete", "setrtc",
+  "demarrage", "apres alarme", "heure non fiable", "sync_time", "Bluetooth", "console"};
+#define N_APPELANTS 17
+static uint16_t g_reprogN[N_APPELANTS] = {0};
+static uint32_t g_reprogQuand[N_APPELANTS] = {0};
+void scheduleNextPrayerAlarm(uint8_t appelant = 0);
+bool garderPriereEchue(const DateTime &now, uint8_t appelant);   // [SAUT 3.0.60]
 void rattraperAdhanInterrompu();   // [RATTRAPAGE 3.0.59]
 void handleJournal();              // [JOURNAL 3.0.60] journal des adhans, lecture seule
 bool computeNextPrayer(const DateTime &now, DateTime &nextDt, int &idx);
@@ -1645,7 +1654,7 @@ void handleSetLocation() {
   Serial.printf("Stored location: %f , %f (acc=%f)\n", lat, lon, acc);
   // [3.0.56] La position decide de l'heure d'ete europeenne : on la relit.
   chargerFuseau();
-  if (rtcPresent) scheduleNextPrayerAlarm();
+  if (rtcPresent) scheduleNextPrayerAlarm(5);
 }
 
 void handleSetTZ() {
@@ -1685,7 +1694,7 @@ void handleSetTZ() {
   prefs.putBool("tz_dst_eu", dstEu);
   prefs.end();
   chargerFuseau();
-  if (rtcPresent) scheduleNextPrayerAlarm();
+  if (rtcPresent) scheduleNextPrayerAlarm(6);
   server.send(200, "text/plain", "Timezone offset saved");
   Serial.printf("Fuseau enregistre : pousse %+d min -> standard %+d min, heure d'ete %s\n",
                 pousse, std, dstEu ? "oui" : "non");
@@ -1705,7 +1714,7 @@ void handleSetRTC() {
   }
   // __DATE__ / __TIME__ sont l'heure LOCALE de la machine de compilation.
   rtc.adjust(heureUtc(DateTime(F(__DATE__), F(__TIME__))));
-  scheduleNextPrayerAlarm();
+  scheduleNextPrayerAlarm(10);
   server.send(200, "text/plain", "RTC set to compile time (converti en UTC)");
 }
 
@@ -1770,7 +1779,7 @@ void handleSetRtcManual() {
   // 22/09/2026, RTC a 21:01 alors que l'UTC reel etait 19:01.
   DateTime utc = heureUtc(dt);
   rtc.adjust(utc);
-  scheduleNextPrayerAlarm();
+  scheduleNextPrayerAlarm(1);
   char buf[96];
   snprintf(buf, sizeof(buf), "RTC regle : %04d-%02d-%02d %02d:%02d:%02d locale -> %02u:%02u:%02u UTC",
            y, m, d, hh, mm, ss, utc.hour(), utc.minute(), utc.second());
@@ -2600,7 +2609,7 @@ void handleMawaqitSetOffsets() {
                 fajrOff, sunriseOff, dhuhrOff, asrOff, maghribOff, ishaOff);
 
   // Reschedule alarm with new offsets
-  if (rtcPresent) scheduleNextPrayerAlarm();
+  if (rtcPresent) scheduleNextPrayerAlarm(8);
 
   server.send(200, "application/json", "{\"ok\":true}");
 }
@@ -2658,7 +2667,7 @@ void handleMawaqitClear() {
   for (const char *c : cles) prefs.remove(c);
   prefs.putULong("mq_sync_ts", 0);
   prefs.end();
-  if (rtcPresent) scheduleNextPrayerAlarm();
+  if (rtcPresent) scheduleNextPrayerAlarm(8);
   Serial.println("[MOSQUEE] Mosquee retiree : retour aux horaires calcules");
   server.send(200, "application/json", "{\"ok\":true,\"source\":\"calculated\"}");
 }
@@ -2899,7 +2908,7 @@ void handleMawaqitSync() {
 
   String err;
   if (performMawaqitSync(err)) {
-    scheduleNextPrayerAlarm();
+    scheduleNextPrayerAlarm(8);
     server.send(200, "application/json", "{\"ok\":true,\"message\":\"times synced\"}");
   } else {
     server.send(500, "application/json", "{\"error\":\"" + err + "\"}");
@@ -3087,7 +3096,7 @@ void handleCalculationConfig() {
                   ancienneMethode.c_str(), ancienneEcole, nouvelleMethode.c_str(), ecole);
   }
 
-  if (rtcPresent) scheduleNextPrayerAlarm();
+  if (rtcPresent) scheduleNextPrayerAlarm(7);
 
   String out = "{\"ok\":true,\"method\":\"" + method + "\",\"school\":" + String(ecole) + ",\"fajr_angle\":" + String(customFajr, 1) + ",\"isha_angle\":" + String(customIsha, 1) + "}";
   server.send(200, "application/json", out);
@@ -3531,7 +3540,7 @@ void handleBLEProvisioning() {
 
     if (rtcPresent) {
       syncTimeFromNtp(10000);
-      scheduleNextPrayerAlarm();
+      scheduleNextPrayerAlarm(15);
     }
 
   } else {
@@ -4270,7 +4279,7 @@ void setupServerRoutes() {
   server.on("/sync_time", HTTP_GET, []() {
     bool ok = syncTimeFromNtp(10000);
     if (ok) {
-      if (rtcPresent) scheduleNextPrayerAlarm();
+      if (rtcPresent) scheduleNextPrayerAlarm(14);
       server.send(200, "text/plain", "Time synced");
     } else server.send(500, "text/plain", "Time sync failed");
   });
@@ -5261,15 +5270,16 @@ bool computeNextPrayer(const DateTime &now, DateTime &nextDt, int &idx) {
 }
 
 // Schedule next prayer alarm: computes next prayer, programs Alarm2 daily at that hh:mm
-void scheduleNextPrayerAlarm() {
+void scheduleNextPrayerAlarm(uint8_t appelant) {
   if (!rtcPresent) return;
   DateTime now = localNow();
+  if (appelant < N_APPELANTS) { g_reprogN[appelant]++; g_reprogQuand[appelant] = now.unixtime(); }
   // Guard against corrupt RTC data (I2C bus issue) to avoid out-of-bounds crash in dayOfYear()
   if (now.month() < 1 || now.month() > 12 || now.day() < 1 || now.day() > 31 || now.year() < 2020 || now.year() > 2100) {
     Serial.printf("scheduleNextPrayerAlarm: invalid RTC date %04u-%02u-%02u, skipping\n", now.year(), now.month(), now.day());
     return;
   }
-  if (garderPriereEchue(now)) return;   // [SAUT 3.0.60]
+  if (garderPriereEchue(now, appelant)) return;   // [SAUT 3.0.60]
   DateTime nextDt;
   int idx;
   if (computeNextPrayer(now, nextDt, idx)) {
@@ -5498,10 +5508,14 @@ static void journalDemarrage() {
 // recalage 5 s apres une alarme de test l'envoie directement a l'Isha.
 // On la garde programmee (dans le passe) : loop() la declenche au tour
 // suivant, et la protection anti-doublon (last_trig_*) empeche de la rejouer.
-bool garderPriereEchue(const DateTime &now) {
+// Couvre aussi les 5 s AVANT l'heure : computeNextPrayer() ignore une priere a
+// moins de 5 s (marge « > now + 5 »), ce qui faisait sauter l'Isha de 20 h 15
+// le 21/10/2026 a une reprogrammation tombee dans ces 5 s.
+bool garderPriereEchue(const DateTime &now, uint8_t appelant) {
   if (scheduledPrayerIndex <= 0) return false;
   const uint32_t n = now.unixtime(), p = scheduledPrayerTime.unixtime();
-  if (n < p || n - p > 10UL * 60UL) return false;
+  if (p > n + 5) return false;                     // encore loin : on recalcule
+  if (n > p && n - p > 10UL * 60UL) return false;  // trop ancienne : on passe
   Preferences c;
   if (!c.begin("adhancfg", true)) return false;
   const bool deja = c.getInt("last_trig_idx", 0) == scheduledPrayerIndex
@@ -5513,7 +5527,7 @@ bool garderPriereEchue(const DateTime &now) {
   static uint32_t notee = 0;   // une ligne de journal par priere, pas une par appel
   if (notee != p) {
     notee = p;
-    if (scheduledPrayerIndex != 2) journal(J_GARDEE, scheduledPrayerIndex);
+    if (scheduledPrayerIndex != 2) journal(J_GARDEE, scheduledPrayerIndex, 0, appelant);
   }
   Serial.printf("[SAUT] Priere %d de %02d:%02d pas encore jouee : gardee\n",
                 scheduledPrayerIndex, scheduledPrayerTime.hour(), scheduledPrayerTime.minute());
@@ -5569,6 +5583,8 @@ void handleJournal() {
                  e.type == J_COUPE ? ",\"par\":\"" : "",
                  e.type == J_COUPE ? coupures[e.code < 10 ? e.code : 0] : "",
                  e.type == J_COUPE ? "\"" : "");
+      } else if (e.type == J_GARDEE) {
+        snprintf(extra, sizeof(extra), ",\"par\":\"%s\"", kAppelants[e.code < N_APPELANTS ? e.code : 0]);
       } else if (e.type == J_RIEN) {
         snprintf(extra, sizeof(extra), ",\"faute_de_ram\":%s", e.code ? "true" : "false");
       }
@@ -5585,6 +5601,16 @@ void handleJournal() {
     mi = j.getUInt("mi", 0);
     mr = j.getUChar("mr", 0);
     j.end();
+  }
+  server.sendContent("],\"reprogrammations\":[");
+  bool prem = true;
+  for (int a = 0; a < N_APPELANTS; a++) {
+    if (!g_reprogN[a]) continue;
+    DateTime d(g_reprogQuand[a]);
+    snprintf(l, sizeof(l), "%s{\"par\":\"%s\",\"n\":%u,\"dernier\":\"%02d:%02d:%02d\"}",
+             prem ? "" : ",", kAppelants[a], (unsigned)g_reprogN[a], d.hour(), d.minute(), d.second());
+    server.sendContent(l);
+    prem = false;
   }
   miette.replace("\"", "'");
   snprintf(l, sizeof(l), "],\"derniere_miette\":{\"texte\":\"%s\",\"info\":%lu,\"cause\":\"%s\"}}",
@@ -7618,7 +7644,7 @@ void setup() {
   // Decoupled alarm scheduling: Always schedule on boot if RTC is present (covers Mawaqit-only setups)
   if (rtcPresent) {
     Serial.println("Scheduling next prayer alarm on startup...");
-    scheduleNextPrayerAlarm();
+    scheduleNextPrayerAlarm(11);
     rattraperAdhanInterrompu();   // [RATTRAPAGE 3.0.59]
   }
 
@@ -7843,7 +7869,7 @@ void setup() {
       Serial.println("Synchro NTP au boot...");
       if (syncTimeFromNtp(15000)) Serial.println("NTP OK.");
       else Serial.println("NTP echoue.");
-      if (rtcPresent) scheduleNextPrayerAlarm();
+      if (rtcPresent) scheduleNextPrayerAlarm(11);
     } else {
       Serial.println("\n✗ WiFi echoue.");
     }
@@ -8232,7 +8258,7 @@ void loop() {
   if ((long)(millis() - _ntpProchain) >= 0 && WiFi.status() == WL_CONNECTED
       && !audio.isRunning() && !_syncRunning) {
     _ntpProchain = millis() + 5UL * 60UL * 1000UL;
-    if (syncTimeFromNtp(8000) && rtcPresent) scheduleNextPrayerAlarm();
+    if (syncTimeFromNtp(8000) && rtcPresent) scheduleNextPrayerAlarm(2);
   }
   const uint32_t _t1 = micros();
   v2Tick();          // [V2] azkar/coran + sync contenu
@@ -8363,7 +8389,7 @@ void loop() {
       if (rtc.begin()) {
         rtc.adjust(heureUtc(DateTime(F(__DATE__), F(__TIME__))));   // compilation = heure locale
         Serial.println("RTC regle sur l'heure de compilation, convertie en UTC.");
-        scheduleNextPrayerAlarm();
+        scheduleNextPrayerAlarm(16);
       } else {
         Serial.println("RTC not initialized or not present.");
       }
@@ -8798,7 +8824,7 @@ void loop() {
     rtcAlarmFlag = false;
     Serial.println("[COUPURES] Alarme ignoree : heure non fiable (attente NTP).");
     if (scheduledPrayerIndex != 2) journal(J_HEURE, scheduledPrayerIndex);   // [JOURNAL]
-    if (rtcPresent) scheduleNextPrayerAlarm();
+    if (rtcPresent) scheduleNextPrayerAlarm(13);
   }
   if (rtcAlarmFlag) {
     Serial.println("Alarme RTC declenchee.");
@@ -8908,7 +8934,7 @@ void loop() {
     } else {
       Serial.println("Skipped duplicate alarm trigger within 60s");
     }
-    scheduleNextPrayerAlarm();
+    scheduleNextPrayerAlarm(12);
   }
 
   // Async WiFi connect state machine
@@ -8934,7 +8960,7 @@ void loop() {
         setupOTA();
       }
       // NTP + prayer reschedule
-      if (syncTimeFromNtp(15000) && rtcPresent) scheduleNextPrayerAlarm();
+      if (syncTimeFromNtp(15000) && rtcPresent) scheduleNextPrayerAlarm(3);
       // Init MQTT if broker stored
       if (g_servicesDemarres) {
         prefs.begin("adhancfg", true);
@@ -8968,7 +8994,7 @@ void loop() {
                     WiFi.localIP().toString().c_str());
       startServices();
       wifiConnectState = WCS_CONNECTED;
-      if (rtcPresent) scheduleNextPrayerAlarm();
+      if (rtcPresent) scheduleNextPrayerAlarm(4);
     }
   }
 
@@ -9083,7 +9109,7 @@ void loop() {
           prefs.begin("adhancfg", false);
           prefs.putULong("mq_sync_ts", 0);
           prefs.end();
-          scheduleNextPrayerAlarm();
+          scheduleNextPrayerAlarm(9);
         }
         dernierOffset = off;
       }
@@ -9117,7 +9143,7 @@ void loop() {
           String err;
           if (performMawaqitSync(err)) {
             Serial.println("Auto-sync: Background sync successful!");
-            scheduleNextPrayerAlarm();
+            scheduleNextPrayerAlarm(8);
           } else {
             Serial.printf("Auto-sync: Background sync failed: %s. Nouvel essai dans 6 h.\n", err.c_str());
             dernierEchecMawaqit = millis();
