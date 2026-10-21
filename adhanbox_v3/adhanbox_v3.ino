@@ -1215,6 +1215,12 @@ static uint16_t g_reprogN[N_APPELANTS] = {0};
 static uint32_t g_reprogQuand[N_APPELANTS] = {0};
 void scheduleNextPrayerAlarm(uint8_t appelant = 0);
 bool garderPriereEchue(const DateTime &now, uint8_t appelant);   // [SAUT 3.0.60]
+bool rearmerPriereEchue(const DateTime &now, uint8_t appelant);  // [SAUT 3.0.60] apres un redemarrage
+// [SAUT 3.0.60] Derniere priere declenchee, temoin en RAM : la garde ne doit
+// pas dependre de la seule NVS (une ecriture refusee, memoire pleine, ferait
+// rejouer l'adhan toutes les minutes jusqu'a p + 10 min).
+static uint8_t  g_declencheIdx = 0;
+static uint32_t g_declencheA = 0;
 void rattraperAdhanInterrompu();   // [RATTRAPAGE 3.0.59]
 void handleJournal();              // [JOURNAL 3.0.60] journal des adhans, lecture seule
 bool computeNextPrayer(const DateTime &now, DateTime &nextDt, int &idx);
@@ -1778,6 +1784,19 @@ void handleSetRtcManual() {
   // l'appli, et l'ecart se voit tout de suite : constate sur carte le
   // 22/09/2026, RTC a 21:01 alors que l'UTC reel etait 19:01.
   DateTime utc = heureUtc(dt);
+  // [SAUT 3.0.60] Heure deja sure (NTP) et ecart sous 30 s : on ne touche ni a
+  // la RTC ni a l'alarme. L'appli renvoyait l'heure a chaque ouverture et
+  // toutes les 10 min ; recue dans les secondes autour d'une priere, elle la
+  // faisait sauter. Protege aussi les telephones restes sur une ancienne appli.
+  if (_timeTrusted) {
+    const int32_t ecart = (int32_t)(utc.unixtime() - rtc.now().unixtime());
+    if (ecart > -30 && ecart < 30) {
+      char ok[80];
+      snprintf(ok, sizeof(ok), "RTC deja a l'heure (ecart %ld s) : inchangee", (long)ecart);
+      server.send(200, "text/plain", String(ok));
+      return;
+    }
+  }
   rtc.adjust(utc);
   scheduleNextPrayerAlarm(1);
   char buf[96];
@@ -5280,6 +5299,7 @@ void scheduleNextPrayerAlarm(uint8_t appelant) {
     return;
   }
   if (garderPriereEchue(now, appelant)) return;   // [SAUT 3.0.60]
+  if (rearmerPriereEchue(now, appelant)) return;  // [SAUT 3.0.60] apres un redemarrage
   DateTime nextDt;
   int idx;
   if (computeNextPrayer(now, nextDt, idx)) {
@@ -5516,6 +5536,7 @@ bool garderPriereEchue(const DateTime &now, uint8_t appelant) {
   const uint32_t n = now.unixtime(), p = scheduledPrayerTime.unixtime();
   if (p > n + 5) return false;                     // encore loin : on recalcule
   if (n > p && n - p > 10UL * 60UL) return false;  // trop ancienne : on passe
+  if (g_declencheIdx == scheduledPrayerIndex && g_declencheA == p) return false;   // deja declenchee (temoin RAM)
   Preferences c;
   if (!c.begin("adhancfg", true)) return false;
   const bool deja = c.getInt("last_trig_idx", 0) == scheduledPrayerIndex
@@ -5531,6 +5552,35 @@ bool garderPriereEchue(const DateTime &now, uint8_t appelant) {
   }
   Serial.printf("[SAUT] Priere %d de %02d:%02d pas encore jouee : gardee\n",
                 scheduledPrayerIndex, scheduledPrayerTime.hour(), scheduledPrayerTime.minute());
+  return true;
+}
+
+// [SAUT 3.0.60] Rien n'est programme (demarrage) : une priere passee depuis
+// moins de 10 min et jamais declenchee est re-armee, loop() la joue par le
+// sondage de l'heure. Sans ca, un redemarrage dans cette fenetre la perdait en
+// silence : scheduledPrayerIndex vaut 0, la garde n'a rien a garder, et
+// computeNextPrayer() prend la suivante (piste serieuse pour l'Asr du
+// 21/10/2026 : redemarrage logiciel pendant la synchro). Heure SURE seulement :
+// une heure restauree approximative pourrait rejouer a tort.
+bool rearmerPriereEchue(const DateTime &now, uint8_t appelant) {
+  if (scheduledPrayerIndex > 0 || !_timeTrusted) return false;
+  DateTime cand;
+  int idx = 0;
+  if (!computeNextPrayer(DateTime(now.unixtime() - 605UL), cand, idx)) return false;
+  const uint32_t n = now.unixtime(), p = cand.unixtime();
+  if (p > n + 5 || idx == 2) return false;
+  if (g_declencheIdx == idx && g_declencheA == p) return false;
+  Preferences c;
+  if (!c.begin("adhancfg", true)) return false;
+  const bool deja = c.getInt("last_trig_idx", 0) == idx && c.getInt("last_trig_day", 0) == cand.day()
+                 && c.getInt("last_trig_mon", 0) == cand.month() && c.getInt("last_trig_yr", 0) == cand.year();
+  c.end();
+  if (deja) return false;
+  scheduledPrayerIndex = idx;
+  scheduledPrayerTime = cand;
+  softwareAlarmAt = 0;
+  journal(J_GARDEE, (uint8_t)idx, 0, appelant);
+  Serial.printf("[SAUT] Priere %d de %02d:%02d passee sans etre jouee : re-armee\n", idx, cand.hour(), cand.minute());
   return true;
 }
 
@@ -5645,6 +5695,8 @@ void rattraperAdhanInterrompu() {
   audio.volume(vol);
   if (piste == 1) piste = 2;
   Serial.printf("[RATTRAPAGE] adhan %d interrompu par un redemarrage : on le rejoue\n", idx);
+  g_declencheIdx = (uint8_t)idx; g_declencheA = g_adhanEnCoursA;   // [SAUT] temoin : pas de 2e declenchement
+  if (scheduledPrayerIndex == idx && scheduledPrayerTime.unixtime() == g_adhanEnCoursA) scheduleNextPrayerAlarm(11);
   journal(J_RATTRAPAGE, idx, piste);   // [JOURNAL] avant d'ouvrir le son
   shouldPlayDuaaAfterAdhan = duaa;
   g_ramAudioManque = false;
@@ -8811,7 +8863,7 @@ void loop() {
 
   bool shouldTrigger = false;
 
-  if (softwareAlarmAt != 0 && millis() >= softwareAlarmAt) {
+  if (softwareAlarmAt != 0 && (int32_t)(millis() - softwareAlarmAt) >= 0) {   // [SAUT] tient au debordement de millis()
     Serial.println("Software fallback alarm triggered (millis)");
     shouldTrigger = true;
   }
@@ -8852,6 +8904,8 @@ void loop() {
                         scheduledPrayerIndex, scheduledPrayerTime.year(), scheduledPrayerTime.month(), scheduledPrayerTime.day());
           if (scheduledPrayerIndex != 2) journal(J_DOUBLON, scheduledPrayerIndex);   // [JOURNAL]
         } else {
+          g_declencheIdx = (uint8_t)scheduledPrayerIndex;   // [SAUT] temoin RAM, avant la NVS
+          g_declencheA = scheduledPrayerTime.unixtime();
           // Write trigger info to NVS
           prefs.begin("adhancfg", false);
           prefs.putInt("last_trig_idx", scheduledPrayerIndex);
