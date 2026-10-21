@@ -33,6 +33,7 @@ static inline void securiser(WiFiClientSecure &c) {
 #include <nvs_flash.h>   // [BANC] remise a zero usine : effacement de la NVS
 #include <esp_wifi.h>    // [BANC] lecture des identifiants Wi-Fi memorises
 #include <esp_heap_caps.h>   // [CREPITEMENT] taille du coussin DMA selon la memoire libre
+#include <nvs.h>             // [JOURNAL 3.0.59] nvs_get_stats
 #include <esp_system.h>      // [CREPITEMENT] esp_reset_reason : pourquoi la carte a redemarre
 #include <esp_timer.h>       // [CREPITEMENT] sonde CPU du banc (IRAM)
 #include <RTClib.h>
@@ -465,7 +466,7 @@ static inline void _plusHaut(uint32_t &m, uint32_t v) { if (v > m) m = v; }
 // [CREPITEMENT] Pourquoi la carte a demarre. « PANIQUE » = plantage logiciel :
 // c'est ce que produit un assert de la bibliotheque audio quand elle n'obtient
 // pas sa memoire DMA. « TENSION INSUFFISANTE » = alimentation. Le banc l'affiche.
-static const char* raisonRedemarrage() {
+static const char* nomRaison(esp_reset_reason_t r) {
   // ATTENTION : ce sont des valeurs d'enumeration, PAS des macros. Un
   // #ifdef ESP_RST_USB est donc toujours FAUX et supprimerait le cas au lieu de
   // le proteger — c'est ce qui laissait le banc lire « inconnu » sur une carte
@@ -473,7 +474,6 @@ static const char* raisonRedemarrage() {
   // La liste complete existe depuis l'IDF 5 ; le defaut rend le numero brut
   // pour qu'un cas inattendu reste identifiable au lieu de disparaitre.
   static char autre[20];
-  const esp_reset_reason_t r = esp_reset_reason();
   switch (r) {
     case ESP_RST_POWERON:    return "allumage";
     case ESP_RST_EXT:        return "reset externe";
@@ -493,6 +493,7 @@ static const char* raisonRedemarrage() {
     default:                 snprintf(autre, sizeof(autre), "inconnu (%d)", (int)r); return autre;
   }
 }
+static const char* raisonRedemarrage() { return nomRaison(esp_reset_reason()); }
 
 // [CREPITEMENT] Sonde CPU du banc. Tourne en rond pendant `us` microsecondes et
 // rend de combien on a DEPASSE : si le coeur nous a ete vole entre-temps (tache
@@ -1205,6 +1206,7 @@ bool syncTimeFromNtp(unsigned long timeoutMs = 10000);
 void handleDumpStatus();
 void scheduleNextPrayerAlarm();
 void rattraperAdhanInterrompu();   // [RATTRAPAGE 3.0.59]
+void handleJournal();              // [JOURNAL 3.0.59] journal des adhans, lecture seule
 bool computeNextPrayer(const DateTime &now, DateTime &nextDt, int &idx);
 void handleLedTest();
 void handleMqttConfig();
@@ -4304,6 +4306,7 @@ void setupServerRoutes() {
   server.on("/api/audio/pause", HTTP_GET, handleAudioPause);     // [PLAYER] pause
   server.on("/api/audio/resume", HTTP_GET, handleAudioResume);   // [PLAYER] reprise
   server.on("/api/diag", HTTP_GET, handleDiag);
+  server.on("/api/journal", HTTP_GET, handleJournal);   // [JOURNAL 3.0.59] ne coupe PAS le son
   server.on("/api/bouton", HTTP_GET, handleBouton);          // [BOUTON] capteur tactile
   server.on("/api/mosquee", HTTP_GET, handleMosqueeGet);     // [MOSQUEE] etat + sujets MQTT
   server.on("/api/mosquee", HTTP_POST, handleMosqueeSet);    // [MOSQUEE] activer / regler
@@ -5366,6 +5369,196 @@ int jouerAdhan(int track, bool fajr) {
   return 0;
 }
 
+// ── [JOURNAL 3.0.59] Journal des adhans, garde en flash ─────────────────────
+// Le 21/10/2026, le Fajr de la box d'Adel n'a pas sonne. La cause du dernier
+// redemarrage vit en memoire RTC (miette, esp_reset_reason) : le debranchement
+// qui a suivi l'a effacee, et on n'a pu que la deduire. Ce journal est ecrit en
+// NVS et survit a un debranchement : chaque demarrage et sa cause, chaque
+// alarme de priere avec la RAM libre a cet instant et ce qui tournait, puis ce
+// qu'elle a donne. Les JOURNAL_N derniers evenements, lus par GET /api/journal
+// (lecture seule : ne touche pas a la lecture, contrairement a /api/diag).
+// REGLE : rien n'est ecrit pendant qu'un adhan joue. Une ecriture flash gele
+// les deux coeurs (bien plus longtemps si la NVS doit effacer une page) : on
+// note avant d'ouvrir le son et apres l'avoir arrete, jamais entre les deux.
+// Espace NVS a part (« journal ») : une ecriture ratee n'y touche aucun reglage.
+enum : uint8_t {
+  J_DEMARRAGE = 1,  // code = esp_reset_reason()
+  J_ALARME,         // l'alarme part, AVANT d'ouvrir le son ; code = J_ACT_* en cours
+  J_RIEN,           // aucun adhan lance ; code 1 = faute de RAM, 0 = pas de fichier
+  J_RAM,            // RAM audio insuffisante : redemarrage pour le rejouer
+  J_RATTRAPAGE,     // rejoue au demarrage apres J_RAM (ecrit avant d'ouvrir le son)
+  J_FIN,            // adhan alle au bout
+  J_COUPE,          // adhan arrete avant la fin ; code = J_C_*
+  J_HEURE,          // alarme ignoree : heure non fiable
+  J_DOUBLON,        // priere deja jouee aujourd'hui
+  J_DESACTIVEE,     // adhan coupe pour cette priere dans l'application
+};
+enum : uint8_t { J_ACT_SYNCHRO = 1, J_ACT_SDTEST = 2, J_ACT_LECTURE = 4 };
+enum : uint8_t { J_C_AUTRE = 0, J_C_APPLI, J_C_BOUTON, J_C_MQTT, J_C_DIAG, J_C_BANC,
+                 J_C_CONSOLE, J_C_MESURE, J_C_REMPLACE, J_C_DECODEUR };
+struct EvtJournal {     // 20 octets
+  uint32_t quand;       // heure locale (unix), 0 = inconnue
+  uint32_t dma;         // RAM DMA interne libre, la mesure de dimensionnerCoussin()
+  uint32_t bloc;        // plus grand bloc DMA libre : l'emiettement
+  uint16_t secondes;    // FIN / COUPE : duree jouee
+  uint8_t  type, priere, piste, code, pct;
+  uint8_t  heure;       // 2 sure (NTP), 1 approchee (RTC), 0 inconnue
+};
+#define JOURNAL_N 24
+static uint8_t  g_jIdx = 0;      // priere dont l'adhan joue (0 = aucun)
+static uint8_t  g_jPiste = 0;
+static uint32_t g_jDebut = 0;    // millis() du lancement
+
+static void journal(uint8_t type, uint8_t priere = 0, uint8_t piste = 0, uint8_t code = 0,
+                    uint16_t secondes = 0, uint8_t pct = 0) {
+  const uint32_t caps = MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT;
+  EvtJournal e = {};
+  if (rtcPresent) {
+    DateTime t = localNow();
+    if (t.year() >= 2020 && t.year() <= 2100) e.quand = t.unixtime();
+  }
+  e.dma = (uint32_t)heap_caps_get_free_size(caps);
+  e.bloc = (uint32_t)heap_caps_get_largest_free_block(caps);
+  e.secondes = secondes;
+  e.type = type; e.priere = priere; e.piste = piste; e.code = code; e.pct = pct;
+  e.heure = _timeTrusted ? 2 : (_timeApprox ? 1 : 0);
+  Preferences j;
+  if (!j.begin("journal", false)) return;
+  const uint8_t n = j.getUChar("n", 0) % JOURNAL_N;
+  char cle[6];
+  snprintf(cle, sizeof(cle), "e%u", (unsigned)n);
+  j.putBytes(cle, &e, sizeof(e));
+  j.putUChar("n", (uint8_t)((n + 1) % JOURNAL_N));
+  j.end();
+}
+
+static uint8_t codeCoupure(const char *c) {
+  if (!c) return J_C_AUTRE;
+  if (!strcmp(c, "application")) return J_C_APPLI;
+  if (!strcmp(c, "bouton tactile")) return J_C_BOUTON;
+  if (!strcmp(c, "MQTT")) return J_C_MQTT;
+  if (!strcmp(c, "diagnostic")) return J_C_DIAG;
+  if (!strcmp(c, "banc")) return J_C_BANC;
+  if (!strcmp(c, "console serie")) return J_C_CONSOLE;
+  if (!strcmp(c, "mesure")) return J_C_MESURE;
+  return J_C_AUTRE;
+}
+
+// Le fichier qui vient de s'arreter est-il l'adhan suivi ? Sinon une autre
+// lecture l'avait remplace entre-temps (playPath arrete sans stopPlay).
+static bool estAdhanSuivi(const char *fichier) {
+  char p[16];
+  snprintf(p, sizeof(p), "/mp3/%04u.mp3", (unsigned)g_jPiste);
+  return fichier && strcasecmp(fichier, p) == 0;
+}
+
+static void journalDebutAdhan(int priere, int piste) {
+  if (piste <= 0) return;
+  g_jIdx = (uint8_t)priere; g_jPiste = (uint8_t)piste; g_jDebut = millis();
+}
+
+// Fin de l'adhan suivi, une seule ligne, le son deja arrete. Remplace : la
+// duree ne veut rien dire (on l'apprend a la fin de l'autre lecture).
+static void journalFinAdhan(uint8_t type, uint8_t code) {
+  if (!g_jIdx) return;
+  uint32_t s = (millis() - g_jDebut) / 1000;
+  if (code == J_C_REMPLACE) s = 0;
+  journal(type, g_jIdx, g_jPiste, code, s > 65535 ? 65535 : (uint16_t)s,
+          code == J_C_REMPLACE ? 0 : g_coupure.positionPct);
+  g_jIdx = 0;
+}
+
+// Au demarrage : la cause, et la miette d'un redemarrage anormal, recopiee en
+// flash (en memoire RTC, un debranchement l'effacerait).
+static void journalDemarrage() {
+  const esp_reset_reason_t r = esp_reset_reason();
+  journal(J_DEMARRAGE, 0, 0, (uint8_t)r);
+  if (g_mietteAvant[0] && r != ESP_RST_POWERON) {
+    Preferences j;
+    if (j.begin("journal", false)) {
+      j.putString("m", g_mietteAvant);
+      j.putUInt("mi", g_mietteAvantInfo);
+      j.putUChar("mr", (uint8_t)r);
+      j.putUChar("mn", j.getUChar("n", 0));   // rang du demarrage concerne
+      j.end();
+    }
+  }
+}
+
+// GET /api/journal : du plus ancien au plus recent. Envoye par morceaux, sans
+// grosse chaine en RAM interne (c'est elle qui manque a l'adhan).
+void handleJournal() {
+  static const char *const types[] = {"?", "demarrage", "alarme", "rien joue", "RAM insuffisante",
+                                "rattrapage", "fin", "coupe", "heure non fiable",
+                                "deja jouee", "desactivee"};
+  static const char *const prieres[] = {"-", "fajr", "lever", "dhuhr", "asr", "maghrib", "isha"};
+  static const char *const coupures[] = {"autre", "application", "bouton tactile", "MQTT", "diagnostic",
+                                   "banc", "console serie", "mesure", "autre lecture", "decodeur"};
+  static const char *const heures[] = {"inconnue", "approchee", "sure"};
+  server.setContentLength(CONTENT_LENGTH_UNKNOWN);
+  server.send(200, "application/json", "");
+  char l[240];
+  nvs_stats_t st = {};
+  nvs_get_stats(NULL, &st);
+  snprintf(l, sizeof(l), "{\"version\":\"3.0.59\",\"nvs_libres\":%u,\"nvs_total\":%u,\"evenements\":[",
+           (unsigned)st.free_entries, (unsigned)st.total_entries);
+  server.sendContent(l);
+  Preferences j;
+  bool premier = true;
+  String miette = "";
+  uint32_t mi = 0;
+  uint8_t mr = 0;
+  if (j.begin("journal", true)) {
+    const uint8_t n = j.getUChar("n", 0) % JOURNAL_N;
+    for (int k = 0; k < JOURNAL_N; k++) {
+      char cle[6];
+      snprintf(cle, sizeof(cle), "e%u", (unsigned)((n + k) % JOURNAL_N));
+      EvtJournal e;
+      if (j.getBytesLength(cle) != sizeof(e) || j.getBytes(cle, &e, sizeof(e)) != sizeof(e)) continue;
+      char quand[20] = "inconnue";
+      if (e.quand) {
+        DateTime d(e.quand);
+        snprintf(quand, sizeof(quand), "%04d-%02d-%02d %02d:%02d:%02d",
+                 d.year(), d.month(), d.day(), d.hour(), d.minute(), d.second());
+      }
+      char extra[96] = "";
+      if (e.type == J_DEMARRAGE) {
+        snprintf(extra, sizeof(extra), ",\"cause\":\"%s\"", nomRaison((esp_reset_reason_t)e.code));
+      } else if (e.type == J_ALARME) {
+        snprintf(extra, sizeof(extra), ",\"synchro\":%s,\"test_sd\":%s,\"lecture\":%s",
+                 (e.code & J_ACT_SYNCHRO) ? "true" : "false", (e.code & J_ACT_SDTEST) ? "true" : "false",
+                 (e.code & J_ACT_LECTURE) ? "true" : "false");
+      } else if (e.type == J_FIN || e.type == J_COUPE) {
+        snprintf(extra, sizeof(extra), ",\"secondes\":%u,\"pct\":%u%s%s%s",
+                 (unsigned)e.secondes, (unsigned)e.pct,
+                 e.type == J_COUPE ? ",\"par\":\"" : "",
+                 e.type == J_COUPE ? coupures[e.code < 10 ? e.code : 0] : "",
+                 e.type == J_COUPE ? "\"" : "");
+      } else if (e.type == J_RIEN) {
+        snprintf(extra, sizeof(extra), ",\"faute_de_ram\":%s", e.code ? "true" : "false");
+      }
+      snprintf(l, sizeof(l),
+               "%s{\"quand\":\"%s\",\"evt\":\"%s\",\"priere\":\"%s\",\"piste\":%u,\"heure\":\"%s\","
+               "\"dma\":%lu,\"bloc\":%lu%s}",
+               premier ? "" : ",", quand, types[e.type <= J_DESACTIVEE ? e.type : 0],
+               prieres[e.priere <= 6 ? e.priere : 0], (unsigned)e.piste, heures[e.heure <= 2 ? e.heure : 0],
+               (unsigned long)e.dma, (unsigned long)e.bloc, extra);
+      server.sendContent(l);
+      premier = false;
+    }
+    miette = j.getString("m", "");
+    mi = j.getUInt("mi", 0);
+    mr = j.getUChar("mr", 0);
+    j.end();
+  }
+  miette.replace("\"", "'");
+  snprintf(l, sizeof(l), "],\"derniere_miette\":{\"texte\":\"%s\",\"info\":%lu,\"cause\":\"%s\"}}",
+           miette.length() ? miette.c_str() : "-", (unsigned long)mi,
+           miette.length() ? nomRaison((esp_reset_reason_t)mr) : "-");
+  server.sendContent(l);
+  server.sendContent("");
+}
+
 // [RATTRAPAGE 3.0.59] Appelee au demarrage, apres la premiere programmation :
 // rejoue l'adhan que la carte etait en train de lancer quand elle a redemarre.
 // Une seule reprise (le marqueur est efface d'abord) : jamais de boucle.
@@ -5391,10 +5584,16 @@ void rattraperAdhanInterrompu() {
   audio.volume(vol);
   if (piste == 1) piste = 2;
   Serial.printf("[RATTRAPAGE] adhan %d interrompu par un redemarrage : on le rejoue\n", idx);
+  journal(J_RATTRAPAGE, idx, piste);   // [JOURNAL] avant d'ouvrir le son
   shouldPlayDuaaAfterAdhan = duaa;
   g_ramAudioManque = false;
   adhanTrackBeforeDuaa = jouerAdhan(piste, idx == 1);
-  if (!adhanTrackBeforeDuaa) shouldPlayDuaaAfterAdhan = false;
+  if (adhanTrackBeforeDuaa) {
+    journalDebutAdhan(idx, adhanTrackBeforeDuaa);
+  } else {
+    shouldPlayDuaaAfterAdhan = false;
+    journal(J_RIEN, idx, piste, g_ramAudioManque ? 1 : 0);
+  }
 }
 
 void stopPlay(const char *cause) {
@@ -5410,6 +5609,8 @@ void stopPlay(const char *cause) {
   audio.stop();
   isPlaying = false;
   demoFin = millis();               // [MOSQUEE] le repos part d'ici
+  // [JOURNAL] Le son est arrete : on peut noter qui a coupe l'adhan.
+  if (g_jIdx) journalFinAdhan(J_COUPE, estAdhanSuivi(g_coupure.fichier) ? codeCoupure(cause) : J_C_REMPLACE);
   prefs.begin("adhancfg", true);
   int storedVol = constrain(prefs.getInt("volume", 20), 0, 30);
   prefs.end();
@@ -5439,6 +5640,13 @@ static bool coranSuivante(const char *fini, char *suivant, size_t n) {
 }
 
 void onPlaybackFinished() {
+  // [JOURNAL] L'adhan suivi vient de finir : au bout, lache par le decodeur, ou
+  // remplace plus tot par une autre lecture. Le son est arrete : on peut ecrire.
+  if (g_jIdx) {
+    if (!estAdhanSuivi(g_coupure.fichier)) journalFinAdhan(J_COUPE, J_C_REMPLACE);
+    else if (strcmp(g_coupure.cause, "fin du fichier") == 0) journalFinAdhan(J_FIN, 0);
+    else journalFinAdhan(J_COUPE, J_C_DECODEUR);
+  }
   // [CORAN] Enchainer la sourate suivante. On exige que la lecture se soit
   // terminee NATURELLEMENT : g_coupure porte la cause, et « decodeur : la carte
   // SD ne repond plus » ne doit pas faire sauter a la suivante en masquant le
@@ -7371,6 +7579,7 @@ void setup() {
     Serial.println("No stored location yet.");
   }
 
+  journalDemarrage();   // [JOURNAL 3.0.59] avant le rattrapage, qui note apres lui
   // Decoupled alarm scheduling: Always schedule on boot if RTC is present (covers Mawaqit-only setups)
   if (rtcPresent) {
     Serial.println("Scheduling next prayer alarm on startup...");
@@ -8553,6 +8762,7 @@ void loop() {
     // [COUPURES] heure inconnue : alarme ignoree et reprogrammee.
     rtcAlarmFlag = false;
     Serial.println("[COUPURES] Alarme ignoree : heure non fiable (attente NTP).");
+    if (scheduledPrayerIndex != 2) journal(J_HEURE, scheduledPrayerIndex);   // [JOURNAL]
     if (rtcPresent) scheduleNextPrayerAlarm();
   }
   if (rtcAlarmFlag) {
@@ -8579,6 +8789,7 @@ void loop() {
         if (lastTrigIdx == scheduledPrayerIndex && lastTrigDay == scheduledPrayerTime.day() && lastTrigMon == scheduledPrayerTime.month() && lastTrigYr == scheduledPrayerTime.year()) {
           Serial.printf("Duplicate adhan protection: Prayer index %d on %04d-%02d-%02d already played. Skipping.\n",
                         scheduledPrayerIndex, scheduledPrayerTime.year(), scheduledPrayerTime.month(), scheduledPrayerTime.day());
+          if (scheduledPrayerIndex != 2) journal(J_DOUBLON, scheduledPrayerIndex);   // [JOURNAL]
         } else {
           // Write trigger info to NVS
           prefs.begin("adhancfg", false);
@@ -8616,6 +8827,12 @@ void loop() {
               Serial.printf("LED switched to PRAYER scene (was %d)\n", prayerPrevLedScenario);
             }
 
+            // [JOURNAL] Avant d'ouvrir le son : si la carte meurt en l'ouvrant,
+            // cette ligne reste, avec la RAM qu'il y avait et ce qui tournait.
+            journal(J_ALARME, scheduledPrayerIndex, trackToPlay,
+                    (_syncRunning ? J_ACT_SYNCHRO : 0) | (_sdTestRunning ? J_ACT_SDTEST : 0) |
+                    (audio.isRunning() ? J_ACT_LECTURE : 0));
+
             // [RATTRAPAGE 3.0.59] Si la carte redemarre pendant le lancement,
             // rattraperAdhanInterrompu() le rejouera au demarrage.
             g_adhanEnCoursIdx = scheduledPrayerIndex;
@@ -8638,14 +8855,18 @@ void loop() {
               // que le silence, un redemarrage propre (RAM neuve) et l'adhan
               // rejoue aussitot par rattraperAdhanInterrompu().
               Serial.println("[RATTRAPAGE] RAM audio insuffisante : redemarrage pour jouer l'adhan");
+              journal(J_RAM, scheduledPrayerIndex, trackToPlay);   // [JOURNAL]
               delay(200);
               ESP.restart();
             }
             g_adhanEnCours = 0;             // lance (ou rien a jouer) : pas de rattrapage
+            if (joue) journalDebutAdhan(scheduledPrayerIndex, joue);   // [JOURNAL]
+            else journal(J_RIEN, scheduledPrayerIndex, trackToPlay);
             demoPriereA = (uint32_t)nowUnix;   // [MOSQUEE] point de depart du silence d'apres
             mqttPublishPrayerFired(scheduledPrayerIndex);
           } else {
             Serial.printf("Skipping non-adhan event for index %d\n", scheduledPrayerIndex);
+            if (scheduledPrayerIndex != 2) journal(J_DESACTIVEE, scheduledPrayerIndex);   // [JOURNAL]
           }
         }
       }
