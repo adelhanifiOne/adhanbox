@@ -33,7 +33,7 @@ static inline void securiser(WiFiClientSecure &c) {
 #include <nvs_flash.h>   // [BANC] remise a zero usine : effacement de la NVS
 #include <esp_wifi.h>    // [BANC] lecture des identifiants Wi-Fi memorises
 #include <esp_heap_caps.h>   // [CREPITEMENT] taille du coussin DMA selon la memoire libre
-#include <nvs.h>             // [JOURNAL 3.0.59] nvs_get_stats
+#include <nvs.h>             // [JOURNAL 3.0.60] nvs_get_stats
 #include <esp_system.h>      // [CREPITEMENT] esp_reset_reason : pourquoi la carte a redemarre
 #include <esp_timer.h>       // [CREPITEMENT] sonde CPU du banc (IRAM)
 #include <RTClib.h>
@@ -1206,7 +1206,7 @@ bool syncTimeFromNtp(unsigned long timeoutMs = 10000);
 void handleDumpStatus();
 void scheduleNextPrayerAlarm();
 void rattraperAdhanInterrompu();   // [RATTRAPAGE 3.0.59]
-void handleJournal();              // [JOURNAL 3.0.59] journal des adhans, lecture seule
+void handleJournal();              // [JOURNAL 3.0.60] journal des adhans, lecture seule
 bool computeNextPrayer(const DateTime &now, DateTime &nextDt, int &idx);
 void handleLedTest();
 void handleMqttConfig();
@@ -4306,7 +4306,7 @@ void setupServerRoutes() {
   server.on("/api/audio/pause", HTTP_GET, handleAudioPause);     // [PLAYER] pause
   server.on("/api/audio/resume", HTTP_GET, handleAudioResume);   // [PLAYER] reprise
   server.on("/api/diag", HTTP_GET, handleDiag);
-  server.on("/api/journal", HTTP_GET, handleJournal);   // [JOURNAL 3.0.59] ne coupe PAS le son
+  server.on("/api/journal", HTTP_GET, handleJournal);   // [JOURNAL 3.0.60] ne coupe PAS le son
   server.on("/api/bouton", HTTP_GET, handleBouton);          // [BOUTON] capteur tactile
   server.on("/api/mosquee", HTTP_GET, handleMosqueeGet);     // [MOSQUEE] etat + sujets MQTT
   server.on("/api/mosquee", HTTP_POST, handleMosqueeSet);    // [MOSQUEE] activer / regler
@@ -5369,7 +5369,7 @@ int jouerAdhan(int track, bool fajr) {
   return 0;
 }
 
-// ── [JOURNAL 3.0.59] Journal des adhans, garde en flash ─────────────────────
+// ── [JOURNAL 3.0.60] Journal des adhans, garde en flash ─────────────────────
 // Le 21/10/2026, le Fajr de la box d'Adel n'a pas sonne. La cause du dernier
 // redemarrage vit en memoire RTC (miette, esp_reset_reason) : le debranchement
 // qui a suivi l'a effacee, et on n'a pu que la deduire. Ce journal est ecrit en
@@ -5500,7 +5500,7 @@ void handleJournal() {
   char l[240];
   nvs_stats_t st = {};
   nvs_get_stats(NULL, &st);
-  snprintf(l, sizeof(l), "{\"version\":\"3.0.59\",\"nvs_libres\":%u,\"nvs_total\":%u,\"evenements\":[",
+  snprintf(l, sizeof(l), "{\"nvs_libres\":%u,\"nvs_total\":%u,\"evenements\":[",
            (unsigned)st.free_entries, (unsigned)st.total_entries);
   server.sendContent(l);
   Preferences j;
@@ -7579,7 +7579,7 @@ void setup() {
     Serial.println("No stored location yet.");
   }
 
-  journalDemarrage();   // [JOURNAL 3.0.59] avant le rattrapage, qui note apres lui
+  journalDemarrage();   // [JOURNAL 3.0.60] avant le rattrapage, qui note apres lui
   // Decoupled alarm scheduling: Always schedule on boot if RTC is present (covers Mawaqit-only setups)
   if (rtcPresent) {
     Serial.println("Scheduling next prayer alarm on startup...");
