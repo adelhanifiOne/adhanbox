@@ -8553,8 +8553,12 @@ void loop() {
           leds.setPixelColor(i, leds.Color(r_adj, g_adj, b_adj));
         }
         leds.show();
-      } else if (ledCustomActive) {
-        // Couleur RGB libre choisie depuis la roue chromatique
+      } else if (ledCustomActive && ledScenario != SCENE_PRAYER) {
+        // Couleur RGB libre choisie depuis la roue chromatique. [LED 3.0.60]
+        // Sauf pendant la scene de priere : elle passait avant tout, donc une
+        // box reglee sur une couleur libre ne changeait jamais de lumiere a
+        // l'adhan (Fajr du 22/10/2026 chez Adel). La couleur n'est pas touchee,
+        // elle revient d'elle-meme quand stopPlay() restaure le scenario.
         stripSetAll(ledCustomR, ledCustomG, ledCustomB);
       } else {
         // New scene handling: static colors, blink (reserved), dynamic unified scenes
