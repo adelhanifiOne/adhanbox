@@ -1221,6 +1221,7 @@ bool rearmerPriereEchue(const DateTime &now, uint8_t appelant);  // [SAUT 3.0.60
 // rejouer l'adhan toutes les minutes jusqu'a p + 10 min).
 static uint8_t  g_declencheIdx = 0;
 static uint32_t g_declencheA = 0;
+static bool     g_alarmeTest = false;   // alarme posee par /set_alarm_test ou la console : pas une priere calculee
 void rattraperAdhanInterrompu();   // [RATTRAPAGE 3.0.59]
 void handleJournal();              // [JOURNAL 3.0.60] journal des adhans, lecture seule
 bool computeNextPrayer(const DateTime &now, DateTime &nextDt, int &idx);
@@ -1817,6 +1818,7 @@ void handleSetAlarmTest() {
   int hh = now.hour() + (now.minute() == 59 ? 1 : 0);
   scheduledPrayerIndex = 1;
   scheduledPrayerTime = DateTime(now.year(), now.month(), now.day(), hh % 24, mm, 0);
+  g_alarmeTest = true;
   { DateTime _u = heureUtc(scheduledPrayerTime); rtcSetAlarmDaily(_u.hour(), _u.minute()); }
 
   // Clear last trigger NVS to ensure the test alarm fires
@@ -5305,6 +5307,7 @@ void scheduleNextPrayerAlarm(uint8_t appelant) {
   if (computeNextPrayer(now, nextDt, idx)) {
     scheduledPrayerIndex = idx;
     scheduledPrayerTime = nextDt;            // horaire de priere : heure LOCALE
+    g_alarmeTest = false;
     // Mais la puce RTC compte en UTC : son alarme materielle doit etre
     // programmee a l'heure UTC correspondante, sinon elle sonne avec l'ecart
     // du fuseau. C'est le seul endroit ou la conversion est indispensable.
@@ -5313,8 +5316,11 @@ void scheduleNextPrayerAlarm(uint8_t appelant) {
     // Also schedule a software fallback alarm based on millis() to ensure
     // the prayer triggers even if the RTC interrupt/flag is missed.
     unsigned long deltaSec = 0;
-    uint32_t nowUnix = now.unixtime();
-    uint32_t nextUnix = nextDt.unixtime();
+    // [HEURE D'ETE 3.0.60] Delai compte en UTC, pas en heure locale : a cheval
+    // sur un changement d'heure, l'ecart local se trompait d'une heure et le
+    // secours sonnait le Fajr une heure trop tot (puis le vrai etait un doublon).
+    uint32_t nowUnix = rtc.now().unixtime();
+    uint32_t nextUnix = nextUtc.unixtime();
     if (nextUnix > nowUnix) deltaSec = nextUnix - nowUnix;
     if (deltaSec > 0 && deltaSec < (7UL * 24UL * 3600UL)) {
       // convert to ms, guard overflow
@@ -5537,6 +5543,16 @@ bool garderPriereEchue(const DateTime &now, uint8_t appelant) {
   if (p > n + 5) return false;                     // encore loin : on recalcule
   if (n > p && n - p > 10UL * 60UL) return false;  // trop ancienne : on passe
   if (g_declencheIdx == scheduledPrayerIndex && g_declencheA == p) return false;   // deja declenchee (temoin RAM)
+  // [SAUT 3.0.60] La priere gardee doit encore etre la bonne sous les reglages
+  // du moment. A l'association, l'appli envoie la position puis le fuseau : une
+  // priere calculee dans l'ancien cadran (UTC, sortie d'usine) tombait dans la
+  // fenetre une fois l'heure avancee de 1 ou 2 h, partait aussitot, et la vraie
+  // etait ensuite sautee comme doublon. Une alarme de test n'est pas calculee.
+  if (!g_alarmeTest) {
+    DateTime chk;
+    int ci = 0;
+    if (!computeNextPrayer(DateTime(p - 60UL), chk, ci) || chk.unixtime() != p || ci != scheduledPrayerIndex) return false;
+  }
   Preferences c;
   if (!c.begin("adhancfg", true)) return false;
   const bool deja = c.getInt("last_trig_idx", 0) == scheduledPrayerIndex
@@ -5578,6 +5594,7 @@ bool rearmerPriereEchue(const DateTime &now, uint8_t appelant) {
   if (deja) return false;
   scheduledPrayerIndex = idx;
   scheduledPrayerTime = cand;
+  g_alarmeTest = false;
   softwareAlarmAt = 0;
   journal(J_GARDEE, (uint8_t)idx, 0, appelant);
   Serial.printf("[SAUT] Priere %d de %02d:%02d passee sans etre jouee : re-armee\n", idx, cand.hour(), cand.minute());
@@ -8463,6 +8480,7 @@ void loop() {
         int mm = (now.minute() + 1) % 60;
         int hh = now.hour() + (now.minute() == 59 ? 1 : 0);
         scheduledPrayerIndex = 1;  // test play track 1
+        g_alarmeTest = true;
         scheduledPrayerTime = DateTime(now.year(), now.month(), now.day(), hh % 24, mm, 0);
         { DateTime _u = heureUtc(scheduledPrayerTime); rtcSetAlarmDaily(_u.hour(), _u.minute()); }
         Serial.printf("Test alarm set for %02d:%02d\n", hh % 24, mm);
