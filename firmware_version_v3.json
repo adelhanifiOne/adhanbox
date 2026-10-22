@@ -1,6 +1,6 @@
 {
-  "version": "3.0.59",
+  "version": "3.0.60",
   "hardware": "v3",
   "url": "https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/build_temp_v3/adhanbox_v3.ino.bin",
-  "changelog": "Adhan plus fiable : si votre boîtier manque de mémoire au moment de l'appel (par exemple pendant un téléchargement), il réessaie et, au besoin, redémarre aussitôt pour jouer l'adhan au lieu de rester silencieux."
+  "changelog": "Adhan plus fiable : une prière n'est plus sautée quand l'application remet le boîtier à l'heure, l'adhan manqué après un redémarrage est rejoué, et la lumière de prière s'affiche aussi quand une couleur libre est choisie. Ajoute un journal de diagnostic."
 }
