@@ -48,6 +48,7 @@
               '<li><a href="cadeau.html">Offrir en cadeau</a></li>' +
               '<li><a href="avis.html">Avis</a></li>' +
               '<li><a href="faq.html">FAQ</a></li>' +
+              '<li><a href="notice-application.pdf">Notice de l\'application</a></li>' +
               '<li><a href="contact.html">Contact</a></li>' +
             '</ul>' +
           '</div>' +
