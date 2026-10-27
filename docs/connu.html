@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <script>document.documentElement.classList.add('js')</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Merci — AdhanBox</title>
+  <meta name="description" content="Merci d'avoir indiqué comment vous avez connu AdhanBox.">
+  <meta name="theme-color" content="#0C5B45">
+  <!-- Page d'arrivée des boutons « Comment avez-vous connu AdhanBox ? » des mails de
+       relance d'avis (26/10/2026) : pas d'indexation. -->
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="icon" type="image/png" href="logo-app.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=Amiri:wght@400;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css?v=2026100901">
+  <script defer src="site.js"></script>
+</head>
+<body data-page="connu">
+  <main>
+    <section class="first-section">
+      <div class="container" style="max-width: 640px; text-align: center;">
+        <div class="section-head">
+          <div class="eyebrow">C'est noté</div>
+          <h2>Merci <em>de tout cœur</em> 🌙</h2>
+          <p id="connu-texte">Votre réponse m'aide à savoir où faire connaître AdhanBox.</p>
+        </div>
+        <div style="text-align:left; background:var(--card, #fff); border:1px solid rgba(0,0,0,.08); border-radius:14px; padding:26px 28px; margin:24px 0;">
+          <p style="margin:0 0 10px; font-weight:600; color:#0C5B45;">Si vous avez deux minutes de plus</p>
+          <p class="control-note" style="margin:0 0 14px;">Quelques mots sur votre expérience aident la prochaine famille à se décider, et comptent énormément pour moi, qui démarre.</p>
+          <a href="avis.html" class="btn btn-gold">Laisser un avis</a>
+        </div>
+        <a href="index.html" class="control-note">Retour à l'accueil</a>
+      </div>
+    </section>
+  </main>
+  <script>
+  /* Un bouton du mail = une ligne de comptage, rien d'autre : pas de cookie, pas
+     d'identifiant, pas d'adresse. Le Worker de mesure additionne des totaux par jour
+     (cloudflare_mesure/worker.js). Lecture :
+       SELECT quoi, SUM(n) FROM compteurs WHERE page='/connu.html' AND quoi LIKE 'connu:%' GROUP BY quoi */
+  (function () {
+    var CHOIX = {
+      tiktok: 'TikTok', instagram: 'Instagram', facebook: 'Facebook',
+      proche: 'un proche ou WhatsApp', google: 'Google', etsy: 'Etsy',
+      mosquee: 'une mosquée', flyer: 'un flyer', autre: 'un autre endroit'
+    };
+    var c = (new URLSearchParams(location.search).get('c') || '').toLowerCase();
+    if (!Object.prototype.hasOwnProperty.call(CHOIX, c)) c = '';
+    if (c) {
+      document.getElementById('connu-texte').textContent =
+        'Vous avez connu AdhanBox par ' + CHOIX[c] + '. Merci, ça m\'aide énormément à savoir où me faire connaître.';
+    }
+    if (!c || !/(^|\.)adhanbox\.fr$/.test(location.hostname) || navigator.webdriver) return;
+    var corps = JSON.stringify({ page: '/connu.html', quoi: 'connu:' + c, source: 'direct' });
+    try { if (navigator.sendBeacon && navigator.sendBeacon('https://adhanbox-mesure.adhanbox.workers.dev/', corps)) return; } catch (e) {}
+    try { fetch('https://adhanbox-mesure.adhanbox.workers.dev/', { method: 'POST', body: corps, mode: 'no-cors', keepalive: true }); } catch (e) {}
+  })();
+  </script>
+</body>
+</html>
