@@ -124,7 +124,7 @@
         var M = window.BoxtalParcelPointMap && (window.BoxtalParcelPointMap.BoxtalParcelPointMap || window.BoxtalParcelPointMap);
         if (typeof M !== 'function') throw new Error('composant carte non chargé');
         var reseaux = (Array.isArray(d.networks) && d.networks.length) ? d.networks : ['MONR_NETWORK'];
-        var ou = { country: 'FR', zipCode: adresse.zipCode, city: adresse.city };
+        var ou = { country: adresse.country || 'FR', zipCode: adresse.zipCode, city: adresse.city };
         if (adresse.street) ou.street = adresse.street;
         var chercher = function () { map.searchParcelPoints(ou, enregistrer); };
         if (map) { chercher(); return; }
