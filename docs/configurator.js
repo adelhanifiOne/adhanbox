@@ -530,7 +530,9 @@
     //     secours automatique : Payment Link direct (client_reference_id).
     const CHECKOUT_BACKEND = 'https://adhanbox-commande.vercel.app';
     const STRIPE_PAYMENT_LINK = 'https://buy.stripe.com/00w00kg6P7sb5Woe7LfjG01';
-    const PRICE_EUR = 95;
+    // Offre de lancement 95 € jusqu'au 31/10/2026, 119 € ensuite : meme
+    // bascule que commande_backend/api/checkout.js, qui fait foi.
+    const PRICE_EUR = Date.now() >= new Date('2026-11-01T00:00:00').getTime() ? 119 : 95;
     const DOMICILE_EUR = 5;
 
     // ─── Livraison : point relais (offert) ou domicile (+5 €) ───

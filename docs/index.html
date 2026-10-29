@@ -575,7 +575,7 @@
       <li><a href="contact.html">Contact</a></li>
     </ul>
     <div class="nav-right">
-      <a href="personnaliser.html" class="btn btn-gold">Commander<span class="nav-cta-prix"> · 95&nbsp;€</span></a>
+      <a href="personnaliser.html" class="btn btn-gold">Commander<span class="nav-cta-prix"> · <span data-fin-offre="2026-10-31">95</span><span data-des-le="2026-11-01" style="display:none">119</span>&nbsp;€</span></a>
       <button class="burger" id="burger" type="button" aria-label="Ouvrir le menu" aria-expanded="false" aria-controls="menu-mobile"><span></span><span></span><span></span></button>
     </div>
   </div>
@@ -586,7 +586,7 @@
   <a href="avis.html">Avis</a>
   <a href="faq.html">Questions</a>
   <a href="contact.html">Contact</a>
-  <a href="personnaliser.html" class="btn btn-gold">Commander · 95&nbsp;€</a>
+  <a href="personnaliser.html" class="btn btn-gold">Commander · <span data-fin-offre="2026-10-31">95</span><span data-des-le="2026-11-01" style="display:none">119</span>&nbsp;€</a>
 </nav>
 
 <!-- ── HERO ── -->
@@ -607,10 +607,10 @@
         façonné à la main en France.
       </p>
       <div class="hero-buy">
-        <p class="hero-offer"><span class="now">95&nbsp;€</span><s>119&nbsp;€</s><span class="free">livraison offerte en point relais</span><span class="fin-offre" data-fin-offre="2026-10-31" style="display:block; font-size:.82rem; color:var(--gold-deep); margin-top:.2rem;">Offre de lancement jusqu'au 31 octobre</span></p>
+        <p class="hero-offer"><span class="now" data-fin-offre="2026-10-31">95&nbsp;€</span><s data-fin-offre="2026-10-31">119&nbsp;€</s><span class="now" data-des-le="2026-11-01" style="display:none">119&nbsp;€</span><span class="free">livraison offerte en point relais</span><span class="fin-offre" data-fin-offre="2026-10-31" style="display:block; font-size:.82rem; color:var(--gold-deep); margin-top:.2rem;">Offre de lancement jusqu'au 31 octobre</span></p>
         <div class="hero-ctas">
           <a href="personnaliser.html" class="btn btn-emerald btn-big">Personnaliser la mienne</a>
-          <span class="hero-price">ou <b>3 × 31,67&nbsp;€</b> sans frais</span>
+          <span class="hero-price">ou <b>3 × <span data-fin-offre="2026-10-31">31,67</span><span data-des-le="2026-11-01" style="display:none">39,67</span>&nbsp;€</b> sans frais</span>
         </div>
         <!-- Note et nombre d'avis : valeurs statiques, mises a jour par le
              script des temoignages quand le backend repond. -->
@@ -862,9 +862,9 @@
     <div class="order-grid">
       <div class="price-card">
         <p style="color:var(--muted); font-size:.9rem;">AdhanBox — fait main en France</p>
-        <span class="founders" style="background:var(--gold-soft); color:var(--gold-deep); margin-top:.5rem;">🎁 Offre de lancement<span data-fin-offre="2026-10-31"> · jusqu'au 31 octobre</span></span>
-        <div class="price-line"><span class="p"><s style="font-size:.55em; font-weight:500; opacity:.5; margin-right:.15em;">119&nbsp;€</s>95&nbsp;€</span><span class="per">point relais offert</span></div>
-        <p class="kl">ou <b>3 × 31,67&nbsp;€ sans frais</b> avec Klarna</p>
+        <span class="founders" data-fin-offre="2026-10-31" style="background:var(--gold-soft); color:var(--gold-deep); margin-top:.5rem;">🎁 Offre de lancement<span data-fin-offre="2026-10-31"> · jusqu'au 31 octobre</span></span>
+        <div class="price-line"><span class="p"><s data-fin-offre="2026-10-31" style="font-size:.55em; font-weight:500; opacity:.5; margin-right:.15em;">119&nbsp;€</s><span data-fin-offre="2026-10-31">95</span><span data-des-le="2026-11-01" style="display:none">119</span>&nbsp;€</span><span class="per">point relais offert</span></div>
+        <p class="kl">ou <b>3 × <span data-fin-offre="2026-10-31">31,67</span><span data-des-le="2026-11-01" style="display:none">39,67</span>&nbsp;€ sans frais</b> avec Klarna</p>
         <ul class="includes">
           <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg>Boîtier personnalisé (couleur &amp; motif au choix)</li>
           <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg>Carte signée à la main incluse</li>
@@ -1009,6 +1009,24 @@
   </div>
 </footer>
 
+<script>
+// [OFFRE] Meme regle que site.js (que cette page ne charge pas) : apres le
+// 31/10/2026, data-fin-offre disparait (95 €, prix barre, « jusqu'au 31
+// octobre ») et data-des-le apparait (119 €).
+(function () {
+  var maintenant = Date.now();
+  var fins = document.querySelectorAll('[data-fin-offre]');
+  for (var i = 0; i < fins.length; i++) {
+    var fin = new Date(fins[i].getAttribute('data-fin-offre') + 'T23:59:59');
+    if (!isNaN(fin) && maintenant > fin.getTime()) fins[i].style.display = 'none';
+  }
+  var debuts = document.querySelectorAll('[data-des-le]');
+  for (var j = 0; j < debuts.length; j++) {
+    var debut = new Date(debuts[j].getAttribute('data-des-le') + 'T00:00:00');
+    if (!isNaN(debut) && maintenant >= debut.getTime()) debuts[j].style.display = '';
+  }
+})();
+</script>
 <script>
 // ══════════════════════════════════════════════════════════════
 // CONFIGURATION COMMANDE

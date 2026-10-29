@@ -11,11 +11,13 @@
   // Bouton « Commander » dans l'en-tete de toutes les pages. Sur la page de
   // commande elle-meme, il descend au panneau des choix (#commande).
   var CTA_HREF = page === 'personnaliser' ? '#commande' : 'personnaliser.html';
+  // Prix affiche : 95 € jusqu'au 31/10/2026, 119 € ensuite (voir [OFFRE] plus bas).
+  var PRIX = Date.now() >= new Date('2026-11-01T00:00:00').getTime() ? '119' : '95';
   var HEADER =
     '<header id="header">' +
       '<div class="container nav-bar">' +
         '<a href="index.html" class="logo" aria-label="AdhanBox — Accueil">' + LOGO_SVG + 'Adhan<span>Box</span></a>' +
-        '<a href="' + CTA_HREF + '" class="btn btn-gold nav-cta">Commander<span class="nav-cta-prix"> · 95 €</span></a>' +
+        '<a href="' + CTA_HREF + '" class="btn btn-gold nav-cta">Commander<span class="nav-cta-prix"> · ' + PRIX + ' €</span></a>' +
       '</div>' +
     '</header>' +
     '<button class="burger" id="burger" aria-label="Ouvrir le menu" aria-expanded="false" aria-controls="menu-overlay">' +
@@ -186,13 +188,21 @@
   }
 })();
 
-// [OFFRE] La mention « jusqu'au 31 octobre » s'efface seule apres la date :
-// pas de site qui promet une offre finie. Le prix, lui, reste ce qu'il est
-// dans le HTML tant qu'Adel n'a pas decide la suite.
+// [OFFRE] Fin de l'offre de lancement : apres le 31/10/2026, tout ce qui porte
+// data-fin-offre (95 €, prix barre, « jusqu'au 31 octobre ») disparait et ce
+// qui porte data-des-le (119 €) apparait. style.display plutot que hidden :
+// plusieurs de ces elements ont un display en ligne qui l'emporterait.
+// Meme regle recopiee dans index.html, qui ne charge pas ce fichier.
 (function () {
-  var els = document.querySelectorAll('[data-fin-offre]');
-  for (var i = 0; i < els.length; i++) {
-    var fin = new Date(els[i].getAttribute('data-fin-offre') + 'T23:59:59');
-    if (!isNaN(fin) && Date.now() > fin.getTime()) els[i].hidden = true;
+  var maintenant = Date.now();
+  var fins = document.querySelectorAll('[data-fin-offre]');
+  for (var i = 0; i < fins.length; i++) {
+    var fin = new Date(fins[i].getAttribute('data-fin-offre') + 'T23:59:59');
+    if (!isNaN(fin) && maintenant > fin.getTime()) fins[i].style.display = 'none';
+  }
+  var debuts = document.querySelectorAll('[data-des-le]');
+  for (var j = 0; j < debuts.length; j++) {
+    var debut = new Date(debuts[j].getAttribute('data-des-le') + 'T00:00:00');
+    if (!isNaN(debut) && maintenant >= debut.getTime()) debuts[j].style.display = '';
   }
 })();
