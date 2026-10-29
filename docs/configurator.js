@@ -643,3 +643,13 @@
           window.location.href = cta.href;
         });
     });
+
+    // Retour depuis la page Stripe (29/10/2026) : le navigateur restaure la
+    // page telle quelle (bfcache), bouton encore marque « busy ». Le clic
+    // suivant partait alors sur le Payment Link de secours : ni couleur, ni
+    // point relais, ni frais de port, retour sur stripe.com. On le libere.
+    window.addEventListener('pageshow', function (e) {
+      if (!e.persisted) return;
+      delete document.getElementById('config-cta').dataset.busy;
+      updateQuoteLink();
+    });
