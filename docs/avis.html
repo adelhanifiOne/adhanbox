@@ -375,8 +375,31 @@
   }
 
   // ── Chargement et rendu des avis approuvés ──
+  // [SECOURS 01/11/2026] Le stockage des avis a été suspendu par Vercel (quota
+  // gratuit dépassé) et la page est restée vide quatre jours. Si le backend ne
+  // rend rien, on affiche la copie que maj_avis_seo.py écrit dans cette page
+  // (bloc avis:debut) : les mêmes avis, sans ville ni photo.
+  function avisDeLaPage() {
+    try {
+      var bloc = document.querySelector('script[type="application/ld+json"]');
+      var j = JSON.parse(bloc.textContent);
+      var liste = (j.review || []).map(function (r) {
+        return {
+          note: Number((r.reviewRating || {}).ratingValue) || 5,
+          texte: r.reviewBody || '',
+          prenom: (r.author || {}).name || '',
+          date: r.datePublished || ''
+        };
+      }).filter(function (r) { return r.texte; });
+      var somme = liste.reduce(function (t, r) { return t + r.note; }, 0);
+      return { count: liste.length, average: liste.length ? Math.round(somme / liste.length * 10) / 10 : 0, reviews: liste };
+    } catch (e) { return { count: 0, average: 0, reviews: [] }; }
+  }
+
   fetch(API + '/api/reviews')
     .then(function (r) { return r.json(); })
+    .then(function (data) { return (data && data.reviews && data.reviews.length) ? data : avisDeLaPage(); },
+          function () { return avisDeLaPage(); })
     .then(function (data) {
       var grid = document.getElementById('avis-grid');
       var reviews = (data && data.reviews) || [];
