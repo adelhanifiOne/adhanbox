@@ -1,6 +1,6 @@
 {
-  "version": "3.0.60",
+  "version": "3.0.62",
   "hardware": "v3",
   "url": "https://raw.githubusercontent.com/adelhanifiOne/adhanbox/main/build_temp_v3/adhanbox_v3.ino.bin",
-  "changelog": "Adhan plus fiable : une prière n'est plus sautée quand l'application remet le boîtier à l'heure, l'adhan manqué après un redémarrage est rejoué, et la lumière de prière s'affiche aussi quand une couleur libre est choisie. Ajoute un journal de diagnostic."
+  "changelog": "Les sourates écoutées par Internet s'enchaînent toutes seules, même téléphone verrouillé. En été, Fajr et Isha sont toujours joués, même dans le nord de la France."
 }

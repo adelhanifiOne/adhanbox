@@ -2,7 +2,7 @@
 // - Starts an AP when a long-press is detected on CONFIG_BUTTON_PIN
 // - Serves a small webpage that requests navigator.geolocation and POSTs lat/lon
 // - Stores lat/lon/accuracy/timestamp in Preferences (NVS)
-//Version: 3.0.60 (AdhanBox V3 / HW v3)
+//Version: 3.0.62 (AdhanBox V3 / HW v3)
 #include <Arduino.h>
 #include <esp_mac.h>   // esp_read_mac() : MAC eFuse, lisible sans Wi-Fi
 #include <Wire.h>
@@ -674,6 +674,12 @@ class I2SAudio {
   bool _flux = false;              // [FLUX] la lecture en cours vient d'Internet
   char _repli[65] = {0};           // [FLUX] copie SD a jouer si le flux lache
                                    // [RITUELS] 64 octets + fin : un repli de rituel en fait jusqu'a 64
+  // [FLUX 3.0.62] Adresse ENTIERE et repli du dernier flux qui a joue. Gardes
+  // apres stop() (qui vide _curPath, tronque de toute facon) : la fin naturelle
+  // d'une sourate en a besoin pour ouvrir la suivante. Videes par playPath().
+  char _urlFlux[301] = {0};
+  char _repliFlux[65] = {0};
+  uint32_t _genFlux = 0;           // +1 a chaque flux lance : qui a lance celui qui finit
   SemaphoreHandle_t _verrou = nullptr;   // [POMPE] recursif : pump() et les commandes partagent le decodeur
   TaskHandle_t _tache = nullptr;         // [POMPE] la tache qui alimente le DMA
  public:
@@ -914,6 +920,8 @@ class I2SAudio {
     } else stop();
     g_blocage.raz();                 // [CREPITEMENT] chaque lecture repart a zero
     libererBlePourLeSon();           // [3.0.51] la RAM du BLE d'arriere-plan revient au canal audio
+    _urlFlux[0] = 0;                 // [FLUX 3.0.62] la derniere lecture n'est plus un flux
+    _repliFlux[0] = 0;
     if (!_sdOk || !SD.exists(path)) return false;
     strncpy(_curPath, path, sizeof(_curPath) - 1);   // [PLAYER] memorise le fichier
     _curPath[sizeof(_curPath) - 1] = 0;
@@ -999,6 +1007,8 @@ class I2SAudio {
     char repliCopie[sizeof(_repli)] = {0};
     if (repli && *repli) strncpy(repliCopie, repli, sizeof(repliCopie) - 1);
     if (mp3 || wav) stop("nouvelle lecture flux"); else stop();
+    _urlFlux[0] = 0;                // [FLUX 3.0.62] rempli seulement si celui-ci joue
+    _repliFlux[0] = 0;
     g_blocage.raz();
     auto versRepli = [&](const char *pourquoi) -> int {
       Serial.printf("[FLUX] %s -> %s\n", pourquoi, repliCopie[0] ? repliCopie : "aucun repli");
@@ -1040,9 +1050,17 @@ class I2SAudio {
     if (!h->sauterId3()) { stop(); return versRepli("etiquette ID3 illisible"); }
     String u = url; u.toLowerCase();
     if (!lancer(u.endsWith(".wav"))) { stop(); return versRepli("decodeur refuse"); }
+    strncpy(_urlFlux, url, sizeof(_urlFlux) - 1);
+    _urlFlux[sizeof(_urlFlux) - 1] = 0;
+    strncpy(_repliFlux, repliCopie, sizeof(_repliFlux) - 1);
+    _repliFlux[sizeof(_repliFlux) - 1] = 0;
+    _genFlux++;
     return 1;
   }
   bool isStream() const { return _flux; }
+  const char* urlFlux() const { return _urlFlux; }
+  const char* repliFlux() const { return _repliFlux; }
+  uint32_t genFlux() const { return _genFlux; }
 
   // Rend VRAI seulement si le fichier existe et que la lecture a demarre. La
   // version precedente ne rendait rien : un numero de piste inexistant passait
@@ -1150,6 +1168,10 @@ bool isPlaying = false;
 // onPlaybackFinished() n'enchaine pas la sourate suivante.
 bool g_lectureRituel = false;
 char g_rituelFichiers[2][sizeof(Coupure::fichier)] = {};
+// [FLUX 3.0.62] Numero (audio.genFlux) du flux lance par le rituel, 0 s'il joue
+// un fichier de la carte. Un flux tronque dans g_coupure.fichier ne se reconnait
+// pas : toutes les sourates d'un recitateur y commencent par la meme adresse.
+uint32_t g_rituelGenFlux = 0;
 // ledc PWM channel for LED brightness
 const int LEDC_CHANNEL = 0;
 const int LEDC_FREQ = 5000;
@@ -1247,6 +1269,7 @@ void handleBLEProvisioning();
 #endif
 void getCalculationAngles(double &fajrAngle, double &ishaAngle, String &methodName);
 int ecoleAsr();
+int regleHauteLatitude();   // [HAUTE LAT 3.0.61]
 void scanI2CBusAndReport();
 void probeIP5306();
 bool getPrayerPlaybackForIndex(int prayerIndex, int &trackToPlay, bool &playDuaaAfter);
@@ -2354,7 +2377,7 @@ void handleOtaUploadComplete() {
 // GET /api/firmware/version
 void handleFirmwareVersion() {
   server.send(200, "application/json",
-              "{\"version\":\"3.0.60\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
+              "{\"version\":\"3.0.62\",\"hardware\":\"v3\",\"build\":\"" __DATE__ " " __TIME__ "\"}");
 }
 
 // Returns true if the request carries the correct API key (or if token not yet set).
@@ -2468,11 +2491,11 @@ void handleDeviceInfo() {
   char buf[512];
   if (pairingWindow || hasValidToken) {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.60\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
+             "{\"version\":\"3.0.62\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"token\":\"%s\",\"ota_pass\":\"%s\"}",
              OTA_HOSTNAME, deviceIdHex().c_str(), _apiToken.c_str(), _otaPass.c_str());
   } else {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.60\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
+             "{\"version\":\"3.0.62\",\"hardware\":\"v3\",\"hostname\":\"%s\",\"device_id\":\"%s\",\"paired\":true}",
              OTA_HOSTNAME, deviceIdHex().c_str());
   }
   server.send(200, "application/json", buf);
@@ -2693,231 +2716,13 @@ void handleMawaqitClear() {
   server.send(200, "application/json", "{\"ok\":true,\"source\":\"calculated\"}");
 }
 
-// Helper function to encode URL parameters
-String urlEncode(const String &str) {
-  String encoded = "";
-  for (size_t i = 0; i < str.length(); i++) {
-    char c = str.charAt(i);
-    if (isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~') {
-      encoded += c;
-    } else {
-      char hex[4];
-      sprintf(hex, "%%%02X", (unsigned char)c);
-      encoded += hex;
-    }
-  }
-  return encoded;
-}
-
-bool parseMawaqitTimesFromStream(Stream &stream, const String &uuid, const String &slug, String times[6]) {
-  int braceCount = 0;
-  String buffer = "";
-  buffer.reserve(3000); // Pre-allocate to avoid memory fragmentation
-
-  unsigned long startTime = millis();
-  while (millis() - startTime < 20000) { // 20 seconds timeout for reading the stream
-    if (!stream.available()) {
-      delay(10);
-      continue;
-    }
-    char c = stream.read();
-    
-    if (braceCount == 0) {
-      if (c == '{') {
-        braceCount = 1;
-        buffer = "{";
-      }
-    } else {
-      buffer += c;
-      if (c == '{') {
-        braceCount++;
-      } else if (c == '}') {
-        braceCount--;
-        if (braceCount == 0) {
-          // We have a complete mosque object!
-          bool match = false;
-          if (uuid.length() > 0 && buffer.indexOf(uuid) >= 0) {
-            match = true;
-          }
-          if (!match && slug.length() > 0 && buffer.indexOf(slug) >= 0) {
-            match = true;
-          }
-          
-          if (match) {
-            // Parse times from this buffer
-            int timesPos = buffer.indexOf("\"times\"");
-            if (timesPos >= 0) {
-              int curPos = buffer.indexOf("[", timesPos);
-              bool allParsed = true;
-              const char *timeNames[6] = { "fajr", "sunrise", "dhuhr", "asr", "maghrib", "isha" };
-              for (int i = 0; i < 6; i++) {
-                int q1 = buffer.indexOf('"', curPos + 1);
-                int q2 = buffer.indexOf('"', q1 + 1);
-                if (q1 >= 0 && q2 > q1) {
-                  times[i] = buffer.substring(q1 + 1, q2);
-                  if (times[i].length() > 5 && times[i].charAt(5) == ':') {
-                    times[i] = times[i].substring(0, 5);
-                  }
-                  curPos = q2;
-                  Serial.printf("  parsed stream %s = %s\n", timeNames[i], times[i].c_str());
-                } else {
-                  allParsed = false;
-                }
-              }
-              if (allParsed) {
-                return true;
-              }
-            }
-          }
-          // Clear buffer for the next mosque
-          buffer = "";
-        }
-      }
-      
-      // Guard against runaway buffer size (if a mosque object exceeds 4KB)
-      if (buffer.length() > 4000) {
-        buffer = "";
-        braceCount = 0;
-      }
-    }
-  }
-  return false;
-}
-
-// Trigger a sync placeholder (keeps API compatibility with app)
+// [3.0.61] Mawaqit n'est plus interroge (29/10/2026). Son API refuse tout le
+// monde depuis le 06/10/2026, et les box rattachees a une mosquee retentaient
+// quand meme toutes les 6 h une requete refusee. La box calcule seule, avec sa
+// methode, son ecole et ses decalages. Garde pour /api/mawaqit/sync.
 bool performMawaqitSync(String &errorMsg) {
-  prefs.begin("adhancfg", true);
-  String uuid = prefs.getString("mq_uuid", "");
-  String slug = prefs.getString("mq_slug", "");
-  String name = prefs.getString("mq_name", "");
-  prefs.end();
-
-  if (uuid.length() == 0 && slug.length() == 0) {
-    errorMsg = "No mosque configured";
-    return false;
-  }
-
-  Serial.printf(">>> Syncing Mawaqit times. UUID: %s, Slug: %s\n", uuid.c_str(), slug.c_str());
-
-  double lat = 0.0, lon = 0.0, acc = 0.0;
-  bool hasLocation = loadStoredLocation(lat, lon, acc);
-
-  String host = "mawaqit.net";
-  String urls[3] = { "", "", "" };
-  int attempts = 0;
-
-  if (slug.length() > 0) {
-    urls[attempts++] = "/api/2.0/mosque/search?word=" + urlEncode(slug);
-  }
-  if (name.length() > 0 && attempts < 3) {
-    urls[attempts++] = "/api/2.0/mosque/search?word=" + urlEncode(name);
-  }
-  if (hasLocation && attempts < 3) {
-    urls[attempts++] = "/api/2.0/mosque/search?lat=" + String(lat, 6) + "&lon=" + String(lon, 6) + "&distance=20";
-  }
-
-  const char *timeNames[6] = { "fajr", "sunrise", "dhuhr", "asr", "maghrib", "isha" };
-  String times[6] = { "", "", "", "", "", "" };
-  bool anyValid = false;
-
-  for (int attempt = 0; attempt < attempts && !anyValid; attempt++) {
-    HTTPClient http;
-    WiFiClientSecure client;
-    securiser(client);   // [TLS] on verifie que c est bien mawaqit.net
-
-    String url = "https://" + host + urls[attempt];
-    Serial.printf("Mawaqit request [%d/%d]: %s\n", attempt + 1, attempts, url.c_str());
-
-    http.begin(client, url);
-    http.addHeader("User-Agent", "AdhanBox/1.0");
-    http.addHeader("Accept", "application/json");
-    // [FIX WDT] Timeouts courts + watchdog nourri : 3x15s=45s de blocage
-    // depassait le watchdog 30s sur Wi-Fi faible -> reboot aleatoire.
-    http.setConnectTimeout(4000);
-    http.setTimeout(6000);
-    if (_wdtArmed) esp_task_wdt_reset();
-
-    int httpCode = http.GET();
-    if (_wdtArmed) esp_task_wdt_reset();
-    if (httpCode == 200) {
-      WiFiClient* streamPtr = http.getStreamPtr();
-      if (streamPtr && parseMawaqitTimesFromStream(*streamPtr, uuid, slug, times)) {
-        anyValid = true;
-      } else {
-        Serial.println("Failed to parse times from Mawaqit stream");
-      }
-    } else {
-      Serial.printf("Mawaqit HTTP error: %d\n", httpCode);
-    }
-    http.end();
-
-    if (!anyValid) {
-      for (int i = 0; i < 6; i++) times[i] = "";
-    }
-  }
-
-  bool mawaqitSyncSuccess = anyValid;
-
-  // [3.0.58] Plus de repli Aladhan (20/10/2026). Mawaqit refuse tout le monde
-  // depuis le 06/10/2026 ; la box demandait alors ses horaires a un service
-  // tiers (api.aladhan.com, UOIF + Asr hanafite) alors qu'elle sait faire
-  // exactement ce calcul elle-meme. Sans reponse de Mawaqit, on ne stocke
-  // rien : les horaires « mosquee » perimes, computePrayerTimesForDate prend
-  // le relais, avec la methode, l'ecole et les decalages de la box (une box
-  // rattachee a une mosquee et jamais reglee calcule en UOIF + hanafite, voir
-  // getCalculationAngles et ecoleAsr : memes horaires qu'avec Aladhan).
-  if (!anyValid) {
-    errorMsg = "Mawaqit indisponible : horaires calcules par la box";
-    return false;
-  }
-
-  // Apply user-configured offsets to times
-  prefs.begin("adhancfg", true);
-  int offsets[6] = {
-    prefs.getInt("mq_off_fajr", 0),
-    prefs.getInt("mq_off_sunrise", 0),
-    prefs.getInt("mq_off_dhuhr", 0),
-    prefs.getInt("mq_off_asr", 0),
-    prefs.getInt("mq_off_maghrib", 0),
-    prefs.getInt("mq_off_isha", 0)
-  };
-  prefs.end();
-
-  Serial.println("Applying offsets to times:");
-  for (int i = 0; i < 6; i++) {
-    if (offsets[i] != 0 && times[i].length() >= 5) {
-      String original = times[i];
-      times[i] = addMinutesToTime(times[i], offsets[i]);
-      Serial.printf("  %s: %s + %d min = %s\n", timeNames[i], original.c_str(), offsets[i], times[i].c_str());
-    }
-  }
-
-  // Save to Preferences with RTC timestamp (not millis!)
-  if (!rtcPresent) {
-    errorMsg = "RTC missing";
-    return false;
-  }
-  unsigned long now_epoch = rtc.now().unixtime();
-
-  prefs.begin("adhancfg", false);
-  prefs.putString("mq_fajr", times[0]);
-  prefs.putString("mq_sunrise", times[1]);
-  prefs.putString("mq_dhuhr", times[2]);
-  prefs.putString("mq_asr", times[3]);
-  prefs.putString("mq_maghrib", times[4]);
-  prefs.putString("mq_isha", times[5]);
-  prefs.putULong("mq_sync_ts", now_epoch);
-  prefs.end();
-
-  Serial.printf("Mawaqit times synced successfully at epoch %lu\n", now_epoch);
-  Serial.printf("  Fajr: %s  Dhuhr: %s  Maghrib: %s  Isha: %s\n", times[0].c_str(), times[2].c_str(), times[4].c_str(), times[5].c_str());
-
-  if (!mawaqitSyncSuccess) {
-    errorMsg = "Mawaqit sync failed (using calculated times fallback)";
-    return false;
-  }
-
-  return true;
+  errorMsg = "Mawaqit n'est plus interroge : horaires calcules par la box";
+  return false;
 }
 
 void handleMawaqitSync() {
@@ -3041,7 +2846,7 @@ void handleCalculationConfig() {
     double fajrAngle, ishaAngle;
     String methodName;
     getCalculationAngles(fajrAngle, ishaAngle, methodName);
-    String out = "{\"method\":\"" + methodName + "\",\"school\":" + String(ecoleAsr()) + ",\"fajr_angle\":" + String(fajrAngle, 1) + ",\"isha_angle\":" + String(ishaAngle, 1) + "}";
+    String out = "{\"method\":\"" + methodName + "\",\"school\":" + String(ecoleAsr()) + ",\"high_lat\":" + String(regleHauteLatitude()) + ",\"fajr_angle\":" + String(fajrAngle, 1) + ",\"isha_angle\":" + String(ishaAngle, 1) + "}";
     server.send(200, "application/json", out);
     return;
   }
@@ -3091,12 +2896,21 @@ void handleCalculationConfig() {
   const int ancienneEcole = ecoleAsr();
   int ecole = ancienneEcole;
   if (body.indexOf("\"school\"") >= 0) ecole = (extractJsonNumber(body, "school", 0) >= 0.5) ? 1 : 0;
+  // [HAUTE LAT 3.0.61] « high_lat » facultatif lui aussi (0 aucune, 1 milieu,
+  // 2 septieme, 3 angle) : l'app d'aujourd'hui ne l'envoie pas.
+  const int ancienneRegle = regleHauteLatitude();
+  int regle = ancienneRegle;
+  if (body.indexOf("\"high_lat\"") >= 0) {
+    const int r = (int)extractJsonNumber(body, "high_lat", 3);
+    regle = (r >= 0 && r <= 3) ? r : 3;
+  }
 
   prefs.begin("adhancfg", false);
   prefs.putString("calc_method", method);
   prefs.putFloat("calc_fajr_angle", (float)customFajr);
   prefs.putFloat("calc_isha_angle", (float)customIsha);
   if (body.indexOf("\"school\"") >= 0) prefs.putInt("calc_school", ecole);   // jamais d'office
+  if (body.indexOf("\"high_lat\"") >= 0) prefs.putInt("calc_hlr", regle);
   prefs.end();
 
   // [ECOLE] Les horaires « mosquee » en memoire viennent en pratique du repli
@@ -3108,7 +2922,7 @@ void handleCalculationConfig() {
   double nouveauFajr, nouvelIsha;
   String nouvelleMethode;
   getCalculationAngles(nouveauFajr, nouvelIsha, nouvelleMethode);
-  if (nouvelleMethode != ancienneMethode || ecole != ancienneEcole
+  if (nouvelleMethode != ancienneMethode || ecole != ancienneEcole || regle != ancienneRegle
       || fabs(nouveauFajr - ancienFajr) > 0.01 || fabs(nouvelIsha - ancienIsha) > 0.01) {
     prefs.begin("adhancfg", false);
     prefs.putULong("mq_sync_ts", 0);
@@ -4571,6 +4385,34 @@ static bool hourAngleForZenith(double zenithDeg, double latRad, double declRad, 
   return true;
 }
 
+// [HAUTE LAT 3.0.61] Regle pour les nuits courtes de l'ete (calc_hlr) :
+// 0 aucune, 1 milieu de la nuit, 2 septieme de la nuit, 3 selon l'angle (la
+// regle par defaut d'Aladhan, donc celle de nos box a mosquee du temps du
+// repli Aladhan). Sans regle, des Bordeaux et Lyon en MWL le soleil ne descend
+// plus a 18 degres en juin : pas de Fajr (Paris : 20 jours), et l'Isha tombe
+// apres minuit (68 nuits), ou il n'etait jamais joue (voir computeNextPrayer).
+int regleHauteLatitude() {
+  prefs.begin("adhancfg", true);
+  int r = prefs.getInt("calc_hlr", 3);
+  prefs.end();
+  return (r >= 0 && r <= 3) ? r : 3;
+}
+
+// Fajr jamais avant le lever moins une part de la nuit, Isha jamais apres le
+// coucher plus la meme part ; la part depend de la regle (1/2, 1/7, angle/60).
+// Appliquee quand l'horaire manque ou depasse la borne, comme PrayTimes et
+// Aladhan (adjustHighLats). t[] en minutes depuis minuit : un Isha borne peut
+// depasser 1440 (apres minuit), c'est voulu, computeNextPrayer le place demain.
+static void appliquerRegleHauteLatitude(double t[6], double angleFajr, double angleIsha, int regle) {
+  if (regle == 0 || isnan(t[1]) || isnan(t[4])) return;
+  const double nuit = 1440.0 - (t[4] - t[1]);           // du coucher au lever
+  double partFajr = nuit / 2.0, partIsha = nuit / 2.0;   // 1 : milieu de la nuit
+  if (regle == 2) { partFajr = nuit / 7.0; partIsha = nuit / 7.0; }
+  else if (regle == 3) { partFajr = nuit * angleFajr / 60.0; partIsha = nuit * angleIsha / 60.0; }
+  if (isnan(t[0]) || t[1] - t[0] > partFajr) t[0] = t[1] - partFajr;
+  if (isnan(t[5]) || t[5] - t[4] > partIsha) t[5] = t[4] + partIsha;
+}
+
 // format minutes (local) into hh:mm string
 static String formatTimeFromMinutes(double minutes) {
   if (isnan(minutes)) return String("--:--");
@@ -4707,6 +4549,9 @@ bool computePrayerTimesForDate(const DateTime &date, double outTimes[6], int &tz
   outTimes[3] = asr;
   outTimes[4] = sunset;
   outTimes[5] = isha;
+  // [HAUTE LAT 3.0.61] Avant les reglages fins : ils s'ajoutent a l'horaire
+  // borne, comme chez Aladhan.
+  appliquerRegleHauteLatitude(outTimes, fajrAngle, ishaAngle, regleHauteLatitude());
 
   // Apply user fine-tuning offsets (minutes) on calculated times too.
   prefs.begin("adhancfg", true);
@@ -4856,7 +4701,7 @@ void handlePrayerTimes() {
   double fajrAngle, ishaAngle;
   String methodName;
   getCalculationAngles(fajrAngle, ishaAngle, methodName);
-  json += ",\"calc_method\":\"" + methodName + "\",\"school\":" + String(ecoleAsr()) + ",\"fajr_angle\":" + String(fajrAngle, 1) + ",\"isha_angle\":" + String(ishaAngle, 1);
+  json += ",\"calc_method\":\"" + methodName + "\",\"school\":" + String(ecoleAsr()) + ",\"high_lat\":" + String(regleHauteLatitude()) + ",\"fajr_angle\":" + String(fajrAngle, 1) + ",\"isha_angle\":" + String(ishaAngle, 1);
   json += "}";
   server.send(200, "application/json", json);
 }
@@ -5248,46 +5093,33 @@ bool computeNextPrayer(const DateTime &now, DateTime &nextDt, int &idx) {
     }
   }
 
-  // 2) Fallback to calculated times (with fine-tuning offsets applied).
-  double timesToday[6];
-  double timesTomorrow[6];
-  int tzDummy = 0;
-  String tzSrc;
-
-  if (!computePrayerTimesForDate(now, timesToday, tzDummy, tzSrc)) return false;
-
-  DateTime tomorrow = now + TimeSpan(1, 0, 0, 0);
-  if (!computePrayerTimesForDate(tomorrow, timesTomorrow, tzDummy, tzSrc)) return false;
-
-  // Compare today then tomorrow to find the next > now
-  for (int i = 0; i < 6; i++) {
-    double tmin = timesToday[i];
-    if (!isnan(tmin)) {
-      DateTime candidate = DateTime(now.year(), now.month(), now.day(), 0, 0, 0) + TimeSpan(0, (int)(tmin / 60), (int)fmod(tmin, 60), 0);
-      // candidate rounding: use minutes precision
-      int candMin = (int)round(tmin);
-      int ch = (candMin / 60) % 24;
-      int cm = candMin % 60;
-      candidate = DateTime(now.year(), now.month(), now.day(), ch, cm, 0);
-      if (candidate.unixtime() > now.unixtime() + 5) {  // a small safety margin
-        nextDt = candidate;
+  // 2) Horaires calcules (reglages fins compris), en minutes depuis minuit du
+  // jour concerne. [HAUTE LAT 3.0.61] Un Isha apres minuit depasse 1440 : il
+  // sonne le lendemain. Jusqu'a la 3.0.60, (candMin / 60) % 24 le ramenait a
+  // 01:07 du jour meme, deja passe le soir : la box enchainait Maghrib puis le
+  // lever du lendemain, et l'Isha affiche par l'app n'etait jamais joue (Paris
+  // en MWL : 68 nuits par an). On regarde la veille (son Isha peut tomber cette
+  // nuit), aujourd'hui et demain, et on garde l'horaire a venir le plus proche.
+  bool trouve = false;
+  for (int k = -1; k <= 1; k++) {
+    const DateTime jour = (k < 0) ? now - TimeSpan(1, 0, 0, 0) : now + TimeSpan(k, 0, 0, 0);
+    double t[6];
+    int tzDummy = 0;
+    String tzSrc;
+    if (!computePrayerTimesForDate(jour, t, tzDummy, tzSrc)) return false;
+    const DateTime minuit(jour.year(), jour.month(), jour.day(), 0, 0, 0);
+    for (int i = 0; i < 6; i++) {
+      if (isnan(t[i])) continue;
+      const DateTime cand = minuit + TimeSpan((int32_t)round(t[i]) * 60);   // arrondi a la minute
+      if (cand.unixtime() > now.unixtime() + 5   // petite marge, comme avant
+          && (!trouve || cand.unixtime() < nextDt.unixtime())) {
+        nextDt = cand;
         idx = i + 1;
-        return true;
+        trouve = true;
       }
     }
   }
-  for (int i = 0; i < 6; i++) {
-    double tmin = timesTomorrow[i];
-    if (!isnan(tmin)) {
-      int candMin = (int)round(tmin);
-      int ch = (candMin / 60) % 24;
-      int cm = candMin % 60;
-      nextDt = DateTime(tomorrow.year(), tomorrow.month(), tomorrow.day(), ch, cm, 0);
-      idx = i + 1;
-      return true;
-    }
-  }
-  return false;
+  return trouve;
 }
 
 // Schedule next prayer alarm: computes next prayer, programs Alarm2 daily at that hh:mm
@@ -5769,6 +5601,31 @@ static bool coranSuivante(const char *fini, char *suivant, size_t n) {
   return SD.exists(suivant);
 }
 
+// [FLUX 3.0.62] La meme chose pour un recitateur ecoute par Internet :
+// https://…/<prefixe>NNN.mp3 -> NNN+1, jusqu'a 114. L'application enchainait
+// seule et seulement si elle voyait la fin : rien ne suivait telephone verrouille
+// (iOS l'endort), ni meme appli ouverte le 01/11/2026 sur la box neuve d'Adel.
+// Trois chiffres exactement (mp3quran « 085.mp3 », IslamHouse « fr-085.mp3 ») :
+// les adhans en ont quatre (« 0005.mp3 ») et ne doivent pas s'enchainer.
+static bool fluxSuivant(const char *url, char *suivant, size_t n) {
+  if (!url || strncmp(url, "https://", 8) != 0) return false;
+  const char *barre = strrchr(url, '/');
+  if (!barre) return false;
+  const char *nom = barre + 1;
+  const size_t l = strlen(nom);
+  if (l < 7 || strcasecmp(nom + l - 4, ".mp3") != 0) return false;
+  const char *c = nom + l - 7;
+  if (!isdigit((unsigned char)c[0]) || !isdigit((unsigned char)c[1])
+      || !isdigit((unsigned char)c[2])) return false;
+  if (c > nom && isdigit((unsigned char)c[-1])) return false;   // quatre chiffres : un adhan
+  const int num = (c[0] - '0') * 100 + (c[1] - '0') * 10 + (c[2] - '0');
+  if (num < 1 || num >= 114) return false;
+  const int debut = (int)(c - url);
+  if ((size_t)debut + 8 > n) return false;
+  snprintf(suivant, n, "%.*s%03d.mp3", debut, url, num + 1);
+  return true;
+}
+
 void onPlaybackFinished() {
   // [JOURNAL] L'adhan suivi vient de finir : au bout, lache par le decodeur, ou
   // remplace plus tot par une autre lecture. Le son est arrete : on peut ecrire.
@@ -5786,11 +5643,15 @@ void onPlaybackFinished() {
   // rituel du vendredi sur /quran/<recitateur>/018.mp3 ne doit pas derouler
   // tout le reste du Coran. On le reconnait au fichier qui vient de finir, pour
   // qu'une sourate lancee a la main par-dessus garde son enchainement.
+  // [FLUX 3.0.62] Un flux se reconnait a son numero de lancement, pas au fichier.
+  const bool finFlux = strcmp(g_coupure.cause, "fin du flux") == 0;
   const bool finRituel = g_lectureRituel
-      && (strcmp(g_coupure.fichier, g_rituelFichiers[0]) == 0
-          || strcmp(g_coupure.fichier, g_rituelFichiers[1]) == 0);
+      && (finFlux ? (g_rituelGenFlux && g_rituelGenFlux == audio.genFlux())
+                  : (strcmp(g_coupure.fichier, g_rituelFichiers[0]) == 0
+                     || strcmp(g_coupure.fichier, g_rituelFichiers[1]) == 0));
   g_lectureRituel = false;
   char suivante[40];
+  char urlSuivante[301];
   if (!finRituel && !shouldPlayDuaaAfterAdhan
       && strcmp(g_coupure.cause, "fin du fichier") == 0
       && coranSuivante(g_coupure.fichier, suivante, sizeof(suivante))) {
@@ -5801,6 +5662,25 @@ void onPlaybackFinished() {
     g_enchainement = false;
     if (ok) { isPlaying = true; return; }
     Serial.println("[Coran] enchainement refuse, on s'arrete la");
+  } else if (!finRituel && !shouldPlayDuaaAfterAdhan && finFlux
+             && fluxSuivant(audio.urlFlux(), urlSuivante, sizeof(urlSuivante))) {
+    // Copie du repli AVANT playUrl, qui vide celui du flux fini. Le repli suit
+    // la meme numerotation sur la carte (/quran/<recitateur>/NNN.mp3).
+    char repli[65] = {0};
+    if (audio.repliFlux()[0] && !coranSuivante(audio.repliFlux(), repli, sizeof(repli))) repli[0] = 0;
+    Serial.printf("[Coran] flux termine, enchaine sur %s\n", urlSuivante);
+    g_enchainement = true;
+    int r = 0;
+    // Deux essais : l'ouverture TLS juste apres la fermeture de la precedente
+    // peut echouer une fois. Chaque essai peut bloquer loop() ~10 s.
+    for (int essai = 0; essai < 2 && !r; essai++) {
+      if (_wdtArmed) esp_task_wdt_reset();
+      delay(essai ? 1500 : 300);
+      r = audio.playUrl(urlSuivante, repli[0] ? repli : nullptr);
+    }
+    g_enchainement = false;
+    if (r) { isPlaying = true; return; }
+    Serial.println("[Coran] flux suivant injoignable, on s'arrete la");
   }
   isPlaying = false;
   demoFin = millis();               // [MOSQUEE] le repos part d'ici
@@ -7421,6 +7301,7 @@ static void rituelsTick() {
     const size_t n = sizeof(g_rituelFichiers[0]) - 1;
     strncpy(g_rituelFichiers[0], flux ? "" : r.contenu, n); g_rituelFichiers[0][n] = 0;
     strncpy(g_rituelFichiers[1], r.repli, n);               g_rituelFichiers[1][n] = 0;
+    g_rituelGenFlux = (flux && res == 1) ? audio.genFlux() : 0;
     isPlaying = true;
   } else {
     // Rien ne joue (fichier absent, SD muette, flux sans repli) : on rend tout
@@ -8091,7 +7972,7 @@ static void bancCommande(String c) {
 
   if (verbe == "info") {
     snprintf(buf, sizeof(buf),
-             "{\"version\":\"3.0.60\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
+             "{\"version\":\"3.0.62\",\"hardware\":\"v3\",\"device_id\":\"%s\"}",
              deviceIdHex().c_str());
     bancRep(buf);
 
@@ -9159,7 +9040,6 @@ void loop() {
     prefs.end();
   }
 
-  // Auto-sync Mawaqit times every 20 hours when connected to WiFi
   // [HEURE] Surveillance de la bascule ete/hiver.
   // Le dernier dimanche d'octobre a 3 h locales, l'offset passe de +120 a +60.
   // L'alarme materielle du RTC a ete programmee en UTC avec l'ANCIEN offset :
@@ -9178,53 +9058,14 @@ void loop() {
                         dernierOffset, off);
           // Les horaires Mawaqit en memoire sont ceux d'HIER, lus dans l'ancien
           // cadran : appliques tels quels apres la bascule, chaque priere
-          // partirait avec une heure d'ecart jusqu'a la synchro suivante, qui
-          // peut attendre 20 h. On les perime : computeNextPrayer() retombe des
-          // maintenant sur le calcul (juste, lui), et la synchro automatique
-          // repart dans la minute si le reseau est la.
+          // partirait avec une heure d'ecart. On les perime : computeNextPrayer()
+          // retombe des maintenant sur le calcul (juste, lui).
           prefs.begin("adhancfg", false);
           prefs.putULong("mq_sync_ts", 0);
           prefs.end();
           scheduleNextPrayerAlarm(9);
         }
         dernierOffset = off;
-      }
-    }
-  }
-
-  // [3.0.55] Jamais pendant un son : performMawaqitSync() fait deux GET HTTPS
-  // (jusqu'a 4-6 s chacun) dans loop(). Mesure sur la box de la maison le
-  // 07/10/2026 : boucle figee 4,3 s pendant la douaa, et 2-3 accrocs « disque
-  // raye » sur le meme adhan (un essai par minute tant que la synchro echoue).
-  static unsigned long lastAutoSyncCheck = 0;
-  if (millis() - lastAutoSyncCheck > 60000 && !audio.isRunning() && !isPlaying) {  // Check once per minute
-    lastAutoSyncCheck = millis();
-    if (WiFi.status() == WL_CONNECTED && rtcPresent) {
-      unsigned long now_epoch = rtc.now().unixtime();
-      prefs.begin("adhancfg", true);
-      unsigned long mq_sync_ts = prefs.getULong("mq_sync_ts", 0);
-      String uuid = prefs.getString("mq_uuid", "");
-      prefs.end();
-
-      if (uuid.length() > 0) {
-        unsigned long age_sec = (mq_sync_ts > 0 && now_epoch >= mq_sync_ts) ? (now_epoch - mq_sync_ts) : 999999UL;
-        // [3.0.58] Apres un echec (Mawaqit refuse tout le monde depuis le
-        // 06/10/2026), on ne reessaie que 6 h plus tard : sans le repli Aladhan,
-        // qui reecrivait mq_sync_ts, la box retentait chaque minute (deux GET
-        // HTTPS dans loop(), la cause des accrocs de son corriges en 3.0.55).
-        static unsigned long dernierEchecMawaqit = 0;
-        const bool enAttente = dernierEchecMawaqit != 0 && millis() - dernierEchecMawaqit < 6UL * 3600UL * 1000UL;
-        if (age_sec > 20UL * 3600UL && !enAttente) {  // More than 20 hours since last sync
-          Serial.println("Auto-sync: Mawaqit times are older than 20 hours. Starting background sync...");
-          String err;
-          if (performMawaqitSync(err)) {
-            Serial.println("Auto-sync: Background sync successful!");
-            scheduleNextPrayerAlarm(8);
-          } else {
-            Serial.printf("Auto-sync: Background sync failed: %s. Nouvel essai dans 6 h.\n", err.c_str());
-            dernierEchecMawaqit = millis();
-          }
-        }
       }
     }
   }
