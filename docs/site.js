@@ -11,8 +11,9 @@
   // Bouton « Commander » dans l'en-tete de toutes les pages. Sur la page de
   // commande elle-meme, il descend au panneau des choix (#commande).
   var CTA_HREF = page === 'personnaliser' ? '#commande' : 'personnaliser.html';
-  // Prix affiche : 95 € jusqu'au 31/10/2026, 119 € ensuite (voir [OFFRE] plus bas).
-  var PRIX = Date.now() >= new Date('2026-11-01T00:00:00').getTime() ? '119' : '95';
+  // Prix affiche : 99 € depuis le 2 novembre 2026, le meme que
+  // commande_backend/api/checkout.js, qui fait foi.
+  var PRIX = '99';
   var HEADER =
     '<header id="header">' +
       '<div class="container nav-bar">' +
@@ -188,9 +189,10 @@
   }
 })();
 
-// [OFFRE] Fin de l'offre de lancement : apres le 31/10/2026, tout ce qui porte
-// data-fin-offre (95 €, prix barre, « jusqu'au 31 octobre ») disparait et ce
-// qui porte data-des-le (119 €) apparait. style.display plutot que hidden :
+// [OFFRE] Offres datees : ce qui porte data-fin-offre="AAAA-MM-JJ" disparait
+// apres cette date, ce qui porte data-des-le="AAAA-MM-JJ" (cache dans le HTML)
+// apparait a partir de cette date. Aucune en cours : 99 € depuis le 2 novembre
+// 2026 (95 € de lancement jusqu'au 31/10, 119 € les 1er et 2). style.display plutot que hidden :
 // plusieurs de ces elements ont un display en ligne qui l'emporterait.
 // Meme regle recopiee dans index.html, qui ne charge pas ce fichier.
 (function () {
